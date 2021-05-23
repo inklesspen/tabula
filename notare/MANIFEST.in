@@ -1,0 +1,11 @@
+graft src
+graft tests
+include .bumpversion.cfg
+
+include COPYING.md
+include README.md
+include pyproject.toml
+
+prune src/notare/gadget/headers
+
+global-exclude *.py[cod] __pycache__/* *.so *.dylib
