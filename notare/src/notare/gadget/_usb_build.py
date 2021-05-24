@@ -570,7 +570,8 @@ struct descriptors {
 	struct speed_descs {
 		struct usb_interface_descriptor intf;
 		struct usb_endpoint_descriptor_no_audio frames;
-		struct usb_endpoint_descriptor_no_audio events;
+		struct usb_endpoint_descriptor_no_audio host_events;
+		struct usb_endpoint_descriptor_no_audio device_events;
 	} fs_descs, hs_descs;
 } ;
 
@@ -598,7 +599,8 @@ struct descriptors {
 	struct speed_descs {
 		struct usb_interface_descriptor intf;
 		struct usb_endpoint_descriptor_no_audio frames;
-		struct usb_endpoint_descriptor_no_audio events;
+		struct usb_endpoint_descriptor_no_audio host_events;
+		struct usb_endpoint_descriptor_no_audio device_events;
 	}  __attribute__((packed))  fs_descs, hs_descs;
 }  __attribute__((packed)) ;
 
