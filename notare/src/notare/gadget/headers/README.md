@@ -1,4 +1,10 @@
-directories asm, asm-generic, linux should be _directly_ next to this file, **not** nested inside an include directory
+<!--
+SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
+Directories asm, asm-generic, linux should be _directly_ next to this file, **not** nested inside an include directory
 
 These directories come from the `make headers_install` target in the Linux kernel source tree.
 
@@ -11,3 +17,5 @@ Finally, get the kernel config from your Kobo (`/proc/config.gz`), ungzip it, pu
 Run `make olddefconfig`, then `make headers_install ARCH=arm INSTALL_HDR_PATH=/your/output/path`.
 
 There will be a whole lot of files in there that you **don't** need, along with all the ones you do need.
+
+These files are all licensed under GPL 2.0 with the Linux-syscall-note, as explained in https://github.com/torvalds/linux/commit/e2be04c7f9958dde770eeb8b30e829ca969b37bb
