@@ -27,15 +27,25 @@ def read_serial_number():
         return blk.read(13)
 
 
+def code_version(*, major: int, minor: int, subminor: int):
+    return "0x{:04X}".format(
+        (major & 0xFF) << 8 | (minor & 0x0F) << 4 | subminor & 0x0F
+    )
+
+
 def setup_gadget():
     GADGET_PATH.mkdir()
 
     (GADGET_PATH / "idVendor").write_text(VENDOR_ID, encoding="ascii")
     (GADGET_PATH / "idProduct").write_text(PRODUCT_ID, encoding="ascii")
-    # binary-coded decimal, represents version 1.0.0
-    (GADGET_PATH / "bcdDevice").write_text(str(0x0100), encoding="ascii")
-    # USB2
-    (GADGET_PATH / "bcdUSB").write_text(str(0x0200), encoding="ascii")
+    # TODO: base this off the notare version number
+    (GADGET_PATH / "bcdDevice").write_text(
+        code_version(major=0, minor=1, subminor=0), encoding="ascii"
+    )
+    # USB version number
+    (GADGET_PATH / "bcdUSB").write_text(
+        code_version(major=2, minor=0, subminor=0), encoding="ascii"
+    )
 
     strings_path = GADGET_PATH / "strings" / "0x409"
     strings_path.mkdir()
