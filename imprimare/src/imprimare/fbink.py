@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import io
 import contextlib
 
 from ._fbink import ffi, lib
@@ -24,6 +23,9 @@ class FbInk(contextlib.AbstractContextManager, Ink):
 
     def clear(self):
         lib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL)
+
+    def display_png(self, path: str, x: int, y: int):
+        lib.fbink_print_image(self.fbfd, path, x, y, self.fbink_cfg)
 
     def display_pixels(
         self, imagebytes: bytes, x: int, y: int, width: int, height: int

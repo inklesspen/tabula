@@ -10,6 +10,9 @@ class DummyInk(contextlib.AbstractContextManager, Ink):
     def clear(self):
         print("clear")
 
+    def display_png(self, path: str, x: int, y: int):
+        print("display_png: {} ({}, {})".format(path, x, y))
+
     def display_pixels(
         self, imagebytes: bytes, x: int, y: int, width: int, height: int
     ):

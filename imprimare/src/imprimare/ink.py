@@ -11,6 +11,10 @@ class Ink(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def display_png(self, path: str, x: int, y: int):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def display_pixels(
         self, imagebytes: bytes, x: int, y: int, width: int, height: int
     ):

@@ -9,6 +9,7 @@ include .bumpversion.cfg
 include README.md
 include pyproject.toml
 
-prune src/notare/gadget/headers
+include src/notare/device/preload/*.png
+include src/notare/device/preload/*.png.license
 
 global-exclude *.py[cod] __pycache__/* *.so *.dylib

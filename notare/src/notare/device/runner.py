@@ -6,8 +6,10 @@ import collections.abc
 import datetime
 import inspect
 import json
+import os
 
 from dateutil.tz import tzlocal
+import pkg_resources
 from sansio_jsonrpc import (
     JsonRpcRequest,
     JsonRpcResponse,
@@ -71,6 +73,10 @@ def dispatch_request(servicer, request):
 async def run_server(host, port):
     with imprimare.get_ink() as ink:
         ink.clear()
+        loading_png_path = os.fsencode(
+            pkg_resources.resource_filename("notare", "device/preload/waiting.png")
+        )
+        ink.display_png(loading_png_path, 0, 0)
         async with Battery() as battery:
             servicer = Servicer(ink, battery)
 
@@ -78,6 +84,7 @@ async def run_server(host, port):
                 ws = await ws_request.accept()
                 transport = WebSocketTransport(ws)
                 rpc_conn = JsonRpcConnection(transport, JsonRpcConnectionType.SERVER)
+                ink.clear()
                 async with trio.open_nursery() as nursery:
                     nursery.start_soon(rpc_conn._background_task)
                     async for request in rpc_conn.iter_requests():
