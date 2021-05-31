@@ -29,7 +29,7 @@ class Framelet(pydantic.BaseModel):
     class Config:
         @staticmethod
         def json_dumps(val, **kw):
-            compressed = gzip.compress(val['image'], compresslevel=1)
+            compressed = gzip.compress(val["image"], compresslevel=1)
             val["image"] = base64.b85encode(compressed)
             return json.dumps(val, **kw)
 
@@ -41,7 +41,7 @@ class Framelet(pydantic.BaseModel):
 
 
 class ChargingState(str, enum.Enum):
-    DISCHARGING = "Not charging"
+    DISCHARGING = "Discharging"
     CHARGING = "Charging"
     NOT_CHARGING = "Not charging"
 
