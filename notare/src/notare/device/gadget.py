@@ -25,10 +25,17 @@ DEV_MAC_ADDR = "02:00:00:fb:a1:9b"
 
 # Kobo serial number can be gotten from dd if=/dev/mmcblk0 bs=1 skip=515 count=13
 # haven't seen this documented but it seems to always be 13 chars in that spot, on all tested kobos
-def read_serial_number():
+def read_serial_number_from_device():
     with io.FileIO("/dev/mmcblk0", "r") as blk:
         blk.seek(515)
         return blk.read(13)
+
+
+def read_serial_number():
+    # Startup script may populate it
+    if "SERIAL_NUMBER" in os.environ:
+        return os.environ["SERIAL_NUMBER"].encode('ascii')
+    return read_serial_number_from_device()
 
 
 def code_version(*, major: int, minor: int, subminor: int):
@@ -37,6 +44,7 @@ def code_version(*, major: int, minor: int, subminor: int):
     )
 
 
+# a teardown doesn't happen if there's an exception during setup. whoops.
 class Gadget(contextlib.AbstractContextManager):
     def __enter__(self):
         self.dhcp = setup_gadget()
