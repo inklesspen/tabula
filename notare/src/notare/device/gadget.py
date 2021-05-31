@@ -2,19 +2,26 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import contextlib
 import io
+import os
 import pathlib
+import subprocess
 
 GADGET_CONFIG = pathlib.Path("/sys/kernel/config/usb_gadget")
 GADGET_PATH = GADGET_CONFIG / "tabula"
 
 UDC = pathlib.Path("/sys/class/udc")
-FUNCTION_NAME = 'ecm.usb0'
+FUNCTION_NAME = "ecm.usb0"
 
 # These are reserved values belonging to OpenMoko for use in documentation.
 # Replace with the real value when we get it.
 VENDOR_ID = str(0x1D50)
 PRODUCT_ID = str(0x5200)
+
+# Locally-administered MAC addresses; randomly generated.
+HOST_MAC_ADDR = "02:00:00:c1:c5:ab"
+DEV_MAC_ADDR = "02:00:00:fb:a1:9b"
 
 # Kobo serial number can be gotten from dd if=/dev/mmcblk0 bs=1 skip=515 count=13
 # haven't seen this documented but it seems to always be 13 chars in that spot, on all tested kobos
@@ -28,6 +35,16 @@ def code_version(*, major: int, minor: int, subminor: int):
     return "0x{:04X}".format(
         (major & 0xFF) << 8 | (minor & 0x0F) << 4 | subminor & 0x0F
     )
+
+
+class Gadget(contextlib.AbstractContextManager):
+    def __enter__(self):
+        self.dhcp = setup_gadget()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        teardown_gadget(self.dhcp)
+        self.dhcp = None
 
 
 def setup_gadget():
@@ -64,23 +81,51 @@ def setup_gadget():
 
     function_path = GADGET_PATH / "functions" / FUNCTION_NAME
     function_path.mkdir()
-    (config_path / FUNCTION_NAME).symlink_to(function_path)
 
     # https://www.kernel.org/doc/html/v5.4/usb/gadget-testing.html#ecm-function
-    # Write host_addr and dev_addr
+    (function_path / "host_addr").write_bytes(HOST_MAC_ADDR.encode("ascii"))
+    (function_path / "dev_addr").write_bytes(DEV_MAC_ADDR.encode("ascii"))
 
-    # # Enable gadget
+    (config_path / FUNCTION_NAME).symlink_to(function_path)
+
+    # Enable gadget
     # ls /sys/class/udc > UDC
+    udc_name = os.listdir(UDC)[0]
+    (GADGET_PATH / "UDC").write_bytes(udc_name.encode("ascii"))
 
     # read ifname
-    # bring interface up, start dnsmasq
+    ifname = (function_path / "ifname").read_bytes().decode("ascii")
+    # bring interface up
+    # ifconfig $ifname 10.52.0.1 netmask 255.255.255.0
+    subprocess.run(
+        ["ifconfig", ifname, "10.52.0.1", "netmask", "255.255.255.0"], check=True
+    )
+    # start dnsmasq
+    # dnsmasq --listen-address=10.52.0.1 --no-hosts --port=0 --dhcp-range=10.52.0.2,10.52.0.99,1h --dhcp-option=3 --pid-file --dhcp-leasefile --no-daemon
+    dhcp = subprocess.Popen(
+        [
+            "dnsmasq",
+            "--listen-address=10.52.0.1",
+            "--no-hosts",
+            "--port=0",
+            "--dhcp-range=10.52.0.2,10.52.0.99,1h",
+            "--dhcp-option=3",
+            "--pid-file",
+            "--dhcp-leasefile",
+            "--no-daemon",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return dhcp
 
-def teardown_gadget():
+
+def teardown_gadget(dhcp: subprocess.Popen):
     # stop dnsmasq
+    dhcp.terminate()
     # take interface down
-
-    # cd /sys/kernel/config/usb_gadget/tabula/
-    # echo "" > UDC
+    (GADGET_PATH / "UDC").write_bytes(b"")
 
     config_path = GADGET_PATH / "configs" / "c.1"
     (config_path / FUNCTION_NAME).unlink()

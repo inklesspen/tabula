@@ -46,5 +46,5 @@ async def input_loop(stopkeys: StopKeys, now: datetime.datetime, send_channel: t
         print("(Tabula time is {}.)".format(now))
         await loop.event_loop.run_async()
     # the cancel_scope call unglamorously tears everything down. we can do better
-    # await send_channel.send('shutdown')
-    nursery.cancel_scope.cancel()
+    await send_channel.send('shutdown')
+    # nursery.cancel_scope.cancel()

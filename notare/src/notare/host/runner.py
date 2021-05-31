@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
+import os
 import typing
 import unicodedata
 
@@ -36,14 +37,21 @@ class Stub(Protocol):
         self.client = client
 
     async def update_display(self, framelet: Framelet) -> BatteryState:
-        response = await self.client.request(
+        await self.client.request(
             "update_display", {"framelet": json.loads(framelet.json())}
         )
+
+    async def get_battery_state(self) -> BatteryState:
+        response = await self.client.request("get_battery_state", {})
         return BatteryState.parse_raw(json.dumps(response))
 
     async def get_current_time(self) -> KoboTime:
         response = await self.client.request("get_current_time", {})
         return KoboTime.parse_raw(json.dumps(response))
+
+    async def shutdown(self) -> None:
+        print("shutting down")
+        await self.client.request("shutdown", {})
 
 
 def graphical_char(c: typing.Text):
@@ -134,13 +142,14 @@ class Screen:
 
 
 class Application:
-    def __init__(self, keystroke_in_channel: trio.abc.ReceiveChannel, stub: Stub):
+    def __init__(self, keystroke_in_channel: trio.abc.ReceiveChannel, stub: Stub, nursery: trio.Nursery):
         self.keystroke_in_channel = keystroke_in_channel
         self.stub = stub
         self.document_update = RepeatedEvent()
         self.document = DocumentModel(self.document_update)
         self.screen_update = RepeatedEvent()
         self.screen = Screen(self.screen_update)
+        self.nursery = nursery
 
     async def handle_keystrokes(self):
         async with self.keystroke_in_channel:
@@ -151,6 +160,9 @@ class Application:
                     self.document.new_para()
                 elif value == "backspace":
                     self.document.backspace()
+                elif value == "shutdown":
+                    await self.stub.shutdown()
+                    self.nursery.cancel_scope.cancel()
 
     async def handle_document_updates(self):
         async for _ in self.document_update.events():
@@ -171,7 +183,7 @@ async def main(url):
         stub = Stub(client)
         kt = await stub.get_current_time()
         keystroke_send_channel, keystroke_receive_channel = trio.open_memory_channel(0)
-        application = Application(keystroke_receive_channel, stub)
+        application = Application(keystroke_receive_channel, stub, nursery)
         nursery.start_soon(application.handle_keystrokes)
         nursery.start_soon(application.handle_document_updates)
         nursery.start_soon(application.handle_screen_updates)
@@ -182,5 +194,7 @@ async def main(url):
 
 
 if __name__ == "__main__":
-    tabula_url = f"ws://{TABULA_IP}:{TABULA_PORT}"
+    tabula_ip = os.environ.get("TABULA_IP", TABULA_IP)
+    tabula_post = os.environ.get("TABULA_PORT", TABULA_PORT)
+    tabula_url = f"ws://{tabula_ip}:{tabula_post}"
     trio.run(main, tabula_url)

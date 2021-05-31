@@ -57,9 +57,17 @@ class KoboTime(pydantic.BaseModel):
 
 class Protocol(abc.ABC):
     @abc.abstractmethod
-    def update_display(self, framelet: Framelet) -> BatteryState:
+    def update_display(self, framelet: Framelet):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_battery_state(self) -> BatteryState:
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_current_time(self) -> KoboTime:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def shutdown(self) -> None:
         raise NotImplementedError()
