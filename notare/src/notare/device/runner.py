@@ -124,5 +124,5 @@ if __name__ == "__main__":
     if os.environ.get("SKIP_GADGET"):
         trio.run(run_server, None, TABULA_PORT)
     else:
-        with Gadget():
+        with Gadget(with_dhcp=True):
             trio.run(run_server, None, TABULA_PORT)
