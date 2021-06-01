@@ -13,6 +13,7 @@
 # (the specific years vary in some of the files)
 
 from PIL import Image
+import numpy as np
 
 from ._cffi import ffi, lib as clib
 from .types import (
@@ -55,7 +56,17 @@ class Renderer:
 
         with self.instance.create_surface() as surface:
             rendered_size = self.instance.render(surface, render_opts)
-            return self.instance.surface_to_bytes(surface, rendered_size)
+            return (
+                self.instance.surface_to_bytes(surface, rendered_size),
+                rendered_size,
+            )
+
+    def render_to_numpy(self, markup: str, font: str):
+        (buf, new_size) = self.render_to_bytes(markup, font)
+        new_rendered = ~np.ndarray(
+            new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf
+        )
+        return new_rendered
 
 
 class PangoCairoRenderer:

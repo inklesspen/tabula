@@ -88,7 +88,9 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
+        "attrs",
         "cffi>=1.0.0",
+        "numpy>=1.20.3",
         "pydantic>=1.8.2",
         "python-dateutil>=2.8.1",
         "trio>=0.18.0",

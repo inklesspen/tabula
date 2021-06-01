@@ -46,9 +46,16 @@ class Size:
     def as_tuple(self):
         return (self.width, self.height)
 
+    def as_numpy_shape(self):
+        return (self.height, self.width)
+
     @classmethod
     def from_tuple(cls, tup):
         return cls(width=tup[0], height=tup[1])
+
+    @classmethod
+    def from_numpy_shape(cls, shape):
+        return cls(height=shape[0], width=shape[1])
 
 
 @attr.s(auto_attribs=True, kw_only=True, frozen=True)

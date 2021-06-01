@@ -89,6 +89,7 @@ setup(
     install_requires=[
         "cffi>=1.0.0",
         "attrs",
+        "numpy>=1.20.3",
         "pillow",
         "markdown-it-py",
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
