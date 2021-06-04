@@ -1,14 +1,17 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-import contextlib
-
-from .ink import Ink
+from .ink import Ink, ScreenInfo
 
 
-class DummyInk(contextlib.AbstractContextManager, Ink):
+class DummyInk(Ink):
     def clear(self):
         print("clear")
+
+    def get_screen_info(self) -> ScreenInfo:
+        return ScreenInfo(
+            width=1, height=1, dpi=0, device_name="Dummy", code_name="Dummy"
+        )
 
     def display_png(self, path: str, x: int, y: int):
         print("display_png: {} ({}, {})".format(path, x, y))
@@ -21,3 +24,9 @@ class DummyInk(contextlib.AbstractContextManager, Ink):
                 len(imagebytes), x, y, width, height
             )
         )
+
+    def save_screen(self) -> None:
+        print("Saved")
+
+    def restore_screen(self) -> None:
+        print("Restored")
