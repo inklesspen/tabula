@@ -37,7 +37,7 @@ class FbInk(Ink):
             )
 
     def display_png(self, path: str, x: int, y: int):
-        lib.fbink_print_image(self.fbfd, path, x, y, self.fbink_cfg)
+        lib.fbink_print_image(self.fbfd, os.fsencode(path), x, y, self.fbink_cfg)
 
     def display_pixels(
         self, imagebytes: bytes, x: int, y: int, width: int, height: int

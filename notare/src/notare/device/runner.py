@@ -84,8 +84,8 @@ def dispatch_request(servicer, request):
 async def run_server(host, port):
     with imprimare.get_ink() as ink:
         ink.clear()
-        loading_png_path = os.fsencode(
-            pkg_resources.resource_filename("notare", "device/preload/waiting.png")
+        loading_png_path = pkg_resources.resource_filename(
+            "notare", "device/preload/waiting.png"
         )
         ink.display_png(loading_png_path, 0, 0)
         async with Battery() as battery:
