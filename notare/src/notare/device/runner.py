@@ -8,6 +8,7 @@ import inspect
 import json
 import os
 
+import attr
 from dateutil.tz import tzlocal
 import pkg_resources
 from sansio_jsonrpc import (
@@ -32,7 +33,14 @@ import imprimare
 
 from .battery import Battery
 from .gadget import Gadget
-from ..protocol import Framelet, BatteryState, KoboTime, Protocol, TABULA_PORT
+from ..protocol import (
+    Framelet,
+    BatteryState,
+    KoboTime,
+    ScreenInfo,
+    Protocol,
+    TABULA_PORT,
+)
 
 
 class Servicer(Protocol):
@@ -44,6 +52,9 @@ class Servicer(Protocol):
         rect = framelet.rect
         self.ink.display_pixels(framelet.image, rect.x, rect.y, rect.width, rect.height)
         return None
+
+    def get_screen_info(self) -> ScreenInfo:
+        return ScreenInfo(**attr.asdict(self.ink.get_screen_info()))
 
     def get_battery_state(self) -> BatteryState:
         return self.battery.get()

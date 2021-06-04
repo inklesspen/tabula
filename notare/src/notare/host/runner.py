@@ -2,15 +2,11 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import enum
 import json
 import os
 import typing
 import unicodedata
 
-import attr
-import numpy as np
-import numpy.typing as npt
 import trio
 from trio_jsonrpc import (
     open_jsonrpc_ws,
@@ -23,11 +19,13 @@ import stilus.pango_render
 import stilus.types
 
 from . import term
+from .rendering import Screen
+from .types import UpdateKind, ParagraphUpdate, Renderable
 from ..protocol import (
     Framelet,
-    Rect,
     BatteryState,
     KoboTime,
+    ScreenInfo,
     Protocol,
     TABULA_IP,
     TABULA_PORT,
@@ -42,6 +40,10 @@ class Stub(Protocol):
         await self.client.request(
             "update_display", {"framelet": json.loads(framelet.json())}
         )
+
+    async def get_screen_info(self) -> ScreenInfo:
+        response = await self.client.request("get_screen_info", {})
+        return ScreenInfo.parse_raw(json.dumps(response))
 
     async def get_battery_state(self) -> BatteryState:
         response = await self.client.request("get_battery_state", {})
@@ -76,57 +78,6 @@ def graphical_char(c: typing.Text):
 # Pango Markup (HTML-ish tags). If we wanted to know about the grapheme clusters and glyphs,
 # we'd have to switch to using PangoAttrList. So we're not going to do that.
 # The cursor is always at the end of the final paragraph. That's it. That's all there is.
-
-# https://en.wikipedia.org/wiki/Macron_below
-# https://en.wikipedia.org/wiki/Underscore
-CURSOR = '<span alpha="50%">_</span>'
-FONT = "iA Writer Quattro V 8"
-
-
-class UpdateKind(enum.Enum):
-    NEW = enum.auto()
-    CHANGE = enum.auto()
-
-
-@attr.s(auto_attribs=True, kw_only=True, frozen=True)
-class ParagraphUpdate:
-    paragraph: int
-    kind: UpdateKind
-
-
-@attr.s(auto_attribs=True, kw_only=True, frozen=True)
-class Renderable:
-    paragraph: int
-    has_cursor: bool
-
-
-@attr.s(auto_attribs=True, kw_only=True, frozen=True)
-class RenderPara:
-    rendered: npt.ArrayLike
-    size: stilus.types.Size
-
-
-@attr.s(auto_attribs=True, kw_only=True, frozen=True)
-class LaidOutPara:
-    index: int
-    screen_top: int
-    screen_bottom: int
-
-
-@attr.s(auto_attribs=True, kw_only=True, frozen=True)
-class ArrayRect:
-    top: int
-    bottom: int
-    left: int
-    right: int
-
-    def to_protocol_rect(self, y_adjust: int = 0) -> Rect:
-        return Rect(
-            x=self.left,
-            y=self.top + y_adjust,
-            width=self.right - self.left,
-            height=self.bottom - self.top,
-        )
 
 
 class DocumentModel:
@@ -169,133 +120,29 @@ class DocumentModel:
         return self.contents[i].markup
 
 
-def bbox(img: npt.ArrayLike) -> ArrayRect:
-    rows = np.any(img, axis=1)
-    cols = np.any(img, axis=0)
-    rmin, rmax = np.where(rows)[0][[0, -1]]
-    cmin, cmax = np.where(cols)[0][[0, -1]]
-
-    return ArrayRect(top=rmin, bottom=rmax, left=cmin, right=cmax)
-
-
-class Screen:
-    def __init__(
-        self,
-        dispatch_channel: trio.abc.SendChannel,
-        get_markup: typing.Callable[[int], str],
-    ):
-        self.dispatch_channel = dispatch_channel
-        self.get_markup = get_markup
-        self.screen_size = stilus.types.Size(width=1072, height=1448)
-        self.renderer = stilus.pango_render.Renderer(
-            screen_size=self.screen_size, dpi=300
-        )
-        self.set_font(FONT)
-        self.cursor_y = self.screen_size.height // 2
-        self.renders: typing.List[RenderPara] = []
-
-    def set_font(self, font: str):
-        # TODO: trigger a rerender if we change after the start
-        self.font = font
-        self.skip_height = int(self.renderer.instance.calculate_line_height(font))
-
-    @staticmethod
-    def set_into(list, index, item):
-        if index >= len(list):
-            list.append(item)
-        else:
-            list[index] = item
-
-    async def render_update(self, renderables: typing.List[Renderable]):
-        before_render = tuple(self.renders)
-        for renderable in renderables:
-            markup = self.get_markup(renderable.paragraph)
-            if renderable.has_cursor:
-                markup += CURSOR
-            new_rendered: npt.ArrayLike = self.renderer.render_to_numpy(
-                markup, self.font
-            )
-            new_size = stilus.types.Size.from_numpy_shape(new_rendered.shape)
-            self.set_into(
-                self.renders,
-                renderable.paragraph,
-                RenderPara(rendered=new_rendered, size=new_size),
-            )
-
-        need_to_reflow = len(self.renders) > len(before_render) or any(
-            [
-                before.size != after.size
-                for before, after in zip(before_render, self.renders)
-            ]
-        )
-        if not need_to_reflow:
-            # Only the last paragraph needs to be rerendered.
-            relative_top = self.cursor_y - self.renders[-1].size.height
-            new_image = self.renders[-1].rendered
-            render_diff = new_image - before_render[-1].rendered
-            changed_box = bbox(render_diff)
-            changed: npt.ArrayLike = new_image[
-                changed_box.top : changed_box.bottom,
-                changed_box.left : changed_box.right,
-            ]
-            framelet = Framelet(
-                rect=changed_box.to_protocol_rect(relative_top), image=changed.tobytes()
-            )
-
-        else:
-            # we gotta reflow everything on screen
-            laidouts: typing.List[typing.Optional[LaidOutPara]] = [
-                None for _ in self.renders
-            ]
-            current_y = self.cursor_y
-            current_i = len(self.renders) - 1
-            while current_i >= 0 and current_y >= 0:
-                size = self.renders[current_i].size
-                top = current_y - size.height
-                laidouts[current_i] = LaidOutPara(
-                    index=current_i, screen_bottom=current_y, screen_top=top
-                )
-                current_y -= size.height + self.skip_height
-                current_i -= 1
-
-            half_screen = np.full(
-                (self.cursor_y, self.screen_size.width), 255, dtype=np.uint8
-            )
-            for laidout in laidouts:
-                if laidout is not None:
-                    rendered = self.renders[laidout.index].rendered
-                    if laidout.screen_top < 0:
-                        half_screen[0 : laidout.screen_bottom] = rendered[
-                            -laidout.screen_top :
-                        ]
-                    else:
-                        half_screen[
-                            laidout.screen_top : laidout.screen_bottom
-                        ] = rendered
-            framelet = Framelet(
-                rect=Rect(x=0, y=0, width=self.screen_size.width, height=self.cursor_y),
-                image=half_screen.tobytes(),
-            )
-
-        await self.dispatch_channel.send(framelet)
-
-
 class Application:
     def __init__(
         self,
         keystroke_receive_channel: trio.abc.ReceiveChannel,
         stub: Stub,
         nursery: trio.Nursery,
+        screen_info: ScreenInfo,
     ):
         self.keystroke_receive_channel = keystroke_receive_channel
         self.stub = stub
+        self.screen_info = screen_info
         document_send_channel, self.document_receive_channel = trio.open_memory_channel(
             0
         )
         self.document_update = RepeatedEvent()
         self.document = DocumentModel(document_send_channel)
         screen_send_channel, self.screen_receive_channel = trio.open_memory_channel(0)
-        self.screen = Screen(screen_send_channel, self.document.get_markup)
+        screen_size = stilus.types.Size(
+            width=screen_info.width, height=screen_info.height
+        )
+        self.screen = Screen(
+            screen_size, screen_info.dpi, screen_send_channel, self.document.get_markup
+        )
         self.nursery = nursery
         nursery.start_soon(self.document.new_para)
 
@@ -342,9 +189,10 @@ class Application:
 async def main(url):
     async with trio.open_nursery() as nursery, open_jsonrpc_ws(url) as client:
         stub = Stub(client)
+        screen_info = await stub.get_screen_info()
         kt = await stub.get_current_time()
         keystroke_send_channel, keystroke_receive_channel = trio.open_memory_channel(0)
-        application = Application(keystroke_receive_channel, stub, nursery)
+        application = Application(keystroke_receive_channel, stub, nursery, screen_info)
         nursery.start_soon(application.handle_keystrokes)
         nursery.start_soon(application.handle_document_updates)
         nursery.start_soon(application.handle_screen_updates)

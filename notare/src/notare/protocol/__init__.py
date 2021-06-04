@@ -55,9 +55,21 @@ class KoboTime(pydantic.BaseModel):
     now: datetime.datetime
 
 
+class ScreenInfo(pydantic.BaseModel):
+    width: int
+    height: int
+    dpi: int
+    device_name: str
+    code_name: str
+
+
 class Protocol(abc.ABC):
     @abc.abstractmethod
-    def update_display(self, framelet: Framelet):
+    def update_display(self, framelet: Framelet) -> None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_screen_info(self) -> ScreenInfo:
         raise NotImplementedError()
 
     @abc.abstractmethod
