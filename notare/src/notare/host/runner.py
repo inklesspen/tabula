@@ -159,7 +159,7 @@ class Application:
                 #     print("This is when we would show help.")
                 # elif value == "f10":
                 #     print("This is when we would show the menu.")
-                elif value == "shutdown":
+                elif value == "f12":
                     await self.stub.shutdown()
                     self.nursery.cancel_scope.cancel()
 
@@ -190,15 +190,12 @@ async def main(url):
     async with trio.open_nursery() as nursery, open_jsonrpc_ws(url) as client:
         stub = Stub(client)
         screen_info = await stub.get_screen_info()
-        kt = await stub.get_current_time()
         keystroke_send_channel, keystroke_receive_channel = trio.open_memory_channel(0)
         application = Application(keystroke_receive_channel, stub, nursery, screen_info)
         nursery.start_soon(application.handle_keystrokes)
         nursery.start_soon(application.handle_document_updates)
         nursery.start_soon(application.handle_screen_updates)
-        nursery.start_soon(
-            term.input_loop, ("f12",), kt.now, keystroke_send_channel, nursery
-        )
+        nursery.start_soon(term.input_loop, keystroke_send_channel, nursery)
         await trio.sleep_forever()
 
 

@@ -21,30 +21,18 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 # Urwid web site: http://excess.org/urwid/
-import datetime
-import typing
-
 import trio
 
-from .main_loop import MainLoop, ExitMainLoop
+from .main_loop import MainLoop
+from .display import Screen
 
-StopKeys = typing.Tuple[str, ...]
 
-def make_key_handler(stopkeys: StopKeys, send_channel: trio.MemorySendChannel, nursery: trio.Nursery):
+async def input_loop(send_channel: trio.MemorySendChannel, nursery: trio.Nursery):
     def handler(key):
-        if key in stopkeys:
-            raise ExitMainLoop()
         # get back in that async world
         nursery.start_soon(send_channel.send, key)
-    return handler
 
-
-async def input_loop(stopkeys: StopKeys, now: datetime.datetime, send_channel: trio.MemorySendChannel, nursery: trio.Nursery):
-    loop = MainLoop(unhandled_input=make_key_handler(stopkeys, send_channel, nursery))
+    loop = MainLoop(screen=Screen(), unhandled_input=handler)
     with loop.start():
         print("It's Tabula time!")
-        print("(Tabula time is {}.)".format(now))
-        await loop.event_loop.run_async()
-    # the cancel_scope call unglamorously tears everything down. we can do better
-    await send_channel.send('shutdown')
-    # nursery.cancel_scope.cancel()
+        await loop.run_async()

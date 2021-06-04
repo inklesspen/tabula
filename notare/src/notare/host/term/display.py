@@ -36,87 +36,41 @@ import tty
 
 from urwid.util import StoppingContext
 from urwid import escape
-from urwid import signals
-from urwid.compat import B, bytes3, xrange, with_metaclass
-
-# for replacing unprintable bytes with '?'
-UNPRINTABLE_TRANS_TABLE = B("?") * 32 + bytes3(list(xrange(32,256)))
 
 
-# signals sent by BaseScreen
-INPUT_DESCRIPTORS_CHANGED = "input descriptors changed"
-
-
-
-class RealTerminal(object):
-    def __init__(self):
-        super(RealTerminal,self).__init__()
+class Screen:
+    def __init__(self, input=sys.stdin, output=sys.stdout):
+        """Initialize a screen that directly prints escape codes to an output
+        terminal.
+        """
         self._signal_keys_set = False
         self._old_signal_keys = None
-
-    def tty_signal_keys(self, intr=None, quit=None, start=None,
-        stop=None, susp=None, fileno=None):
-        """
-        Read and/or set the tty's signal character settings.
-        This function returns the current settings as a tuple.
-
-        Use the string 'undefined' to unmap keys from their signals.
-        The value None is used when no change is being made.
-        Setting signal keys is done using the integer ascii
-        code for the key, eg.  3 for CTRL+C.
-
-        If this function is called after start() has been called
-        then the original settings will be restored when stop()
-        is called.
-        """
-        if fileno is None:
-            fileno = sys.stdin.fileno()
-        if not os.isatty(fileno):
-            return
-
-        tattr = termios.tcgetattr(fileno)
-        sattr = tattr[6]
-        skeys = (sattr[termios.VINTR], sattr[termios.VQUIT],
-            sattr[termios.VSTART], sattr[termios.VSTOP],
-            sattr[termios.VSUSP])
-
-        if intr == 'undefined': intr = 0
-        if quit == 'undefined': quit = 0
-        if start == 'undefined': start = 0
-        if stop == 'undefined': stop = 0
-        if susp == 'undefined': susp = 0
-
-        if intr is not None: tattr[6][termios.VINTR] = intr
-        if quit is not None: tattr[6][termios.VQUIT] = quit
-        if start is not None: tattr[6][termios.VSTART] = start
-        if stop is not None: tattr[6][termios.VSTOP] = stop
-        if susp is not None: tattr[6][termios.VSUSP] = susp
-
-        if intr is not None or quit is not None or \
-            start is not None or stop is not None or \
-            susp is not None:
-            termios.tcsetattr(fileno, termios.TCSADRAIN, tattr)
-            self._signal_keys_set = True
-
-        return skeys
-
-
-class ScreenError(Exception):
-    pass
-
-class BaseScreen(with_metaclass(signals.MetaSignals, object)):
-    """
-    Base class for Screen classes (raw_display.Screen, .. etc)
-    """
-    signals = [INPUT_DESCRIPTORS_CHANGED]
-
-    def __init__(self):
-        super(BaseScreen,self).__init__()
         self._started = False
+        self.colors = 16  # FIXME: detect this
+        self.has_underline = True  # FIXME: detect this
+        self._keyqueue = []
+        self.prev_input_resize = 0
+        self.set_input_timeouts()
+        self._resized = False
+        self.maxrow = None
+        self.last_bstate = 0
+        self._rows_used = None
+        self._cy = 0
+        self.term = os.environ.get("TERM", "")
+        self._next_timeout = None
+        self.signal_handler_setter = signal.signal
+
+        # Our connections to the world
+        self._term_output_file = output
+        self._term_input_file = input
+
+        # pipe for signalling external event loops about resize events
+        # self._resize_pipe_rd, self._resize_pipe_wr = os.pipe()
+        # fcntl.fcntl(self._resize_pipe_rd, fcntl.F_SETFL, os.O_NONBLOCK)
 
     started = property(lambda self: self._started)
 
-    def start(self, *args, **kwargs):
+    def start(self):
         """Set up the screen.  If the screen has already been started, does
         nothing.
 
@@ -131,60 +85,43 @@ class BaseScreen(with_metaclass(signals.MetaSignals, object)):
         """
         if not self._started:
             self._started = True
-            self._start(*args, **kwargs)
-        return StoppingContext(self)
 
-    def _start(self):
-        pass
+            self._rows_used = 0
+
+            fd = self._input_fileno()
+            if fd is not None and os.isatty(fd):
+                self._old_termios_settings = termios.tcgetattr(fd)
+                tty.setcbreak(fd)
+
+            self.signal_init()
+            self._next_timeout = self.max_wait
+
+            if not self._signal_keys_set:
+                self._old_signal_keys = self.tty_signal_keys(fileno=fd)
+
+        return StoppingContext(self)
 
     def stop(self):
         if self._started:
-            self._stop()
+            self.signal_restore()
+
+            fd = self._input_fileno()
+            if fd is not None and os.isatty(fd):
+                termios.tcsetattr(fd, termios.TCSADRAIN, self._old_termios_settings)
+
+            if self._old_signal_keys:
+                self.tty_signal_keys(*(self._old_signal_keys + (fd,)))
+
         self._started = False
 
-    def _stop(self):
-        pass
-
-class Screen(BaseScreen, RealTerminal):
-    def __init__(self, input=sys.stdin, output=sys.stdout):
-        """Initialize a screen that directly prints escape codes to an output
-        terminal.
-        """
-        super(Screen, self).__init__()
-        self.colors = 16 # FIXME: detect this
-        self.has_underline = True # FIXME: detect this
-        self._keyqueue = []
-        self.prev_input_resize = 0
-        self.set_input_timeouts()
-        self.screen_buf = None
-        self._screen_buf_canvas = None
-        self._resized = False
-        self.maxrow = None
-        self.last_bstate = 0
-        self._rows_used = None
-        self._cy = 0
-        self.term = os.environ.get('TERM', '')
-        self._next_timeout = None
-        self.signal_handler_setter = signal.signal
-
-        # Our connections to the world
-        self._term_output_file = output
-        self._term_input_file = input
-
-        # pipe for signalling external event loops about resize events
-        # self._resize_pipe_rd, self._resize_pipe_wr = os.pipe()
-        # fcntl.fcntl(self._resize_pipe_rd, fcntl.F_SETFL, os.O_NONBLOCK)
-
     def _input_fileno(self):
-        """Returns the fileno of the input stream, or None if it doesn't have one.  A stream without a fileno can't participate in whatever.
-        """
-        if hasattr(self._term_input_file, 'fileno'):
+        """Returns the fileno of the input stream, or None if it doesn't have one.  A stream without a fileno can't participate in whatever."""
+        if hasattr(self._term_input_file, "fileno"):
             return self._term_input_file.fileno()
         else:
             return None
 
-    def set_input_timeouts(self, max_wait=None, complete_wait=0.125,
-        resize_wait=0.125):
+    def set_input_timeouts(self, max_wait=None, complete_wait=0.125, resize_wait=0.125):
         """
         Set the get_input timeout values.  All values are in floating
         point numbers of seconds.
@@ -213,10 +150,6 @@ class Screen(BaseScreen, RealTerminal):
         frame -- will always be None when the GLib event loop is being used.
         """
         return
-        if not self._resized:
-            os.write(self._resize_pipe_wr, B('R'))
-        self._resized = True
-        self.screen_buf = None
 
     def _sigcont_handler(self, signum, frame=None):
         """
@@ -249,77 +182,15 @@ class Screen(BaseScreen, RealTerminal):
         self.signal_handler_setter(signal.SIGCONT, signal.SIG_DFL)
         # self.signal_handler_setter(signal.SIGWINCH, signal.SIG_DFL)
 
-    def set_mouse_tracking(self, enable=True):
-        """
-        Enable (or disable) mouse tracking.
-
-        After calling this function get_input will include mouse
-        click events along with keystrokes.
-        """
-        raise Exception("nope")
-
-    def _mouse_tracking(self, enable):
-        raise Exception("nope")
-
-
-    def _start(self, alternate_buffer=True):
+    def _start(self):
         """
         Initialize the screen and input mode.
-
-        alternate_buffer -- use alternate screen buffer
         """
-        self._rows_used = 0
-
-        fd = self._input_fileno()
-        if fd is not None and os.isatty(fd):
-            self._old_termios_settings = termios.tcgetattr(fd)
-            tty.setcbreak(fd)
-
-        self.signal_init()
-        self._next_timeout = self.max_wait
-
-        if not self._signal_keys_set:
-            self._old_signal_keys = self.tty_signal_keys(fileno=fd)
-
-        signals.emit_signal(self, INPUT_DESCRIPTORS_CHANGED)
-
-        return super(Screen, self)._start()
 
     def _stop(self):
         """
         Restore the screen.
         """
-        self.clear()
-
-        signals.emit_signal(self, INPUT_DESCRIPTORS_CHANGED)
-
-        self.signal_restore()
-
-        fd = self._input_fileno()
-        if fd is not None and os.isatty(fd):
-            termios.tcsetattr(fd, termios.TCSADRAIN, self._old_termios_settings)
-
-        if self._old_signal_keys:
-            self.tty_signal_keys(*(self._old_signal_keys + (fd,)))
-
-        super(Screen, self)._stop()
-
-
-    def write(self, data):
-        """Write some data to the terminal.
-
-        You may wish to override this if you're using something other than
-        regular files for input and output.
-        """
-        self._term_output_file.write(data)
-
-    def flush(self):
-        """Flush the output buffer.
-
-        You may wish to override this if you're using something other than
-        regular files for input and output.
-        """
-        self._term_output_file.flush()
 
     def get_input(self, raw_keys=False):
         """Return pending input as a list.
@@ -398,21 +269,17 @@ class Screen(BaseScreen, RealTerminal):
         if not self._started:
             return []
 
-        # fd_list = [self._resize_pipe_rd]
-        fd_list = []
         fd = self._input_fileno()
-        if fd is not None:
-            fd_list.append(fd)
-        return fd_list
+        return [fd] if fd is not None else []
 
-    _current_event_loop_handles = ()
+    _current_event_loop_handle = None
 
     def unhook_event_loop(self, event_loop):
         """
         Remove any hooks added by hook_event_loop.
         """
-        for handle in self._current_event_loop_handles:
-            event_loop.remove_watch_file(handle)
+        if self._current_event_loop_handle is not None:
+            event_loop.remove_watch_file(self._current_event_loop_handle)
 
         if self._input_timeout:
             event_loop.remove_alarm(self._input_timeout)
@@ -426,15 +293,20 @@ class Screen(BaseScreen, RealTerminal):
 
         Subclasses may wish to use parse_input to wrap the callback.
         """
-        wrapper = lambda: self.parse_input(event_loop, callback, self.get_available_raw_input())
-        fds = self.get_input_descriptors()
-        handles = [event_loop.watch_file(fd, wrapper) for fd in fds]
-        self._current_event_loop_handles = handles
+        if not self._started:
+            return
+
+        fd = self._input_fileno()
+        if fd is None:
+            return
+
+        wrapper = lambda: self.parse_input(
+            event_loop, callback, self.get_available_raw_input()
+        )
+        self._current_event_loop_handle = event_loop.watch_file(fd, wrapper)
 
     _input_timeout = None
     _partial_codes = None
-
-
 
     def get_available_raw_input(self):
         """
@@ -481,8 +353,7 @@ class Screen(BaseScreen, RealTerminal):
         processed = []
         try:
             while codes:
-                run, codes = escape.process_keyqueue(
-                    codes, wait_for_more)
+                run, codes = escape.process_keyqueue(codes, wait_for_more)
                 processed.extend(run)
         except escape.MoreInputRequired:
             # Set a timer to wait for the rest of the input; if it goes off
@@ -494,11 +365,12 @@ class Screen(BaseScreen, RealTerminal):
             def _parse_incomplete_input():
                 self._input_timeout = None
                 self._partial_codes = None
-                self.parse_input(
-                    event_loop, callback, codes, wait_for_more=False)
+                self.parse_input(event_loop, callback, codes, wait_for_more=False)
+
             if event_loop:
                 self._input_timeout = event_loop.alarm(
-                    self.complete_wait, _parse_incomplete_input)
+                    self.complete_wait, _parse_incomplete_input
+                )
 
         else:
             processed_codes = original_codes
@@ -532,11 +404,9 @@ class Screen(BaseScreen, RealTerminal):
         while True:
             try:
                 if timeout is None:
-                    ready,w,err = select.select(
-                        fd_list, [], fd_list)
+                    ready, w, err = select.select(fd_list, [], fd_list)
                 else:
-                    ready,w,err = select.select(
-                        fd_list,[],fd_list, timeout)
+                    ready, w, err = select.select(fd_list, [], fd_list, timeout)
                 break
             except select.error as e:
                 if e.args[0] != 4:
@@ -560,25 +430,82 @@ class Screen(BaseScreen, RealTerminal):
         """Return the terminal dimensions (num columns, num rows)."""
         y, x = 24, 80
         try:
-            if hasattr(self._term_output_file, 'fileno'):
-                buf = fcntl.ioctl(self._term_output_file.fileno(),
-                                termios.TIOCGWINSZ, ' '*4)
-                y, x = struct.unpack('hh', buf)
+            if hasattr(self._term_output_file, "fileno"):
+                buf = fcntl.ioctl(
+                    self._term_output_file.fileno(), termios.TIOCGWINSZ, " " * 4
+                )
+                y, x = struct.unpack("hh", buf)
         except IOError:
             # Term size could not be determined
             pass
         self.maxrow = y
         return x, y
 
-    def draw_screen(self, maxres, r ):
+    def draw_screen(self, maxres, r):
         """Paint screen with rendered canvas."""
         return
 
-
-    def clear(self):
+    def tty_signal_keys(
+        self, intr=None, quit=None, start=None, stop=None, susp=None, fileno=None
+    ):
         """
-        Force the screen to be completely repainted on the next
-        call to draw_screen().
-        """
-        self.screen_buf = None
+        Read and/or set the tty's signal character settings.
+        This function returns the current settings as a tuple.
 
+        Use the string 'undefined' to unmap keys from their signals.
+        The value None is used when no change is being made.
+        Setting signal keys is done using the integer ascii
+        code for the key, eg.  3 for CTRL+C.
+
+        If this function is called after start() has been called
+        then the original settings will be restored when stop()
+        is called.
+        """
+        if fileno is None:
+            fileno = sys.stdin.fileno()
+        if not os.isatty(fileno):
+            return
+
+        tattr = termios.tcgetattr(fileno)
+        sattr = tattr[6]
+        skeys = (
+            sattr[termios.VINTR],
+            sattr[termios.VQUIT],
+            sattr[termios.VSTART],
+            sattr[termios.VSTOP],
+            sattr[termios.VSUSP],
+        )
+
+        if intr == "undefined":
+            intr = 0
+        if quit == "undefined":
+            quit = 0
+        if start == "undefined":
+            start = 0
+        if stop == "undefined":
+            stop = 0
+        if susp == "undefined":
+            susp = 0
+
+        if intr is not None:
+            tattr[6][termios.VINTR] = intr
+        if quit is not None:
+            tattr[6][termios.VQUIT] = quit
+        if start is not None:
+            tattr[6][termios.VSTART] = start
+        if stop is not None:
+            tattr[6][termios.VSTOP] = stop
+        if susp is not None:
+            tattr[6][termios.VSUSP] = susp
+
+        if (
+            intr is not None
+            or quit is not None
+            or start is not None
+            or stop is not None
+            or susp is not None
+        ):
+            termios.tcsetattr(fileno, termios.TCSADRAIN, tattr)
+            self._signal_keys_set = True
+
+        return skeys
