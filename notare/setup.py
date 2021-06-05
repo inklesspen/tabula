@@ -9,42 +9,9 @@
 from glob import glob
 from os.path import basename
 from os.path import splitext
-import platform
 
-from distutils.errors import CCompilerError, DistutilsExecError, DistutilsPlatformError
 from setuptools import find_packages
 from setuptools import setup
-from setuptools.command.build_ext import build_ext
-
-EXPECTED_TO_BUILD_ON = {
-}
-
-
-class optional_build_ext(build_ext):
-    """Allow the building of C extensions to fail."""
-
-    def build_extension(self, ext):
-        extname = ext.name.split(".", 1)[1]
-        try:
-            build_ext.build_extension(self, ext)
-        except (CCompilerError, DistutilsExecError, DistutilsPlatformError) as e:
-            if platform.system() in EXPECTED_TO_BUILD_ON.get(extname, tuple()):
-                raise
-            if extname not in EXPECTED_TO_BUILD_ON:
-                self._unavailable(extname, e)
-
-            self.extensions.remove(ext)
-
-    def _unavailable(self, extname, e):
-        print("*" * 80)
-        print(
-            f"WARNING: {extname} failed to compile and we couldn't tell if that's okay!"
-        )
-
-        print("CAUSE:")
-        print("")
-        print("    " + repr(e))
-        print("*" * 80)
 
 
 setup(
@@ -89,8 +56,6 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "attrs",
-        "cffi>=1.0.0",
-        "numpy>=1.20.3",
         "pydantic>=1.8.2",
         "python-dateutil>=2.8.1",
         "trio>=0.18.0",
@@ -100,13 +65,9 @@ setup(
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
     ],
     extras_require={
+        "host": ["numpy>=1.20.3", "urwid>=2.1.2"]
         # eg:
         #   'rst': ['docutils>=0.11'],
         #   ':python_version=="2.6"': ['argparse'],
     },
-    setup_requires=[
-        "cffi>=1.0.0",
-    ],
-    cmdclass={"build_ext": optional_build_ext},
-    cffi_modules=[i + ":ffibuilder" for i in glob("src/**/_*_build.py", recursive=True)],
 )

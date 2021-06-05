@@ -147,18 +147,21 @@ class Application:
         nursery.start_soon(self.document.new_para)
 
     async def handle_keystrokes(self):
+        log_keys = bool(os.environ.get("LOG_KEYS"))
         async with self.keystroke_receive_channel:
             async for value in self.keystroke_receive_channel:
+                if log_keys:
+                    print(f"keystroke: {value}")
                 if len(value) == 1 and graphical_char(value):
                     await self.document.keystroke(value)
                 elif value == "enter":
                     await self.document.new_para()
                 elif value == "backspace":
                     await self.document.backspace()
-                # elif value == "f1":
-                #     print("This is when we would show help.")
-                # elif value == "f10":
-                #     print("This is when we would show the menu.")
+                elif value == "f1":
+                    print("This is when we would show help.")
+                elif value == "f10":
+                    print("This is when we would show the menu.")
                 elif value == "f12":
                     await self.stub.shutdown()
                     self.nursery.cancel_scope.cancel()
@@ -195,7 +198,7 @@ async def main(url):
         nursery.start_soon(application.handle_keystrokes)
         nursery.start_soon(application.handle_document_updates)
         nursery.start_soon(application.handle_screen_updates)
-        nursery.start_soon(term.input_loop, keystroke_send_channel, nursery)
+        nursery.start_soon(term.input_loop, keystroke_send_channel)
         await trio.sleep_forever()
 
 
