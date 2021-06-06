@@ -44,56 +44,12 @@ def code_version(*, major: int, minor: int, subminor: int):
     )
 
 
-class DHCPD(object):
-    def __init__(self):
-        self.process = None
-
-    @property
-    def is_running(self):
-        return self.process is not None
-
-    def start(self):
-        if self.is_running:
-            return
-        self.process = subprocess.Popen(
-            [
-                "dnsmasq",
-                "--listen-address=10.52.0.1",
-                "--no-hosts",
-                "--port=0",
-                "--dhcp-range=10.52.0.2,10.52.0.99,1h",
-                "--dhcp-option=3",
-                "--pid-file",
-                "--dhcp-leasefile",
-                "--no-daemon",
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-    def stop(self):
-        if not self.is_running:
-            return
-        self.process.terminate()
-        self.process = None
-
-
 class Gadget(contextlib.AbstractContextManager):
-    def __init__(self, with_dhcp: bool = False):
-        self.with_dhcp = with_dhcp
-        if self.with_dhcp:
-            self.dhcp = DHCPD()
-
     def __enter__(self):
         setup_gadget()
-        if self.with_dhcp:
-            self.dhcp.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.with_dhcp:
-            self.dhcp.stop()
         teardown_gadget()
 
 
