@@ -131,9 +131,13 @@ async def run_server(host, port):
         ink.clear()
 
 
-if __name__ == "__main__":
+def main():
     if os.environ.get("SKIP_GADGET"):
         trio.run(run_server, None, TABULA_PORT)
     else:
         with Gadget():
             trio.run(run_server, None, TABULA_PORT)
+
+
+if __name__ == "__main__":
+    main()

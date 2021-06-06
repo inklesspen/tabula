@@ -189,7 +189,7 @@ class Application:
                 await self.stub.update_display(update)
 
 
-async def main(url):
+async def run_client(url):
     async with trio.open_nursery() as nursery, open_jsonrpc_ws(url) as client:
         stub = Stub(client)
         screen_info = await stub.get_screen_info()
@@ -202,8 +202,12 @@ async def main(url):
         await trio.sleep_forever()
 
 
-if __name__ == "__main__":
+def main():
     tabula_ip = os.environ.get("TABULA_IP", TABULA_IP)
     tabula_post = os.environ.get("TABULA_PORT", TABULA_PORT)
     tabula_url = f"ws://{tabula_ip}:{tabula_post}"
-    trio.run(main, tabula_url)
+    trio.run(run_client, tabula_url)
+
+
+if __name__ == "__main__":
+    main()
