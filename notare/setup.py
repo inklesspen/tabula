@@ -56,6 +56,7 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "attrs",
+        "cardinality>=0.1.1",
         "pydantic>=1.8.2",
         "python-dateutil>=2.8.1",
         "trio>=0.18.0",
