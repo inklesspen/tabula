@@ -12,7 +12,6 @@
 # Copyright (C) 2001 Sun Microsystems
 # (the specific years vary in some of the files)
 
-from PIL import Image
 import numpy as np
 
 from ._cffi import ffi, lib as clib
@@ -42,15 +41,6 @@ class Renderer:
             margin_b=0,
         )
         self.instance = PangoCairoRenderer(opts)
-
-    def render(self, markup: str, font: str):
-        render_opts = RenderOpts(font=font, markup=True, text=markup)
-
-        with self.instance.create_surface() as surface:
-            rendered_size = self.instance.render(surface, render_opts)
-            image = self.instance.surface_to_image(surface, rendered_size)
-
-            return image
 
     def render_to_bytes(self, markup: str, font: str):
         render_opts = RenderOpts(font=font, markup=True, text=markup)
@@ -142,10 +132,6 @@ class PangoCairoRenderer:
 
     def surface_to_bytes(self, surface, size):
         return bytes(self._surface_to_buffer(surface, size))
-
-    def surface_to_image(self, surface, size):
-        buf = self._surface_to_buffer(surface, size)
-        return Image.frombuffer("L", size.as_tuple(), buf, "raw", "L;I", 0, 1)
 
     def _paint_background(self, cr):
         clib.cairo_set_operator(cr, clib.CAIRO_OPERATOR_SOURCE)
