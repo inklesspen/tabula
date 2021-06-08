@@ -25,6 +25,7 @@ from .types import (
     Point,
     Opts,
     RenderOpts,
+    WrapMode,
 )
 
 
@@ -33,7 +34,7 @@ class Renderer:
         self.screen_size = screen_size
         self.dpi = dpi
         opts = Opts(
-            wrap=clib.PANGO_WRAP_WORD,
+            wrap=WrapMode.WORD,
             dpi=self.dpi,
             transparent=True,
             screen_size=self.screen_size,

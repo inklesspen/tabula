@@ -28,6 +28,8 @@ Antialias = _c_enum("cairo_antialias_t", "Antialias")
 
 HintMetrics = _c_enum("cairo_hint_metrics_t", "HintMetrics")
 
+WrapMode = _c_enum("PangoWrapMode", "WrapMode")
+
 
 @attr.s(auto_attribs=True, kw_only=True, frozen=True)
 class Point:
@@ -86,7 +88,7 @@ class Opts:
     margin_l: int = 10
     justify: bool = False
     single_par: bool = False
-    wrap: int = clib.PANGO_WRAP_WORD_CHAR
+    wrap: WrapMode = WrapMode.WORD_CHAR
     transparent: bool = False
     screen_size: Size = Size(width=0, height=0)
 
