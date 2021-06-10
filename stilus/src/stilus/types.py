@@ -30,6 +30,8 @@ HintMetrics = _c_enum("cairo_hint_metrics_t", "HintMetrics")
 
 WrapMode = _c_enum("PangoWrapMode", "WrapMode")
 
+Alignment = _c_enum("PangoAlignment", "Alignment")
+
 
 @attr.s(auto_attribs=True, kw_only=True, frozen=True)
 class Point:
@@ -82,13 +84,6 @@ class Opts:
     subpixel_order: SubpixelOrder = SubpixelOrder.DEFAULT
     antialias: Antialias = Antialias.DEFAULT
     subpixel_positions: bool = False
-    margin_t: int = 10
-    margin_r: int = 10
-    margin_b: int = 10
-    margin_l: int = 10
-    justify: bool = False
-    single_par: bool = False
-    wrap: WrapMode = WrapMode.WORD
     transparent: bool = True
     screen_size: Size = Size(width=0, height=0)
 
@@ -99,3 +94,12 @@ class RenderOpts:
     text: str = ""
     markup: bool = False
     draw_border: bool = False
+    justify: bool = False
+    alignment: Alignment = Alignment.LEFT
+    single_par: bool = False
+    wrap: WrapMode = WrapMode.WORD
+    margin_t: int = 10
+    margin_r: int = 10
+    margin_b: int = 10
+    margin_l: int = 10
+    clear_before_render: bool = True

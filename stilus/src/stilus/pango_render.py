@@ -30,24 +30,29 @@ from .types import (
 
 
 class Renderer:
-    def __init__(
-        self, *, screen_size: Size, dpi: int, margin_lr: int = 10, margin_tb: int = 0
-    ):
+    def __init__(self, *, screen_size: Size, dpi: int):
         self.screen_size = screen_size
         self.dpi = dpi
-        opts = Opts(
-            dpi=self.dpi,
-            screen_size=self.screen_size,
+        opts = Opts(dpi=self.dpi, screen_size=self.screen_size)
+        self.instance = PangoCairoRenderer(opts)
+
+    def render_to_bytes(
+        self,
+        markup: str,
+        font: str,
+        margin_lr: int = 10,
+        margin_tb: int = 0,
+        draw_border: bool = False,
+    ):
+        render_opts = RenderOpts(
+            font=font,
+            markup=True,
+            text=markup,
+            draw_border=draw_border,
             margin_t=margin_tb,
             margin_b=margin_tb,
             margin_l=margin_lr,
             margin_r=margin_lr,
-        )
-        self.instance = PangoCairoRenderer(opts)
-
-    def render_to_bytes(self, markup: str, font: str, draw_border=False):
-        render_opts = RenderOpts(
-            font=font, markup=True, text=markup, draw_border=draw_border
         )
 
         with self.instance.create_surface() as surface:
@@ -57,8 +62,17 @@ class Renderer:
                 rendered_size,
             )
 
-    def render_to_numpy(self, markup: str, font: str, draw_border=False):
-        (buf, new_size) = self.render_to_bytes(markup, font, draw_border=draw_border)
+    def render_to_numpy(
+        self,
+        markup: str,
+        font: str,
+        margin_lr: int = 10,
+        margin_tb: int = 0,
+        draw_border: bool = False,
+    ):
+        (buf, new_size) = self.render_to_bytes(
+            markup, font, margin_lr, margin_tb, draw_border
+        )
         new_rendered = np.ndarray(new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
         return new_rendered
 
@@ -202,7 +216,8 @@ class PangoCairoRenderer:
             # sets identity matrix
             self._set_cairo_transform(cairo, None)
 
-            self._paint_background(cairo)
+            if render_opts.clear_before_render:
+                self._paint_background(cairo)
 
             clib.cairo_set_operator(cairo, clib.CAIRO_OPERATOR_OVER)
             clib.cairo_set_source_rgba(cairo, 0, 0, 0, 1)
@@ -258,8 +273,8 @@ class PangoCairoRenderer:
         # x_device = x_user * matrix->xx + y_user * matrix->xy + matrix->x0;
         # y_device = x_user * matrix->yx + y_user * matrix->yy + matrix->y0;
         with ffi.new("PangoMatrix *", [1, 0, 0, 1, 0, 0]) as matrix:
-            matrix.x0 = self.opts.margin_l
-            matrix.y0 = self.opts.margin_t
+            matrix.x0 = render_opts.margin_l
+            matrix.y0 = render_opts.margin_t
 
             clib.pango_context_set_matrix(self.context, matrix)
             self._set_cairo_transform(cairo, matrix)
@@ -268,8 +283,8 @@ class PangoCairoRenderer:
             rendered_size = self._output_body(layout, cairo)
 
         size_with_margin = Size(
-            width=rendered_size.width + self.opts.margin_l + self.opts.margin_r,
-            height=rendered_size.height + self.opts.margin_t + self.opts.margin_b,
+            width=rendered_size.width + render_opts.margin_l + render_opts.margin_r,
+            height=rendered_size.height + render_opts.margin_t + render_opts.margin_b,
         )
 
         clib.pango_context_set_matrix(self.context, orig_matrix)
@@ -288,20 +303,23 @@ class PangoCairoRenderer:
         # don't try auto-detecting text direction
         clib.pango_layout_set_auto_dir(layout, False)
         clib.pango_layout_set_ellipsize(layout, clib.PANGO_ELLIPSIZE_NONE)
-        clib.pango_layout_set_justify(layout, self.opts.justify)
-        clib.pango_layout_set_single_paragraph_mode(layout, self.opts.single_par)
-        clib.pango_layout_set_wrap(layout, self.opts.wrap)
+        clib.pango_layout_set_justify(layout, render_opts.justify)
+        clib.pango_layout_set_single_paragraph_mode(layout, render_opts.single_par)
+        clib.pango_layout_set_wrap(layout, render_opts.wrap)
 
         with self._make_font_description(render_opts.font) as font_description:
             clib.pango_layout_set_font_description(layout, font_description)
 
         clib.pango_layout_set_width(
             layout,
-            (self.opts.screen_size.width - (self.opts.margin_l + self.opts.margin_r))
+            (
+                self.opts.screen_size.width
+                - (render_opts.margin_l + render_opts.margin_r)
+            )
             * clib.PANGO_SCALE,
         )
 
-        clib.pango_layout_set_alignment(layout, clib.PANGO_ALIGN_LEFT)
+        clib.pango_layout_set_alignment(layout, render_opts.alignment)
 
         return layout
 

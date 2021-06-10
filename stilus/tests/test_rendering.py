@@ -5,12 +5,14 @@
 # We cannot have automated tests, because the minute details of rendering
 # depend on a number of things, including fonts installed on the host.
 # So instead we have acceptance tests, which require human eyes.
+import math
 import pathlib
 
+import attr
 import PIL.Image
 import pytest
 
-from stilus.types import RenderOpts, Opts, Size, WrapMode
+from stilus.types import RenderOpts, Opts, Size, Alignment
 from stilus.pango_render import PangoCairoRenderer
 
 pytestmark = pytest.mark.usefixtures("goldenspath", "actualspath")
@@ -23,6 +25,24 @@ TI = (
     "my pen in the year of grace 17—, and go back to the time when my father kept the "
     "Admiral Benbow Inn, and the brown old seaman, with the saber cut, first took up "
     "his lodging under our roof."
+)
+
+VERSE = (
+    "<big>Paradise Lost</big> by John Milton",
+    """Of Man’s first disobedience, and the fruit
+Of that forbidden Tree, whose mortal taste
+Brought death into the world, and all our woe,
+With loss of Eden, till one greater Man
+Restore us, and regain the blissful seat[…]""",
+    "<big>The Iliad</big> by Homer",
+    """O Goddess! Sing the wrath of Peleus’ son,
+Achilles; sing the deadly wrath that brought
+Woes numberless upon the Greeks, and swept
+To Hades many a valiant soul, and gave
+Their limbs a prey to dogs and birds of air⁠—
+For so had Jove appointed⁠—from the time
+When the two chiefs, Atrides, king of men,
+And great Achilles, parted first as foes.""",
 )
 
 
@@ -49,10 +69,6 @@ def renderer():
     opts = Opts(
         dpi=300,
         screen_size=Size(width=800, height=800),
-        margin_t=6,
-        margin_b=6,
-        margin_l=6,
-        margin_r=6,
     )
     instance = PangoCairoRenderer(opts)
     return instance
@@ -63,7 +79,9 @@ def test_ti(
     actualspath: pathlib.Path,
     renderer: PangoCairoRenderer,
 ):
-    render_opts = RenderOpts(font="B612 Regular 8", markup=True, text=TI)
+    render_opts = RenderOpts(
+        font="B612 Regular 8", markup=True, text=TI, margin_t=0, margin_b=0
+    )
 
     with renderer.create_surface() as surface:
         rendered_size = renderer.render(surface, render_opts)
@@ -79,12 +97,49 @@ def test_border(
     actualspath: pathlib.Path,
     renderer: PangoCairoRenderer,
 ):
-    render_opts = RenderOpts(
-        font="TeX Gyre Pagella 8", markup=True, text=TI, draw_border=True
+    base_render_opts = RenderOpts(
+        font="TeX Gyre Pagella 8",
+        markup=True,
+        text="n/a",
+        margin_t=6,
+        margin_b=0,
+        margin_l=6,
+        margin_r=6,
     )
+    skip_height = math.ceil(renderer.calculate_line_height(base_render_opts.font))
 
     with renderer.create_surface() as surface:
+        render_opts = attr.evolve(
+            base_render_opts, text=VERSE[0], alignment=Alignment.CENTER
+        )
         rendered_size = renderer.render(surface, render_opts)
+
+        render_opts = attr.evolve(
+            base_render_opts,
+            text=VERSE[1],
+            margin_t=rendered_size.height + skip_height,
+            clear_before_render=False,
+        )
+        rendered_size = renderer.render(surface, render_opts)
+
+        render_opts = attr.evolve(
+            base_render_opts,
+            text=VERSE[2],
+            alignment=Alignment.CENTER,
+            margin_t=rendered_size.height + skip_height,
+            clear_before_render=False,
+        )
+        rendered_size = renderer.render(surface, render_opts)
+
+        render_opts = attr.evolve(
+            base_render_opts,
+            text=VERSE[3],
+            margin_t=rendered_size.height + skip_height,
+            clear_before_render=False,
+            draw_border=True,
+        )
+        rendered_size = renderer.render(surface, render_opts)
+
         buf = renderer.surface_to_bytes(surface, rendered_size)
 
     im = PIL.Image.frombytes("L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1)
