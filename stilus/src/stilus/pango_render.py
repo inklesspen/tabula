@@ -54,9 +54,7 @@ class Renderer:
 
     def render_to_numpy(self, markup: str, font: str):
         (buf, new_size) = self.render_to_bytes(markup, font)
-        new_rendered = ~np.ndarray(
-            new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf
-        )
+        new_rendered = np.ndarray(new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
         return new_rendered
 
 
@@ -131,6 +129,13 @@ class PangoCairoRenderer:
         return buf
 
     def surface_to_bytes(self, surface, size):
+        # The A8 surface type is treated by cairo as an alpha channel.
+        # To use it as a grayscale channel, we need to invert the bytes.
+        clib.cairo_surface_flush(surface)
+        clib.invert_a8_surface(surface)
+        # Technically this call is not necessary, as long as we immediately
+        # dispose of the surface. But better safe than sorry.
+        clib.cairo_surface_mark_dirty(surface)
         return bytes(self._surface_to_buffer(surface, size))
 
     def _paint_background(self, cr):
