@@ -182,6 +182,17 @@ typedef enum _cairo_hint_metrics {
     CAIRO_HINT_METRICS_ON
 } cairo_hint_metrics_t;
 
+typedef enum _cairo_line_cap {
+    CAIRO_LINE_CAP_BUTT,
+    CAIRO_LINE_CAP_ROUND,
+    CAIRO_LINE_CAP_SQUARE
+} cairo_line_cap_t;
+
+typedef enum _cairo_line_join {
+    CAIRO_LINE_JOIN_MITER,
+    CAIRO_LINE_JOIN_ROUND,
+    CAIRO_LINE_JOIN_BEVEL
+} cairo_line_join_t;
 
 typedef cairo_status_t (*cairo_write_func_t) (void		  *closure,
 					      const unsigned char *data,
@@ -279,6 +290,49 @@ cairo_translate (cairo_t *cr, double tx, double ty);
 
 void
 cairo_move_to (cairo_t *cr, double x, double y);
+
+void
+cairo_new_path (cairo_t *cr);
+
+void
+cairo_close_path (cairo_t *cr);
+
+void
+cairo_line_to (cairo_t *cr, double x, double y);
+
+void
+cairo_rectangle (cairo_t *cr,
+                 double x,
+                 double y,
+                 double width,
+                 double height);
+
+void
+cairo_rel_line_to (cairo_t *cr, double dx, double dy);
+
+void
+cairo_rel_move_to (cairo_t *cr, double dx, double dy);
+
+void
+cairo_path_extents (cairo_t *cr,
+                    double *x1,
+                    double *y1,
+                    double *x2,
+                    double *y2);
+
+void
+cairo_set_line_width (cairo_t *cr, double width);
+
+void
+cairo_set_line_cap (cairo_t *cr,
+                    cairo_line_cap_t line_cap);
+
+void
+cairo_set_line_join (cairo_t *cr,
+                     cairo_line_join_t line_join);
+
+void
+cairo_stroke (cairo_t *cr);
 
 void
 cairo_surface_flush (cairo_surface_t *surface);
@@ -428,6 +482,10 @@ PangoFontDescription *pango_font_description_from_string (const char            
 void                 pango_font_description_set_size          (PangoFontDescription *desc,
                                                                gint                  size);
 void                  pango_font_description_free        (PangoFontDescription        *desc);
+
+PangoFontDescription* pango_font_describe (PangoFont* font);
+
+char* pango_font_description_to_string (PangoFontDescription* desc);
 
 PangoLayout *pango_layout_new            (PangoContext   *context);
 void           pango_layout_set_markup     (PangoLayout    *layout,

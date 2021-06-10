@@ -88,8 +88,8 @@ class Opts:
     margin_l: int = 10
     justify: bool = False
     single_par: bool = False
-    wrap: WrapMode = WrapMode.WORD_CHAR
-    transparent: bool = False
+    wrap: WrapMode = WrapMode.WORD
+    transparent: bool = True
     screen_size: Size = Size(width=0, height=0)
 
 
@@ -98,3 +98,4 @@ class RenderOpts:
     font: str = ""
     text: str = ""
     markup: bool = False
+    draw_border: bool = False

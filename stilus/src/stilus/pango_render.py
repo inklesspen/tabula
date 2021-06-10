@@ -11,6 +11,7 @@
 # Copyright (C) 1999,2004,2005 Red Hat, Inc.
 # Copyright (C) 2001 Sun Microsystems
 # (the specific years vary in some of the files)
+from __future__ import annotations
 
 import numpy as np
 
@@ -29,21 +30,25 @@ from .types import (
 
 
 class Renderer:
-    def __init__(self, *, screen_size: Size, dpi: int):
+    def __init__(
+        self, *, screen_size: Size, dpi: int, margin_lr: int = 10, margin_tb: int = 0
+    ):
         self.screen_size = screen_size
         self.dpi = dpi
         opts = Opts(
-            wrap=WrapMode.WORD,
             dpi=self.dpi,
-            transparent=True,
             screen_size=self.screen_size,
-            margin_t=0,
-            margin_b=0,
+            margin_t=margin_tb,
+            margin_b=margin_tb,
+            margin_l=margin_lr,
+            margin_r=margin_lr,
         )
         self.instance = PangoCairoRenderer(opts)
 
-    def render_to_bytes(self, markup: str, font: str):
-        render_opts = RenderOpts(font=font, markup=True, text=markup)
+    def render_to_bytes(self, markup: str, font: str, draw_border=False):
+        render_opts = RenderOpts(
+            font=font, markup=True, text=markup, draw_border=draw_border
+        )
 
         with self.instance.create_surface() as surface:
             rendered_size = self.instance.render(surface, render_opts)
@@ -52,10 +57,16 @@ class Renderer:
                 rendered_size,
             )
 
-    def render_to_numpy(self, markup: str, font: str):
-        (buf, new_size) = self.render_to_bytes(markup, font)
+    def render_to_numpy(self, markup: str, font: str, draw_border=False):
+        (buf, new_size) = self.render_to_bytes(markup, font, draw_border=draw_border)
         new_rendered = np.ndarray(new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
         return new_rendered
+
+    @staticmethod
+    def calculate_line_height(font: str, dpi: int) -> float:
+        opts = Opts(dpi=dpi)
+        instance = PangoCairoRenderer(opts)
+        return instance.calculate_line_height(font)
 
 
 class PangoCairoRenderer:
@@ -175,6 +186,17 @@ class PangoCairoRenderer:
         ) as font_metrics:
             return clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
 
+    def describe_loaded_font(self, font: str):
+        with self._make_font_description(font) as font_description, ffi.gc(
+            clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
+            clib.g_object_unref,
+        ) as loaded_font, ffi.gc(
+            clib.pango_font_describe(loaded_font), clib.pango_font_description_free
+        ) as loaded_font_description, ffi.gc(
+            clib.pango_font_description_to_string(loaded_font_description), clib.g_free
+        ) as loaded_font_string:
+            return ffi.string(loaded_font_string).decode("utf-8")
+
     def render(self, surface, render_opts: RenderOpts) -> Size:
         with ffi.gc(clib.cairo_create(surface), clib.cairo_destroy) as cairo:
             # sets identity matrix
@@ -186,6 +208,20 @@ class PangoCairoRenderer:
             clib.cairo_set_source_rgba(cairo, 0, 0, 0, 1)
 
             size = self._do_output(cairo, render_opts)
+
+            if render_opts.draw_border:
+                # restore identity matrix
+                self._set_cairo_transform(cairo, None)
+                clib.cairo_set_line_width(cairo, 1)
+                clib.cairo_rectangle(
+                    cairo,
+                    0.5,
+                    0.5,
+                    self.opts.screen_size.width - 2,
+                    self.opts.screen_size.height - 2,
+                )
+                clib.cairo_stroke(cairo)
+                size = self.opts.screen_size
 
         return size
 

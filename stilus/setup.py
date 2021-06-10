@@ -93,6 +93,7 @@ setup(
         "markdown-it-py",
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
     ],
+    tests_require=["pytest>=6.2.4", "Pillow>=8.2.0"],
     extras_require={
         # eg:
         #   'rst': ['docutils>=0.11'],
