@@ -230,8 +230,8 @@ class PangoCairoRenderer:
                 clib.cairo_set_line_width(cairo, 1)
                 clib.cairo_rectangle(
                     cairo,
-                    0.5,
-                    0.5,
+                    1.5,
+                    1.5,
                     self.opts.screen_size.width - 2,
                     self.opts.screen_size.height - 2,
                 )
