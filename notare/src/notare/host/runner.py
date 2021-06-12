@@ -19,6 +19,7 @@ import stilus.pango_render
 import stilus.types
 
 from . import term
+from .config import Settings
 from .rendering import Screen
 from .types import UpdateKind, ParagraphUpdate, Renderable
 from ..protocol import (
@@ -123,11 +124,13 @@ class DocumentModel:
 class Application:
     def __init__(
         self,
+        settings: Settings,
         keystroke_receive_channel: trio.abc.ReceiveChannel,
         stub: Stub,
         nursery: trio.Nursery,
         screen_info: ScreenInfo,
     ):
+        self.settings = settings
         self.keystroke_receive_channel = keystroke_receive_channel
         self.stub = stub
         self.screen_info = screen_info
@@ -141,7 +144,11 @@ class Application:
             width=screen_info.width, height=screen_info.height
         )
         self.screen = Screen(
-            screen_size, screen_info.dpi, screen_send_channel, self.document.get_markup
+            settings.drafting_fonts[0],
+            screen_size,
+            screen_info.dpi,
+            screen_send_channel,
+            self.document.get_markup,
         )
         self.nursery = nursery
         nursery.start_soon(self.document.new_para)
@@ -189,12 +196,16 @@ class Application:
                 await self.stub.update_display(update)
 
 
-async def run_client(url):
+async def run_client(settings: Settings):
+    url = f"ws://{settings.ip}:{settings.port}"
+
     async with trio.open_nursery() as nursery, open_jsonrpc_ws(url) as client:
         stub = Stub(client)
         screen_info = await stub.get_screen_info()
         keystroke_send_channel, keystroke_receive_channel = trio.open_memory_channel(0)
-        application = Application(keystroke_receive_channel, stub, nursery, screen_info)
+        application = Application(
+            settings, keystroke_receive_channel, stub, nursery, screen_info
+        )
         nursery.start_soon(application.handle_keystrokes)
         nursery.start_soon(application.handle_document_updates)
         nursery.start_soon(application.handle_screen_updates)
@@ -203,10 +214,8 @@ async def run_client(url):
 
 
 def main():
-    tabula_ip = os.environ.get("TABULA_IP", TABULA_IP)
-    tabula_post = os.environ.get("TABULA_PORT", TABULA_PORT)
-    tabula_url = f"ws://{tabula_ip}:{tabula_post}"
-    trio.run(run_client, tabula_url)
+    settings = Settings()
+    trio.run(run_client, settings)
 
 
 if __name__ == "__main__":

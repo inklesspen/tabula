@@ -53,6 +53,7 @@ def bbox(img: npt.ArrayLike) -> ArrayRect:
 class Screen:
     def __init__(
         self,
+        font: str,
         screen_size: stilus.types.Size,
         dpi: int,
         dispatch_channel: trio.abc.SendChannel,
@@ -64,7 +65,7 @@ class Screen:
         self.renderer = stilus.pango_render.Renderer(
             screen_size=self.screen_size, dpi=dpi
         )
-        self.set_font(FONT)
+        self.set_font(font)
         self.cursor_y = self.screen_size.height // 2
         self.renders: typing.List[RenderPara] = []
 
