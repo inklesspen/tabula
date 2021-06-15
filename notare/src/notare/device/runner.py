@@ -7,6 +7,7 @@ import datetime
 import inspect
 import json
 import os
+import typing
 
 import attr
 from dateutil.tz import tzlocal
@@ -48,10 +49,21 @@ class Servicer(Protocol):
         self.ink = ink
         self.battery = battery
 
-    def update_display(self, framelet: Framelet) -> None:
-        rect = framelet.rect
-        self.ink.display_pixels(framelet.image, rect.x, rect.y, rect.width, rect.height)
-        return None
+    def update_screen(self, framelets: typing.List[Framelet]) -> None:
+        # TODO: allow a sequence of framelets and only refresh at the end
+        for framelet in framelets:
+            rect = framelet.rect
+            image = Framelet.decode_bytes(framelet.image)
+            self.ink.display_pixels(image, rect.x, rect.y, rect.width, rect.height)
+
+    def clear_screen(self) -> None:
+        self.ink.clear()
+
+    def save_screen(self) -> None:
+        self.ink.save_screen()
+
+    def restore_screen(self) -> None:
+        self.ink.restore_screen()
 
     def get_screen_info(self) -> ScreenInfo:
         return ScreenInfo(**attr.asdict(self.ink.get_screen_info()))
@@ -82,7 +94,12 @@ def dispatch_request(servicer, request):
             raise JsonRpcInvalidParamsError()
         for k, v in bound.arguments.items():
             vclass = sig.parameters[k].annotation
-            bound.arguments[k] = vclass.parse_raw(json.dumps(v))
+            # We support generic lists
+            if typing.get_origin(vclass) is list:
+                vclass = typing.get_args(vclass)[0]
+                bound.arguments[k] = [vclass.parse_raw(json.dumps(x)) for x in v]
+            else:
+                bound.arguments[k] = vclass.parse_raw(json.dumps(v))
         result = smethod(*bound.args, **bound.kwargs)
         if sig.return_annotation is None:
             # Actually returning None causes problems :(

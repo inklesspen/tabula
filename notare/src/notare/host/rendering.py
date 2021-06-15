@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import math
 import typing
 
 import attr
@@ -17,10 +18,7 @@ from .types import (
     Renderable,
     ArrayRect,
 )
-from ..protocol import (
-    Framelet,
-    Rect,
-)
+from ..protocol import Framelet, Rect
 
 # https://en.wikipedia.org/wiki/Macron_below
 # https://en.wikipedia.org/wiki/Underscore
@@ -114,7 +112,8 @@ class Screen:
                 changed_box.left : changed_box.right,
             ]
             framelet = Framelet(
-                rect=changed_box.to_protocol_rect(relative_top), image=changed.tobytes()
+                rect=changed_box.to_protocol_rect(relative_top),
+                image=Framelet.encode_bytes(changed.tobytes()),
             )
 
         else:
@@ -148,8 +147,96 @@ class Screen:
                             laidout.screen_top : laidout.screen_bottom
                         ] = rendered
             framelet = Framelet(
-                rect=Rect(x=0, y=0, width=self.screen_size.width, height=self.cursor_y),
-                image=half_screen.tobytes(),
+                rect=Rect(
+                    x=0,
+                    y=0,
+                    width=self.screen_size.width,
+                    height=self.cursor_y,
+                ),
+                image=Framelet.encode_bytes(half_screen.tobytes()),
             )
 
-        await self.dispatch_channel.send(framelet)
+        await self.dispatch_channel.send([framelet])
+
+
+def make_dialog_dimension(screen_dimension: int):
+    # round to nearest multiple of 4
+    return math.trunc(screen_dimension * 0.2 + 0.5) * 4
+
+
+# We use a modal dialog to render help and menu screens. The dialog should be 80% of the screen,
+# centered (that is, offset by 10% of the screen size), with a 1px border.
+# add a border option to pango_render and draw it with cairo! don't try to do it with numpy twiddling
+# https://www.cairographics.org/FAQ/#sharp_lines
+class ModalDialog:
+    def __init__(
+        self,
+        screen_size: stilus.types.Size,
+        dpi: int,
+    ):
+        self.screen_size = screen_size
+        self.dialog_size = stilus.types.Size(
+            width=make_dialog_dimension(screen_size.width),
+            height=make_dialog_dimension(screen_size.height),
+        )
+        self.renderer = stilus.pango_render.Renderer(
+            screen_size=self.dialog_size, dpi=dpi
+        )
+
+    def frame_offset(self) -> stilus.types.Point:
+        return stilus.types.Point(
+            x=(self.screen_size.width - self.dialog_size.width) // 2,
+            y=(self.screen_size.height - self.dialog_size.height) // 2,
+        )
+
+    def render_frame(self) -> Framelet:
+        frame_offset = self.frame_offset()
+        rendered, size = self.renderer.render_border()
+        return Framelet(
+            rect=Rect(
+                x=frame_offset.x, y=frame_offset.y, width=size.width, height=size.height
+            ),
+            image=Framelet.encode_bytes(rendered),
+        )
+
+    def render_header(self) -> Framelet:
+        frame_offset = self.frame_offset()
+        rendered: npt.ArrayLike = self.renderer.render_to_numpy(
+            markup="Tabula",
+            font="Noto Serif Display 12",
+            margin_lr=10,
+            margin_tb=10,
+            alignment=stilus.types.Alignment.CENTER,
+        )
+        cropped: npt.ArrayLike = rendered[10:-10, 10:-10]
+        size = stilus.types.Size.from_numpy_shape(cropped.shape)
+        return Framelet(
+            rect=Rect(
+                x=frame_offset.x + (self.dialog_size.width - size.width) // 2,
+                y=frame_offset.y + 10,
+                width=size.width,
+                height=size.height,
+            ),
+            image=Framelet.encode_bytes(cropped.tobytes()),
+        )
+
+    def render_dialog(self, markup, font, margin_lr=10) -> typing.List[Framelet]:
+        frame_offset = self.frame_offset()
+
+        frame_op = self.render_frame()
+        header_op = self.render_header()
+        rendered = self.renderer.render_to_numpy(
+            markup=markup, font=font, margin_lr=margin_lr, margin_tb=10
+        )
+        cropped: npt.ArrayLike = rendered[10:-10, margin_lr:-margin_lr]
+        size = stilus.types.Size.from_numpy_shape(cropped.shape)
+        body_op = Framelet(
+            rect=Rect(
+                x=frame_offset.x + margin_lr,
+                y=header_op.rect.y + header_op.rect.height + 14,
+                width=size.width,
+                height=size.height,
+            ),
+            image=Framelet.encode_bytes(cropped.tobytes()),
+        )
+        return [frame_op, header_op, body_op]

@@ -72,4 +72,5 @@ setup(
         #   'rst': ['docutils>=0.11'],
         #   ':python_version=="2.6"': ['argparse'],
     },
+    tests_require=["pytest>=6.2.4", "Pillow>=8.2.0"],
 )

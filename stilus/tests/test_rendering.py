@@ -101,49 +101,76 @@ def test_border(
         font="TeX Gyre Pagella 8",
         markup=True,
         text="n/a",
-        margin_t=6,
+        margin_t=0,
         margin_b=0,
         margin_l=6,
         margin_r=6,
     )
     skip_height = math.ceil(renderer.calculate_line_height(base_render_opts.font))
+    outerim = PIL.Image.new("L", (1000, 1000), "white")
+    with renderer.create_surface() as surface:
+        rendered_size = renderer.render_border(surface)
+        buf = renderer.surface_to_bytes(surface, rendered_size)
+        im = PIL.Image.frombytes("L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1)
+        outerim.paste(im, (100, 100))
+
+        skip_y = 106
 
     with renderer.create_surface() as surface:
         render_opts = attr.evolve(
-            base_render_opts, text=VERSE[0], alignment=Alignment.CENTER
+            base_render_opts,
+            text=VERSE[0],
+            alignment=Alignment.CENTER,
         )
         rendered_size = renderer.render(surface, render_opts)
+        buf = renderer.surface_to_bytes(surface, rendered_size)
+        im = PIL.Image.frombytes(
+            "L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1
+        ).crop((6, 0, rendered_size.width - 12, rendered_size.height))
+        outerim.paste(im, (106, skip_y))
+        skip_y += rendered_size.height + skip_height
 
+    with renderer.create_surface() as surface:
         render_opts = attr.evolve(
             base_render_opts,
             text=VERSE[1],
-            margin_t=rendered_size.height + skip_height,
-            clear_before_render=False,
         )
         rendered_size = renderer.render(surface, render_opts)
+        buf = renderer.surface_to_bytes(surface, rendered_size)
+        im = PIL.Image.frombytes(
+            "L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1
+        ).crop((6, 0, rendered_size.width - 12, rendered_size.height))
+        outerim.paste(im, (106, skip_y))
+        skip_y += rendered_size.height + skip_height
 
+    with renderer.create_surface() as surface:
         render_opts = attr.evolve(
             base_render_opts,
             text=VERSE[2],
             alignment=Alignment.CENTER,
-            margin_t=rendered_size.height + skip_height,
-            clear_before_render=False,
         )
         rendered_size = renderer.render(surface, render_opts)
+        buf = renderer.surface_to_bytes(surface, rendered_size)
+        im = PIL.Image.frombytes(
+            "L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1
+        ).crop((6, 0, rendered_size.width - 12, rendered_size.height))
+        outerim.paste(im, (106, skip_y))
+        skip_y += rendered_size.height + skip_height
 
+    with renderer.create_surface() as surface:
         render_opts = attr.evolve(
             base_render_opts,
             text=VERSE[3],
-            margin_t=rendered_size.height + skip_height,
-            clear_before_render=False,
-            draw_border=True,
         )
         rendered_size = renderer.render(surface, render_opts)
-
         buf = renderer.surface_to_bytes(surface, rendered_size)
+        im = PIL.Image.frombytes(
+            "L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1
+        ).crop((6, 0, rendered_size.width - 12, rendered_size.height))
+        outerim.paste(im, (106, skip_y))
+        # skip_y += rendered_size.height + skip_height
 
-    im = PIL.Image.frombytes("L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1)
-    outerim = PIL.Image.new("L", (1000, 1000), "white")
-    outerim.paste(im, (100, 100))
+    # im = PIL.Image.frombytes("L", rendered_size.as_tuple(), buf, "raw", "L", 0, 1)
+    # outerim.paste(im, (100, 100))
     imagepath = actualspath / f"{request.node.name}.png"
     outerim.save(imagepath)

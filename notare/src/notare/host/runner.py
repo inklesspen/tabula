@@ -37,10 +37,18 @@ class Stub(Protocol):
     def __init__(self, client: JsonRpcConnection):
         self.client = client
 
-    async def update_display(self, framelet: Framelet) -> None:
-        await self.client.request(
-            "update_display", {"framelet": json.loads(framelet.json())}
-        )
+    async def update_screen(self, framelets: typing.List[Framelet]) -> None:
+        args = {"framelets": [json.loads(framelet.json()) for framelet in framelets]}
+        await self.client.request("update_screen", args)
+
+    async def clear_screen(self) -> None:
+        await self.client.request("clear_screen", {})
+
+    async def save_screen(self) -> None:
+        await self.client.request("save_screen", {})
+
+    async def restore_screen(self) -> None:
+        await self.client.request("restore_screen", {})
 
     async def get_screen_info(self) -> ScreenInfo:
         response = await self.client.request("get_screen_info", {})
@@ -191,9 +199,9 @@ class Application:
 
     async def handle_screen_updates(self):
         async with self.screen_receive_channel:
-            update: Framelet
+            update: typing.List[Framelet]
             async for update in self.screen_receive_channel:
-                await self.stub.update_display(update)
+                await self.stub.update_screen(update)
 
 
 async def run_client(settings: Settings):

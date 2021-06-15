@@ -7,7 +7,7 @@ import datetime
 import enum
 import gzip
 import ipaddress
-import json
+from typing import List
 
 import pydantic
 
@@ -26,18 +26,13 @@ class Framelet(pydantic.BaseModel):
     rect: Rect
     image: bytes
 
-    class Config:
-        @staticmethod
-        def json_dumps(val, **kw):
-            compressed = gzip.compress(val["image"], compresslevel=1)
-            val["image"] = base64.b85encode(compressed)
-            return json.dumps(val, **kw)
+    @staticmethod
+    def encode_bytes(some_bytes: bytes) -> bytes:
+        return base64.b85encode(gzip.compress(some_bytes, compresslevel=1))
 
-        @staticmethod
-        def json_loads(val):
-            loaded = json.loads(val)
-            loaded["image"] = gzip.decompress(base64.b85decode(loaded["image"]))
-            return loaded
+    @staticmethod
+    def decode_bytes(some_bytes: bytes) -> bytes:
+        return gzip.decompress(base64.b85decode(some_bytes))
 
 
 class ChargingState(str, enum.Enum):
@@ -65,7 +60,19 @@ class ScreenInfo(pydantic.BaseModel):
 
 class Protocol(abc.ABC):
     @abc.abstractmethod
-    def update_display(self, framelet: Framelet) -> None:
+    def update_screen(self, framelets: List[Framelet]) -> None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def clear_screen(self) -> None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def save_screen(self) -> None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def restore_screen(self) -> None:
         raise NotImplementedError()
 
     @abc.abstractmethod

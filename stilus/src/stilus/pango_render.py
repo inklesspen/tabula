@@ -21,10 +21,12 @@ from .types import (
     HintMetrics,
     HintMode,
     SubpixelOrder,
+    Rect,
     Size,
     Point,
     Opts,
     RenderOpts,
+    Alignment,
     WrapMode,
 )
 
@@ -41,25 +43,15 @@ class Renderer:
         opts = Opts(dpi=self.dpi, screen_size=self.screen_size)
         self.instance = PangoCairoRenderer(opts)
 
-    def render_to_bytes(
-        self,
-        markup: str,
-        font: str,
-        margin_lr: int = 10,
-        margin_tb: int = 0,
-        draw_border: bool = False,
-    ):
-        render_opts = RenderOpts(
-            font=font,
-            markup=True,
-            text=markup,
-            draw_border=draw_border,
-            margin_t=margin_tb,
-            margin_b=margin_tb,
-            margin_l=margin_lr,
-            margin_r=margin_lr,
-        )
+    def render_border(self):
+        with self.instance.create_surface() as surface:
+            rendered_size = self.instance.render_border(surface)
+            return (
+                self.instance.surface_to_bytes(surface, rendered_size),
+                rendered_size,
+            )
 
+    def _render(self, render_opts):
         with self.instance.create_surface() as surface:
             rendered_size = self.instance.render(surface, render_opts)
             return (
@@ -67,17 +59,45 @@ class Renderer:
                 rendered_size,
             )
 
+    def render_to_bytes(
+        self,
+        markup: str,
+        font: str,
+        margin_lr: int = 10,
+        margin_tb: int = 0,
+        alignment: Alignment = Alignment.LEFT,
+    ):
+        render_opts = RenderOpts(
+            font=font,
+            markup=True,
+            text=markup,
+            alignment=alignment,
+            margin_t=margin_tb,
+            margin_b=margin_tb,
+            margin_l=margin_lr,
+            margin_r=margin_lr,
+        )
+        return self._render(render_opts)
+
     def render_to_numpy(
         self,
         markup: str,
         font: str,
         margin_lr: int = 10,
         margin_tb: int = 0,
-        draw_border: bool = False,
+        alignment: Alignment = Alignment.LEFT,
     ):
-        (buf, new_size) = self.render_to_bytes(
-            markup, font, margin_lr, margin_tb, draw_border
+        render_opts = RenderOpts(
+            font=font,
+            markup=True,
+            text=markup,
+            alignment=alignment,
+            margin_t=margin_tb,
+            margin_b=margin_tb,
+            margin_l=margin_lr,
+            margin_r=margin_lr,
         )
+        (buf, new_size) = self._render(render_opts)
         new_rendered = np.ndarray(new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
         return new_rendered
 
@@ -216,6 +236,22 @@ class PangoCairoRenderer:
         ) as loaded_font_string:
             return ffi.string(loaded_font_string).decode("utf-8")
 
+    def render_border(self, surface) -> Size:
+        with ffi.gc(clib.cairo_create(surface), clib.cairo_destroy) as cairo:
+            # ensure identity matrix
+            self._set_cairo_transform(cairo, None)
+            clib.cairo_set_line_width(cairo, 1)
+            clib.cairo_rectangle(
+                cairo,
+                1.5,
+                1.5,
+                self.opts.screen_size.width - 2,
+                self.opts.screen_size.height - 2,
+            )
+            clib.cairo_stroke(cairo)
+            size = self.opts.screen_size
+        return size
+
     def render(self, surface, render_opts: RenderOpts) -> Size:
         with ffi.gc(clib.cairo_create(surface), clib.cairo_destroy) as cairo:
             # sets identity matrix
@@ -230,18 +266,7 @@ class PangoCairoRenderer:
             size = self._do_output(cairo, render_opts)
 
             if render_opts.draw_border:
-                # restore identity matrix
-                self._set_cairo_transform(cairo, None)
-                clib.cairo_set_line_width(cairo, 1)
-                clib.cairo_rectangle(
-                    cairo,
-                    1.5,
-                    1.5,
-                    self.opts.screen_size.width - 2,
-                    self.opts.screen_size.height - 2,
-                )
-                clib.cairo_stroke(cairo)
-                size = self.opts.screen_size
+                size = self.render_border(surface)
 
         return size
 
