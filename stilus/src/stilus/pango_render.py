@@ -31,7 +31,7 @@ from .types import (
 
 class Renderer:
     def __init__(self, *, screen_size: Size, dpi: int):
-        # Screen dimensions must divide evenly by 4, for reasons I don't yet understand.
+        # Screen dimensions must divide evenly by 4, to fit neatly with cairo's stride.
         if screen_size.width % 4 > 0:
             raise ValueError("Screen width must be evenly divisible by 4.")
         if screen_size.height % 4 > 0:

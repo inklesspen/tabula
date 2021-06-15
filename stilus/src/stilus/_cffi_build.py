@@ -198,6 +198,10 @@ typedef cairo_status_t (*cairo_write_func_t) (void		  *closure,
 					      const unsigned char *data,
 					      unsigned int	   length);
 
+int
+cairo_format_stride_for_width (cairo_format_t format,
+                               int width);
+
 cairo_surface_t *
 cairo_image_surface_create (cairo_format_t	format,
 			    int			width,
