@@ -13,7 +13,6 @@
 # (the specific years vary in some of the files)
 from __future__ import annotations
 
-from cffi.lock import allocate_lock
 import numpy as np
 
 from ._cffi import ffi, lib as clib
@@ -109,59 +108,12 @@ class Renderer:
         return instance.calculate_line_height(font)
 
 
-class FontMapManager:
-    def __init__(self) -> None:
-        self._fontmaps = {}
-
-    def __getitem__(self, dpi: int):
-        # This is based on cffi's init_once, but slightly different
-        # in that it passes the dpi option to the maker function
-        try:
-            pair = self._fontmaps[dpi]
-        except KeyError:
-            pair = self._fontmaps.setdefault(dpi, (False, allocate_lock()))
-        if pair[0]:
-            return pair[1]
-        # pair[1] is a lock.
-        with pair[1]:
-            # now we're the only ones able to work with it
-            pair = self._fontmaps[dpi]
-            if pair[0]:
-                return pair[1]
-            fontmap = self._make_fontmap(dpi)
-            self._fontmaps[dpi] = (True, fontmap)
-            return fontmap
-
-    def __delitem__(self, dpi: int):
-        pair = self._fontmaps.pop(dpi)
-        if pair[0]:
-            ffi.release(pair[1])
-
-    def _make_fontmap(self, dpi: int):
-        fontmap = ffi.gc(clib.pango_cairo_font_map_new(), clib.g_object_unref)
-        # It may be safe to simply use the same fontmap for everything, and set
-        # the resolution just before rendering.
-        # Additionally, we will almost certainly only ever had to deal with one
-        # dpi value.
-        clib.pango_cairo_font_map_set_resolution(
-            ffi.cast("PangoCairoFontMap *", fontmap), dpi
-        )
-        return fontmap
-
-
-FONTMAPS = FontMapManager()
-
-
 class PangoCairoRenderer:
     def __init__(self, opts: Opts):
         self.opts = opts
 
-        self.fontmap = FONTMAPS[self.opts.dpi]
-        # # This part is super slow to load, so cache it.
-        # self.fontmap = ffi.gc(clib.pango_cairo_font_map_new(), clib.g_object_unref)
-        # clib.pango_cairo_font_map_set_resolution(
-        #     ffi.cast("PangoCairoFontMap *", self.fontmap), self.opts.dpi
-        # )
+        # This fontmap is owned by Pango, not by us; we must not free it.
+        self.fontmap = clib.pango_cairo_font_map_get_default()
 
         self.fontoptions = ffi.gc(
             clib.cairo_font_options_create(), clib.cairo_font_options_destroy
@@ -207,6 +159,10 @@ class PangoCairoRenderer:
         self.context = None
         ffi.release(self.fontoptions)
         self.fontoptions = None
+
+    def set_fontmap_resolution(self, dpi):
+        cast = ffi.cast("PangoCairoFontMap *", self.fontmap)
+        clib.pango_cairo_font_map_set_resolution(cast, dpi)
 
     def create_surface(self):
         size = self.opts.screen_size
@@ -260,6 +216,7 @@ class PangoCairoRenderer:
             clib.pango_cairo_update_context(cairo, self.context)
 
     def calculate_line_height(self, font: str):
+        self.set_fontmap_resolution(self.opts.dpi)
         with self._make_font_description(font) as font_description, ffi.gc(
             clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
             clib.g_object_unref,
@@ -297,6 +254,7 @@ class PangoCairoRenderer:
         return size
 
     def render(self, surface, render_opts: RenderOpts) -> Size:
+        self.set_fontmap_resolution(self.opts.dpi)
         with ffi.gc(clib.cairo_create(surface), clib.cairo_destroy) as cairo:
             # sets identity matrix
             self._set_cairo_transform(cairo, None)

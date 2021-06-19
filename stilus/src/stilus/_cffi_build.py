@@ -533,6 +533,8 @@ typedef struct _PangoCairoFontMap        PangoCairoFontMap;
 
 PangoFontMap *pango_cairo_font_map_new               (void);
 
+PangoFontMap* pango_cairo_font_map_get_default (void);
+
 void          pango_cairo_font_map_set_resolution (PangoCairoFontMap *fontmap,
 						   double             dpi);
 
