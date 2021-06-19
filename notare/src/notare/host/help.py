@@ -15,7 +15,6 @@ Press <span font="B612">F12</span> to open the system menu.
 
 <small>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</small>
 """.strip()
-HELP_FONT = "Noto Serif 8"
 
 # There's a compose key symbol in unicode (U+2384) but most fonts don't have a glyph for it.
 # One such font is Noto Sans Symbols; alpine package 'font-noto'
@@ -40,4 +39,3 @@ Here are some commonly used compose sequences:
 
 <span font="Noto Sans Symbols">\u2384</span><span font="Noto Sans Mono"> ' '</span> → \u02BC (modifier letter apostrophe)
 """.strip()
-COMPOSES_FONT = "Noto Serif 6"

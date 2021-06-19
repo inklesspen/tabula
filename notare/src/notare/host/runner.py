@@ -2,223 +2,117 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import json
-import os
 import typing
-import unicodedata
 
+import timeflake
 import trio
-from trio_jsonrpc import (
-    open_jsonrpc_ws,
-    JsonRpcConnection,
-)
-from trio_util import RepeatedEvent
+from trio_jsonrpc import open_jsonrpc_ws
 
-import stilus.markdown
-import stilus.pango_render
-import stilus.types
+# from trio_util import periodic
 
-from . import term
+from . import term, loop
 from .config import Settings
-from .rendering import Screen
-from .types import UpdateKind, ParagraphUpdate, Renderable
-from ..protocol import (
-    Framelet,
-    BatteryState,
-    KoboTime,
-    ScreenInfo,
-    Protocol,
-    TABULA_IP,
-    TABULA_PORT,
-)
-
-
-class Stub(Protocol):
-    def __init__(self, client: JsonRpcConnection):
-        self.client = client
-
-    async def update_screen(self, framelets: typing.List[Framelet]) -> None:
-        args = {"framelets": [json.loads(framelet.json()) for framelet in framelets]}
-        await self.client.request("update_screen", args)
-
-    async def clear_screen(self) -> None:
-        await self.client.request("clear_screen", {})
-
-    async def save_screen(self) -> None:
-        await self.client.request("save_screen", {})
-
-    async def restore_screen(self) -> None:
-        await self.client.request("restore_screen", {})
-
-    async def get_screen_info(self) -> ScreenInfo:
-        response = await self.client.request("get_screen_info", {})
-        return ScreenInfo.parse_raw(json.dumps(response))
-
-    async def get_battery_state(self) -> BatteryState:
-        response = await self.client.request("get_battery_state", {})
-        return BatteryState.parse_raw(json.dumps(response))
-
-    async def get_current_time(self) -> KoboTime:
-        response = await self.client.request("get_current_time", {})
-        return KoboTime.parse_raw(json.dumps(response))
-
-    async def shutdown(self) -> None:
-        print("shutting down")
-        await self.client.request("shutdown", {})
+from .db import TabulaDb, make_db
+from .document import DocumentModel
+from .stub import Stub
+from ..protocol import DeviceInfo
 
 
 # At this point it's model view controller, just like papa used to make.
-
-
-def graphical_char(c: typing.Text):
-    category = unicodedata.category(c)
-    return category == "Zs" or category[0] in ("L", "M", "N", "P", "S")
-
-
-# https://gankra.github.io/blah/text-hates-you/
-# Cursor movement is fairly complicated. If we were gonna do everything the proper way, our
-# document model would need to know about Unicode scalars, grapheme clusters, and all that jazz.
-# After all, if I have a grapheme cluster composed of U+0065 (LATIN SMALL LETTER E) and U+0301
-# (COMBINING ACCUTE ACCENT), these render as é (LATIN SMALL LETTER E WITH ACUTE). However, if I
-# insert U+0302 (COMBINING CIRCUMFLEX ACCENT) into the middle of this cluster, I instead get ế
-# (LATIN SMALL LETTER E WITH CIRCUMFLEX AND ACUTE). This example may sound contrived, but it
-# happens all the time with non-Latin scripts.
-# Notare currently handles attributed text by wrapping portions of the Markdown text in
-# Pango Markup (HTML-ish tags). If we wanted to know about the grapheme clusters and glyphs,
-# we'd have to switch to using PangoAttrList. So we're not going to do that.
-# The cursor is always at the end of the final paragraph. That's it. That's all there is.
-
-
-class DocumentModel:
-    def __init__(self, dispatch_channel: trio.abc.SendChannel):
-        self.dispatch_channel = dispatch_channel
-        self.currently = None
-        self.contents: list[stilus.markdown.Paragraph] = []
-
-    async def keystroke(self, keystroke):
-        self.currently.markdown += keystroke
-        self.currently.make_markup()
-        message = ParagraphUpdate(
-            paragraph=len(self.contents) - 1, kind=UpdateKind.CHANGE
-        )
-        await self.dispatch_channel.send(message)
-
-    async def backspace(self):
-        if len(self.currently.markdown) == 0:
-            # no going back
-            return
-        self.currently.markdown = self.currently.markdown[:-1]
-        self.currently.make_markup()
-        message = ParagraphUpdate(
-            paragraph=len(self.contents) - 1, kind=UpdateKind.CHANGE
-        )
-        await self.dispatch_channel.send(message)
-
-    async def new_para(self):
-        if self.currently and len(self.currently.markdown) == 0:
-            return
-        self.currently = stilus.markdown.Paragraph.empty()
-        self.contents.append(self.currently)
-        message = ParagraphUpdate(paragraph=len(self.contents) - 1, kind=UpdateKind.NEW)
-        await self.dispatch_channel.send(message)
-
-    def get_markups(self):
-        return [p.markup for p in self.contents]
-
-    def get_markup(self, i: int) -> str:
-        return self.contents[i].markup
 
 
 class Application:
     def __init__(
         self,
         settings: Settings,
-        keystroke_receive_channel: trio.abc.ReceiveChannel,
+        device_info: DeviceInfo,
         stub: Stub,
-        nursery: trio.Nursery,
-        screen_info: ScreenInfo,
+        db: TabulaDb,
     ):
         self.settings = settings
-        self.keystroke_receive_channel = keystroke_receive_channel
+        self.device_info = device_info
         self.stub = stub
-        self.screen_info = screen_info
-        document_send_channel, self.document_receive_channel = trio.open_memory_channel(
-            0
-        )
-        self.document_update = RepeatedEvent()
-        self.document = DocumentModel(document_send_channel)
-        screen_send_channel, self.screen_receive_channel = trio.open_memory_channel(0)
-        screen_size = stilus.types.Size(
-            width=screen_info.width, height=screen_info.height
-        )
-        self.screen = Screen(
-            settings.drafting_fonts[0],
-            screen_size,
-            screen_info.dpi,
-            screen_send_channel,
-            self.document.get_markup,
-        )
-        self.nursery = nursery
-        nursery.start_soon(self.document.new_para)
+        self.db = db
+        self.dirty_paras = set()
 
-    async def handle_keystrokes(self):
-        log_keys = bool(os.environ.get("LOG_KEYS"))
-        async with self.keystroke_receive_channel:
-            async for value in self.keystroke_receive_channel:
-                if log_keys:
+    async def run(self):
+        document_send_channel, document_receive_channel = trio.open_memory_channel(0)
+        keystroke_send_channel, keystroke_receive_channel = trio.open_memory_channel(0)
+
+        self.document = DocumentModel(
+            document_send_channel, self.db, self.settings.drafting_fonts[0]
+        )
+
+        self.loops = {}
+        for loopcls in loop.Loop.loops():
+            self.loops[loopcls] = loopcls(
+                self.device_info,
+                self.settings,
+                self.db,
+                self.document,
+            )
+        self.current_loop = self.loops[loop.SystemMenu]
+
+        # the first time we switch into Drafting, it will try to restore the screen. so we save it here.
+        await self.stub.save_screen()
+
+        async with trio.open_nursery() as nursery:
+            self.nursery = nursery
+            nursery.start_soon(self.handle_keystrokes, keystroke_receive_channel)
+            nursery.start_soon(self.handle_document_updates, document_receive_channel)
+            nursery.start_soon(term.input_loop, keystroke_send_channel)
+            nursery.start_soon(self.current_loop.activate, self.stub)
+            await trio.sleep_forever()
+
+    @property
+    def is_drafting(self) -> bool:
+        return self.current_loop == self.loops[loop.Drafting]
+
+    async def deliver_dirties(self):
+        if self.is_drafting and self.dirty_paras:
+            all_dirties = sorted(self.dirty_paras)
+            self.dirty_paras.clear()
+            await self.current_loop.handle_dirty_updates(all_dirties)
+
+    async def handle_keystrokes(self, keystroke_receive_channel):
+        async with keystroke_receive_channel:
+            async for value in keystroke_receive_channel:
+                if self.settings.log_keys:
                     print(f"keystroke: {value}")
-                if len(value) == 1 and graphical_char(value):
-                    await self.document.keystroke(value)
-                elif value == "enter":
-                    await self.document.new_para()
-                elif value == "backspace":
-                    await self.document.backspace()
-                elif value == "f1":
-                    print("This is when we would show help.")
-                elif value == "f10":
-                    print("This is when we would show the menu.")
-                elif value == "f12":
+
+                result = await self.current_loop.handle_keystroke(value)
+                cmd = result[0]
+                # possible commands are switch_loop, set_time, shutdown, and nothing
+                if cmd == "switch_loop":
+                    new_loop = self.loops[result[1]]
+                    await self.current_loop.deactivate(self.stub)
+                    self.current_loop = new_loop
+                    await self.current_loop.activate(self.stub)
+                    await self.deliver_dirties()
+                if cmd == "set_time":
+                    print("Was asked to set system time.")
+                if cmd == "shutdown":
+                    # TODO: force db save
                     await self.stub.shutdown()
                     self.nursery.cancel_scope.cancel()
 
-    async def handle_document_updates(self):
-        async with self.document_receive_channel:
-            update: ParagraphUpdate
-            async for update in self.document_receive_channel:
-                renderables: typing.List[Renderable] = []
-                if update.kind == UpdateKind.NEW:
-                    # gotta rerender the previous paragraph to remove the cursor
-                    # as well as the new one
-                    prev = update.paragraph - 1
-                    if prev >= 0:
-                        renderables.append(Renderable(paragraph=prev, has_cursor=False))
-                renderables.append(
-                    Renderable(paragraph=update.paragraph, has_cursor=True)
-                )
-                await self.screen.render_update(renderables)
-
-    async def handle_screen_updates(self):
-        async with self.screen_receive_channel:
-            update: typing.List[Framelet]
-            async for update in self.screen_receive_channel:
-                await self.stub.update_screen(update)
+    async def handle_document_updates(self, document_receive_channel):
+        async with document_receive_channel:
+            dirties: typing.Tuple[timeflake.Timeflake]
+            async for dirties in document_receive_channel:
+                self.dirty_paras.update(dirties)
+                await self.deliver_dirties()
 
 
 async def run_client(settings: Settings):
     url = f"ws://{settings.ip}:{settings.port}"
 
-    async with trio.open_nursery() as nursery, open_jsonrpc_ws(url) as client:
+    async with open_jsonrpc_ws(url) as client:
         stub = Stub(client)
-        screen_info = await stub.get_screen_info()
-        keystroke_send_channel, keystroke_receive_channel = trio.open_memory_channel(0)
-        application = Application(
-            settings, keystroke_receive_channel, stub, nursery, screen_info
-        )
-        nursery.start_soon(application.handle_keystrokes)
-        nursery.start_soon(application.handle_document_updates)
-        nursery.start_soon(application.handle_screen_updates)
-        nursery.start_soon(term.input_loop, keystroke_send_channel)
-        await trio.sleep_forever()
+        db = make_db()
+        device_info = await stub.get_device_info()
+        application = Application(settings, device_info, stub, db)
+        await application.run()
 
 
 def main():

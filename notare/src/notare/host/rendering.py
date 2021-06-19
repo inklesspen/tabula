@@ -8,7 +8,6 @@ import typing
 import attr
 import numpy as np
 import numpy.typing as npt
-import trio
 
 import stilus.markdown
 import stilus.pango_render
@@ -49,21 +48,11 @@ def bbox(img: npt.ArrayLike) -> ArrayRect:
 
 
 class Screen:
-    def __init__(
-        self,
-        font: str,
-        screen_size: stilus.types.Size,
-        dpi: int,
-        dispatch_channel: trio.abc.SendChannel,
-        get_markup: typing.Callable[[int], str],
-    ):
+    def __init__(self, screen_size: stilus.types.Size, dpi: int):
         self.screen_size = screen_size
-        self.dispatch_channel = dispatch_channel
-        self.get_markup = get_markup
         self.renderer = stilus.pango_render.Renderer(
             screen_size=self.screen_size, dpi=dpi
         )
-        self.set_font(font)
         self.cursor_y = self.screen_size.height // 2
         self.renders: typing.List[RenderPara] = []
 
@@ -79,10 +68,10 @@ class Screen:
         else:
             list[index] = item
 
-    async def render_update(self, renderables: typing.List[Renderable]):
+    def render_update(self, renderables: typing.List[Renderable]):
         before_render = tuple(self.renders)
         for renderable in renderables:
-            markup = self.get_markup(renderable.paragraph)
+            markup = renderable.markup
             if renderable.has_cursor:
                 markup += CURSOR
             new_rendered: npt.ArrayLike = self.renderer.render_to_numpy(
@@ -91,11 +80,13 @@ class Screen:
             new_size = stilus.types.Size.from_numpy_shape(new_rendered.shape)
             self.set_into(
                 self.renders,
-                renderable.paragraph,
+                renderable.index,
                 RenderPara(rendered=new_rendered, size=new_size),
             )
 
-        need_to_reflow = len(self.renders) > len(before_render) or any(
+        # It's possible this might fail to reflow if the font has changed
+        # but all the paragraph heights remain the same.
+        need_to_reflow = (len(self.renders) > len(before_render)) or any(
             [
                 before.size != after.size
                 for before, after in zip(before_render, self.renders)
@@ -156,7 +147,7 @@ class Screen:
                 image=Framelet.encode_bytes(half_screen.tobytes()),
             )
 
-        await self.dispatch_channel.send([framelet])
+        return [framelet]
 
 
 def make_dialog_dimension(screen_dimension: int):

@@ -9,7 +9,7 @@ import attr
 
 
 @attr.s(auto_attribs=True, kw_only=True, frozen=True)
-class ScreenInfo:
+class DeviceInfo:
     width: int
     height: int
     dpi: int
@@ -23,7 +23,7 @@ class Ink(contextlib.AbstractContextManager):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_screen_info(self) -> ScreenInfo:
+    def get_device_info(self) -> DeviceInfo:
         raise NotImplementedError()
 
     @abc.abstractmethod

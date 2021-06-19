@@ -30,7 +30,7 @@ def make_paragraphs(markdown):
     return result
 
 
-def _make_markup(markdown):
+def make_markup(markdown):
     collect = []
     tokens = run_splitter.parseInline(markdown)
     if len(tokens) != 1 or tokens[0].type != "inline":
@@ -69,7 +69,7 @@ class Paragraph:
     markup = attr.ib()
 
     def make_markup(self):
-        self.markup = _make_markup(self.markdown)
+        self.markup = make_markup(self.markdown)
 
     @classmethod
     def empty(cls):

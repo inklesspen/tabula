@@ -112,6 +112,7 @@ class PangoCairoRenderer:
     def __init__(self, opts: Opts):
         self.opts = opts
 
+        # This part is super slow to load, so cache it.
         self.fontmap = ffi.gc(clib.pango_cairo_font_map_new(), clib.g_object_unref)
         clib.pango_cairo_font_map_set_resolution(
             ffi.cast("PangoCairoFontMap *", self.fontmap), self.opts.dpi

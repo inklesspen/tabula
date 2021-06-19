@@ -73,6 +73,10 @@ class Settings(BaseSettings):
         sample=["Palatino 8", "Helvetica 8"],
     )
 
+    allow_setting_time: bool = Field(False, description="Handy if host lacks a RTC")
+    allow_markdown_export_to_device: bool = Field(False)
+    shutdown_host_on_exit: bool = Field(False)
+
     log_keys: bool = Field(False, hidden=True)
 
     @classmethod

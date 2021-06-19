@@ -4,7 +4,7 @@
 import os
 
 from ._fbink import ffi, lib
-from .ink import Ink, ScreenInfo
+from .ink import Ink, DeviceInfo
 
 
 class FbInk(Ink):
@@ -25,10 +25,10 @@ class FbInk(Ink):
     def clear(self):
         lib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL)
 
-    def get_screen_info(self) -> ScreenInfo:
+    def get_device_info(self) -> DeviceInfo:
         with ffi.new("FBInkState *") as state:
             lib.fbink_get_state(self.fbink_cfg, state)
-            return ScreenInfo(
+            return DeviceInfo(
                 width=state.view_width,
                 height=state.view_height,
                 dpi=state.screen_dpi,

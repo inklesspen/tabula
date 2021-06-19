@@ -59,6 +59,7 @@ setup(
         "cardinality>=0.1.1",
         "pydantic>=1.8.2",
         "python-dateutil>=2.8.1",
+        "timeflake>=0.4.0",
         "toml>=0.10.2",
         "trio>=0.18.0",
         "trio-jsonrpc>=0.4.0",
@@ -67,7 +68,13 @@ setup(
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
     ],
     extras_require={
-        "host": ["numpy>=1.20.3", "urwid>=2.1.2", "xdg>=5.1.0"]
+        "host": [
+            "numpy>=1.20.3",
+            "urwid>=2.1.2",
+            "xdg>=5.1.0",
+            "sqlalchemy>=1.4.18",
+            "aiosqlite>=0.17.0",
+        ]
         # eg:
         #   'rst': ['docutils>=0.11'],
         #   ':python_version=="2.6"': ['argparse'],

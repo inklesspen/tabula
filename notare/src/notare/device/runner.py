@@ -38,7 +38,7 @@ from ..protocol import (
     Framelet,
     BatteryState,
     KoboTime,
-    ScreenInfo,
+    DeviceInfo,
     Protocol,
     TABULA_PORT,
 )
@@ -65,8 +65,8 @@ class Servicer(Protocol):
     def restore_screen(self) -> None:
         self.ink.restore_screen()
 
-    def get_screen_info(self) -> ScreenInfo:
-        return ScreenInfo(**attr.asdict(self.ink.get_screen_info()))
+    def get_device_info(self) -> DeviceInfo:
+        return DeviceInfo(**attr.asdict(self.ink.get_device_info()))
 
     def get_battery_state(self) -> BatteryState:
         return self.battery.get()

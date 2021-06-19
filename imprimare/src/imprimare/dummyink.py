@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from .ink import Ink, ScreenInfo
+from .ink import Ink, DeviceInfo
 
 
 class DummyInk(Ink):
     def clear(self):
         print("clear")
 
-    def get_screen_info(self) -> ScreenInfo:
-        return ScreenInfo(
+    def get_device_info(self) -> DeviceInfo:
+        return DeviceInfo(
             width=1, height=1, dpi=0, device_name="Dummy", code_name="Dummy"
         )
 
