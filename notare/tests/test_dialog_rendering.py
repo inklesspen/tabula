@@ -13,8 +13,7 @@ import pytest
 
 from stilus.types import Size
 from notare.host.rendering import ModalDialog
-from notare.host.help import COMPOSES_TEMPLATE, COMPOSES_FONT, HELP, HELP_FONT
-from notare.host.menus import SYSTEM_MENU, SYSTEM_MENU_FONT
+from notare.host.help import COMPOSES_TEMPLATE, HELP
 from notare.protocol import Framelet
 
 pytestmark = pytest.mark.usefixtures("goldenspath", "actualspath")
@@ -78,7 +77,7 @@ def test_help(
     actualspath: pathlib.Path,
     renderer: ModalDialog,
 ):
-    ops = renderer.render_dialog(HELP, HELP_FONT)
+    ops = renderer.render_dialog(HELP, "Noto Serif 8")
     im = make_image(ops)
 
     imagepath = actualspath / f"{request.node.name}.png"
@@ -90,11 +89,23 @@ def test_composes(
     actualspath: pathlib.Path,
     renderer: ModalDialog,
 ):
-    ops = renderer.render_dialog(COMPOSES_TEMPLATE, COMPOSES_FONT)
+    ops = renderer.render_dialog(COMPOSES_TEMPLATE, "Noto Serif 6")
     im = make_image(ops)
 
     imagepath = actualspath / f"{request.node.name}.png"
     im.save(imagepath)
+
+
+SYSTEM_MENU = """
+<span font="B612">\u2780</span> \u00B7 \u00B7 \u00B7 New Session
+<span font="B612">\u2781</span> \u00B7 \u00B7 \u00B7 Resume Session
+<span font="B612">\u2782</span> \u00B7 \u00B7 \u00B7 Export Markdown
+
+<span font="B612">\u2783</span> \u00B7 \u00B7 \u00B7 Wifi
+<span font="B612">\u2784</span> \u00B7 \u00B7 \u00B7 Clock
+
+<span font="B612">\u2789</span> \u00B7 \u00B7 \u00B7 Shutdown
+""".strip()
 
 
 def test_system_menu(
@@ -102,7 +113,7 @@ def test_system_menu(
     actualspath: pathlib.Path,
     renderer: ModalDialog,
 ):
-    ops = renderer.render_dialog(SYSTEM_MENU, SYSTEM_MENU_FONT, margin_lr=30)
+    ops = renderer.render_dialog(SYSTEM_MENU, "Noto Serif 8", margin_lr=30)
     im = make_image(ops)
 
     imagepath = actualspath / f"{request.node.name}.png"

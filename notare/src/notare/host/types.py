@@ -44,6 +44,11 @@ class Paragraph:
     def evolve(self, markdown: str):
         return attr.evolve(self, markdown=markdown)
 
+    def to_db_dict(self):
+        return attr.asdict(
+            self, filter=attr.filters.exclude(attr.fields(Paragraph).markup)
+        )
+
     # def enter_sprint(self, sprint_id: timeflake.Timeflake):
     #     if len(self.markdown) > 0:
     #         raise ValueError("Cannot enter sprint mid-paragraph")

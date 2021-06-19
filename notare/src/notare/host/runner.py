@@ -8,9 +8,9 @@ import timeflake
 import trio
 from trio_jsonrpc import open_jsonrpc_ws
 
-# from trio_util import periodic
+from trio_util import periodic
 
-from . import term, loop
+from . import term, loop, wordcount
 from .config import Settings
 from .db import TabulaDb, make_db
 from .document import DocumentModel
@@ -62,6 +62,7 @@ class Application:
             nursery.start_soon(self.handle_document_updates, document_receive_channel)
             nursery.start_soon(term.input_loop, keystroke_send_channel)
             nursery.start_soon(self.current_loop.activate, self.stub)
+            nursery.start_soon(self.periodic_save_doc, periodic(5))
             await trio.sleep_forever()
 
     @property
@@ -92,7 +93,7 @@ class Application:
                 if cmd == "set_time":
                     print("Was asked to set system time.")
                 if cmd == "shutdown":
-                    # TODO: force db save
+                    await self.save_doc()
                     await self.stub.shutdown()
                     self.nursery.cancel_scope.cancel()
 
@@ -102,6 +103,20 @@ class Application:
             async for dirties in document_receive_channel:
                 self.dirty_paras.update(dirties)
                 await self.deliver_dirties()
+
+    async def periodic_save_doc(self, trigger):
+        async for _ in trigger:
+            await self.save_doc()
+
+    async def save_doc(self):
+        if not self.document.has_session:
+            return
+        await trio.sleep(0)
+        paras = self.document.contents
+        doc_wc = wordcount.count_plain_text(
+            wordcount.make_plain_text("\n".join([p.markdown for p in paras]))
+        )
+        self.db.save_session(self.document.session_id, doc_wc, paras)
 
 
 async def run_client(settings: Settings):

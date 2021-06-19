@@ -207,7 +207,7 @@ class SessionList(Loop):
         for i, session in enumerate(sessions, start=1):
             deets = f"Started {session.started_on} — {session.wordcount} words"
             menu.append(template.format(code=chr(CIRCLED_DIGIT_BASE + i), text=deets))
-        menu.append(template.format(code=0, text="Back"))
+        menu.append(template.format(code=chr(CIRCLED_DIGIT_BASE + 10), text="Back"))
         return "\n".join(menu)
 
     async def activate(self, client: Stub):
