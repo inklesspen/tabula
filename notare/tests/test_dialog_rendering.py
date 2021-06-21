@@ -14,6 +14,7 @@ import pytest
 from stilus.types import Size
 from notare.host.rendering import ModalDialog
 from notare.host.help import COMPOSES_TEMPLATE, HELP
+from notare.host.loop import CIRCLED_ALPHANUMERICS
 from notare.protocol import Framelet
 
 pytestmark = pytest.mark.usefixtures("goldenspath", "actualspath")
@@ -96,15 +97,15 @@ def test_composes(
     im.save(imagepath)
 
 
-SYSTEM_MENU = """
-<span font="B612">\u2780</span> \u00B7 \u00B7 \u00B7 New Session
-<span font="B612">\u2781</span> \u00B7 \u00B7 \u00B7 Resume Session
-<span font="B612">\u2782</span> \u00B7 \u00B7 \u00B7 Export Markdown
+SYSTEM_MENU = f"""
+<span font="Noto Sans Symbols">{CIRCLED_ALPHANUMERICS['1']}</span> \u00B7 \u00B7 \u00B7 New Session
+<span font="Noto Sans Symbols">{CIRCLED_ALPHANUMERICS['2']}</span> \u00B7 \u00B7 \u00B7 Resume Session
+<span font="Noto Sans Symbols">{CIRCLED_ALPHANUMERICS['3']}</span> \u00B7 \u00B7 \u00B7 Export Markdown
 
-<span font="B612">\u2783</span> \u00B7 \u00B7 \u00B7 Wifi
-<span font="B612">\u2784</span> \u00B7 \u00B7 \u00B7 Clock
+<span font="Noto Sans Symbols">{CIRCLED_ALPHANUMERICS['Y']}</span> \u00B7 \u00B7 \u00B7 Wifi
+<span font="Noto Sans Symbols">{CIRCLED_ALPHANUMERICS['N']}</span> \u00B7 \u00B7 \u00B7 Clock
 
-<span font="B612">\u2789</span> \u00B7 \u00B7 \u00B7 Shutdown
+<span font="Noto Sans Symbols">{CIRCLED_ALPHANUMERICS['0']}</span> \u00B7 \u00B7 \u00B7 Shutdown
 """.strip()
 
 

@@ -56,8 +56,25 @@ class Loop(abc.ABC):
         raise NotImplementedError()
 
 
-# U+2780, the CIRCLED DIGIT ONE, is 10112.
-CIRCLED_DIGIT_BASE = 10111
+# https://en.wikipedia.org/wiki/Enclosed_Alphanumerics
+# U+24EA is zero; it's out of order from the rest
+# U+2460 is 1, U+2468 is 9
+# U+24CE is Y; U+24C3 is N
+# these are all in Noto Sans Symbols.
+CIRCLED_ALPHANUMERICS = {
+    "0": "\u24ea",
+    "1": "\u2460",
+    "2": "\u2461",
+    "3": "\u2462",
+    "4": "\u2463",
+    "5": "\u2464",
+    "6": "\u2465",
+    "7": "\u2466",
+    "8": "\u2467",
+    "9": "\u2468",
+    "Y": "\u24ce",
+    "N": "\u24c3",
+}
 
 
 def _parse_single_digit(keystroke):
@@ -84,10 +101,10 @@ class SystemMenu(Loop):
             "3": "set_font",
         }
         self.menulines = [
-            {"code": chr(CIRCLED_DIGIT_BASE + 1), "text": "New Session"},
-            {"code": chr(CIRCLED_DIGIT_BASE + 2), "text": "Resume Session"},
+            {"code": CIRCLED_ALPHANUMERICS["1"], "text": "New Session"},
+            {"code": CIRCLED_ALPHANUMERICS["2"], "text": "Resume Session"},
             None,
-            {"code": chr(CIRCLED_DIGIT_BASE + 3), "text": "Set Font"},
+            {"code": CIRCLED_ALPHANUMERICS["3"], "text": "Set Font"},
             None,
         ]
 
@@ -95,11 +112,11 @@ class SystemMenu(Loop):
             self.menulines.extend(
                 [
                     {
-                        "code": chr(CIRCLED_DIGIT_BASE + 4),
+                        "code": CIRCLED_ALPHANUMERICS["4"],
                         "text": "Export Markdown to Host",
                     },
                     {
-                        "code": chr(CIRCLED_DIGIT_BASE + 5),
+                        "code": CIRCLED_ALPHANUMERICS["5"],
                         "text": "Export Markdown to Device",
                     },
                 ]
@@ -109,7 +126,7 @@ class SystemMenu(Loop):
             next_num = 6
         else:
             self.menulines.append(
-                {"code": chr(CIRCLED_DIGIT_BASE + 4), "text": "Export Markdown"},
+                {"code": CIRCLED_ALPHANUMERICS["4"], "text": "Export Markdown"},
             )
             self.keymappings["4"] = "export_to_host"
             next_num = 5
@@ -119,7 +136,7 @@ class SystemMenu(Loop):
                 [
                     None,
                     {
-                        "code": chr(CIRCLED_DIGIT_BASE + next_num),
+                        "code": CIRCLED_ALPHANUMERICS[str(next_num)],
                         "text": "Set System Time",
                     },
                 ]
@@ -128,12 +145,14 @@ class SystemMenu(Loop):
             next_num += 1
 
         self.menulines.extend(
-            [None, {"code": chr(CIRCLED_DIGIT_BASE + 10), "text": "Shutdown"}]
+            [None, {"code": CIRCLED_ALPHANUMERICS["0"], "text": "Shutdown"}]
         )
         self.keymappings["0"] = "shutdown"
 
     def make_menu_markup(self):
-        template = '<span font="B612">{code}</span> \u00B7 \u00B7 \u00B7 {text}'
+        template = (
+            '<span font="Noto Sans Symbols">{code}</span> \u00B7 \u00B7 \u00B7 {text}'
+        )
         menu = []
         for line in self.menulines:
             if line is None:
@@ -202,12 +221,15 @@ class SessionList(Loop):
         )
 
     def make_menu_markup(self, sessions):
-        template = '<span font="B612">{code}</span> \u00B7 \u00B7 \u00B7 {text}'
+        template = (
+            '<span font="Noto Sans Symbols">{code}</span> \u00B7 \u00B7 \u00B7 {text}'
+        )
         menu = []
         for i, session in enumerate(sessions, start=1):
             deets = f"Started {session.started_on} — {session.wordcount} words"
-            menu.append(template.format(code=chr(CIRCLED_DIGIT_BASE + i), text=deets))
-        menu.append(template.format(code=chr(CIRCLED_DIGIT_BASE + 10), text="Back"))
+            menu.append(template.format(code=CIRCLED_ALPHANUMERICS[str(i)], text=deets))
+        # TODO: give an explanation if there aren't any sessions
+        menu.append(template.format(code=CIRCLED_ALPHANUMERICS["0"], text="Back"))
         return "\n".join(menu)
 
     async def activate(self, client: Stub):
@@ -246,14 +268,16 @@ class Fonts(Loop):
 
     def make_menu_markup(self):
         fontoptions = self.settings.drafting_fonts[:9]
-        template = '<span font="B612">{code}</span> \u00B7 \u00B7 \u00B7 {text}'
+        template = (
+            '<span font="Noto Sans Symbols">{code}</span> \u00B7 \u00B7 \u00B7 {text}'
+        )
         menu = []
         for i, font in enumerate(fontoptions, start=1):
             fontmarkup = f'<span font="{font}">{font}</span>'
             menu.append(
-                template.format(code=chr(CIRCLED_DIGIT_BASE + i), text=fontmarkup)
+                template.format(code=CIRCLED_ALPHANUMERICS[str(i)], text=fontmarkup)
             )
-        menu.append(template.format(code=chr(CIRCLED_DIGIT_BASE + 10), text="Back"))
+        menu.append(template.format(code=CIRCLED_ALPHANUMERICS["0"], text="Back"))
         return "\n".join(menu)
 
     async def activate(self, client: Stub):
@@ -292,8 +316,12 @@ class Clocks(Loop):
         await _checkpoint()
         host_time = now()
         device_time = (await client.get_current_time()).now
-        letter_y = "\u24ce"
-        letter_n = "\u24c3"
+        letter_y = (
+            f"<span font=\"Noto Sans Symbols\">{CIRCLED_ALPHANUMERICS['Y']}</span>"
+        )
+        letter_n = (
+            f"<span font=\"Noto Sans Symbols\">{CIRCLED_ALPHANUMERICS['N']}</span>"
+        )
         rows = [f"Host time: {host_time}", f"Device time: {device_time}", ""]
         self.can_change = abs(host_time - device_time) > datetime.timedelta(minutes=5)
         if self.can_change:

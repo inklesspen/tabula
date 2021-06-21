@@ -7,11 +7,11 @@ Tabula is a portable prose-oriented distraction-free drafting tool.
 
 The cursor is locked at the end of the document. You can delete characters with Backspace, but only within the current paragraph; once you hit Enter, you canʼt go back.
 
-You can enter special characters through the use of <span font="B612">compose sequences</span>. Press <span font="B612">F2</span> for examples of common compose sequences.
+You can enter special characters through the use of <b>compose sequences</b>. Press <span font="Noto Sans Mono">F2</span> for examples of common compose sequences.
 
-Press <span font="B612">TBD</span> to start or end a writing sprint.
+Press <span font="Noto Sans Mono">TBD</span> to start or end a writing sprint.
 
-Press <span font="B612">F12</span> to open the system menu.
+Press <span font="Noto Sans Mono">F12</span> to open the system menu.
 
 <small>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</small>
 """.strip()
