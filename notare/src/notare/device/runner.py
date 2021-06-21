@@ -33,6 +33,7 @@ import trio_websocket
 import imprimare
 
 from .battery import Battery
+from .button import buttonwatch
 from .gadget import Gadget
 from ..protocol import (
     Framelet,
@@ -110,11 +111,11 @@ def dispatch_request(servicer, request):
 
 
 async def run_server(host, port):
+    loading_png_path = pkg_resources.resource_filename(
+        "notare", "device/preload/waiting.png"
+    )
     with imprimare.get_ink() as ink:
         ink.clear()
-        loading_png_path = pkg_resources.resource_filename(
-            "notare", "device/preload/waiting.png"
-        )
         ink.display_png(loading_png_path, 0, 0)
         async with Battery() as battery:
             server_cancel_scope = trio.CancelScope()
@@ -142,6 +143,7 @@ async def run_server(host, port):
                     nursery.cancel_scope.cancel()
 
             with server_cancel_scope:
+                trio.lowlevel.spawn_system_task(buttonwatch, server_cancel_scope.cancel)
                 await trio_websocket.serve_websocket(
                     connection_handler, host, port, None
                 )
