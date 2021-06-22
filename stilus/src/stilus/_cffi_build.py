@@ -20,7 +20,7 @@ typedef gint gboolean;
 typedef char gchar;
 typedef unsigned char guchar;
 typedef ... gunichar;
-typedef void* gpointer;
+typedef void *gpointer;
 typedef ... gconstpointer;
 typedef ... GObject;
 typedef ... GObjectClass;
@@ -33,19 +33,20 @@ typedef ... GMarkupParseContext;
 typedef ... GTypeModule;
 typedef signed long gssize;
 
-void g_object_unref (gpointer object);
-void g_free (gpointer mem);
+void g_object_unref(gpointer object);
+void g_free(gpointer mem);
 
 gchar *
-g_markup_escape_text (const gchar *text,
-                      gssize length);
+g_markup_escape_text(const gchar *text,
+                     gssize length);
 
 /* cairo */
 typedef struct _cairo_font_options cairo_font_options_t;
 typedef struct _cairo_surface cairo_surface_t;
 typedef struct _cairo cairo_t;
 
-typedef enum _cairo_status {
+typedef enum _cairo_status
+{
     CAIRO_STATUS_SUCCESS = 0,
 
     CAIRO_STATUS_NO_MEMORY,
@@ -94,23 +95,29 @@ typedef enum _cairo_status {
     CAIRO_STATUS_LAST_STATUS
 } cairo_status_t;
 
-typedef struct _cairo_matrix {
-    double xx; double yx;
-    double xy; double yy;
-    double x0; double y0;
+typedef struct _cairo_matrix
+{
+    double xx;
+    double yx;
+    double xy;
+    double yy;
+    double x0;
+    double y0;
 } cairo_matrix_t;
 
-typedef enum _cairo_format {
-    CAIRO_FORMAT_INVALID   = -1,
-    CAIRO_FORMAT_ARGB32    = 0,
-    CAIRO_FORMAT_RGB24     = 1,
-    CAIRO_FORMAT_A8        = 2,
-    CAIRO_FORMAT_A1        = 3,
+typedef enum _cairo_format
+{
+    CAIRO_FORMAT_INVALID = -1,
+    CAIRO_FORMAT_ARGB32 = 0,
+    CAIRO_FORMAT_RGB24 = 1,
+    CAIRO_FORMAT_A8 = 2,
+    CAIRO_FORMAT_A1 = 3,
     CAIRO_FORMAT_RGB16_565 = 4,
-    CAIRO_FORMAT_RGB30     = 5
+    CAIRO_FORMAT_RGB30 = 5
 } cairo_format_t;
 
-typedef enum _cairo_operator {
+typedef enum _cairo_operator
+{
     CAIRO_OPERATOR_CLEAR,
 
     CAIRO_OPERATOR_SOURCE,
@@ -146,7 +153,8 @@ typedef enum _cairo_operator {
     CAIRO_OPERATOR_HSL_LUMINOSITY
 } cairo_operator_t;
 
-typedef enum _cairo_antialias {
+typedef enum _cairo_antialias
+{
     CAIRO_ANTIALIAS_DEFAULT,
 
     /* method */
@@ -160,7 +168,8 @@ typedef enum _cairo_antialias {
     CAIRO_ANTIALIAS_BEST
 } cairo_antialias_t;
 
-typedef enum _cairo_subpixel_order {
+typedef enum _cairo_subpixel_order
+{
     CAIRO_SUBPIXEL_ORDER_DEFAULT,
     CAIRO_SUBPIXEL_ORDER_RGB,
     CAIRO_SUBPIXEL_ORDER_BGR,
@@ -168,7 +177,8 @@ typedef enum _cairo_subpixel_order {
     CAIRO_SUBPIXEL_ORDER_VBGR
 } cairo_subpixel_order_t;
 
-typedef enum _cairo_hint_style {
+typedef enum _cairo_hint_style
+{
     CAIRO_HINT_STYLE_DEFAULT,
     CAIRO_HINT_STYLE_NONE,
     CAIRO_HINT_STYLE_SLIGHT,
@@ -176,184 +186,159 @@ typedef enum _cairo_hint_style {
     CAIRO_HINT_STYLE_FULL
 } cairo_hint_style_t;
 
-typedef enum _cairo_hint_metrics {
+typedef enum _cairo_hint_metrics
+{
     CAIRO_HINT_METRICS_DEFAULT,
     CAIRO_HINT_METRICS_OFF,
     CAIRO_HINT_METRICS_ON
 } cairo_hint_metrics_t;
 
-typedef cairo_status_t (*cairo_write_func_t) (void		  *closure,
-					      const unsigned char *data,
-					      unsigned int	   length);
+typedef cairo_status_t (*cairo_write_func_t)(void *closure,
+                                             const unsigned char *data,
+                                             unsigned int length);
 
-int
-cairo_format_stride_for_width (cairo_format_t format,
-                               int width);
+int cairo_format_stride_for_width(cairo_format_t format,
+                                  int width);
 
 cairo_surface_t *
-cairo_image_surface_create (cairo_format_t	format,
-			    int			width,
-			    int			height);
+cairo_image_surface_create(cairo_format_t format,
+                           int width,
+                           int height);
 
 unsigned char *
-cairo_image_surface_get_data (cairo_surface_t *surface);
+cairo_image_surface_get_data(cairo_surface_t *surface);
 
-int
-cairo_image_surface_get_width (cairo_surface_t *surface);
+int cairo_image_surface_get_width(cairo_surface_t *surface);
 
-int
-cairo_image_surface_get_height (cairo_surface_t *surface);
+int cairo_image_surface_get_height(cairo_surface_t *surface);
 
-int
-cairo_image_surface_get_stride (cairo_surface_t *surface);
+int cairo_image_surface_get_stride(cairo_surface_t *surface);
 
 cairo_t *
-cairo_create (cairo_surface_t *target);
+cairo_create(cairo_surface_t *target);
 
-void
-cairo_destroy (cairo_t *cr);
+void cairo_destroy(cairo_t *cr);
 
-void
-cairo_set_operator (cairo_t *cr, cairo_operator_t op);
+void cairo_set_operator(cairo_t *cr, cairo_operator_t op);
 
-void
-cairo_set_source_rgba (cairo_t *cr,
-		       double red, double green, double blue,
-		       double alpha);
+void cairo_set_source_rgba(cairo_t *cr,
+                           double red, double green, double blue,
+                           double alpha);
 
-void
-cairo_paint (cairo_t *cr);
+void cairo_paint(cairo_t *cr);
 
-void
-cairo_surface_destroy (cairo_surface_t *surface);
+void cairo_surface_destroy(cairo_surface_t *surface);
 
 cairo_font_options_t *
-cairo_font_options_create (void);
+cairo_font_options_create(void);
 
-void
-cairo_font_options_destroy (cairo_font_options_t *options);
+void cairo_font_options_destroy(cairo_font_options_t *options);
 
-void
-cairo_font_options_set_antialias (cairo_font_options_t *options,
-				  cairo_antialias_t     antialias);
+void cairo_font_options_set_antialias(cairo_font_options_t *options,
+                                      cairo_antialias_t antialias);
 
-void
-cairo_font_options_set_subpixel_order (cairo_font_options_t   *options,
-				       cairo_subpixel_order_t  subpixel_order);
+void cairo_font_options_set_subpixel_order(cairo_font_options_t *options,
+                                           cairo_subpixel_order_t subpixel_order);
 
-void
-cairo_font_options_set_hint_style (cairo_font_options_t *options,
-				   cairo_hint_style_t     hint_style);
+void cairo_font_options_set_hint_style(cairo_font_options_t *options,
+                                       cairo_hint_style_t hint_style);
 
-void
-cairo_font_options_set_hint_metrics (cairo_font_options_t *options,
-				     cairo_hint_metrics_t  hint_metrics);
+void cairo_font_options_set_hint_metrics(cairo_font_options_t *options,
+                                         cairo_hint_metrics_t hint_metrics);
 
-void
-cairo_matrix_init (cairo_matrix_t *matrix,
-		   double  xx, double  yx,
-		   double  xy, double  yy,
-		   double  x0, double  y0);
+void cairo_matrix_init(cairo_matrix_t *matrix,
+                       double xx, double yx,
+                       double xy, double yy,
+                       double x0, double y0);
 
-void
-cairo_matrix_init_identity (cairo_matrix_t *matrix);
+void cairo_matrix_init_identity(cairo_matrix_t *matrix);
 
-void
-cairo_set_matrix (cairo_t	       *cr,
-		  const cairo_matrix_t *matrix);
+void cairo_set_matrix(cairo_t *cr,
+                      const cairo_matrix_t *matrix);
 
-void
-cairo_identity_matrix (cairo_t *cr);
+void cairo_identity_matrix(cairo_t *cr);
 
-void
-cairo_save (cairo_t *cr);
+void cairo_save(cairo_t *cr);
 
-void
-cairo_restore (cairo_t *cr);
+void cairo_restore(cairo_t *cr);
 
-void
-cairo_translate (cairo_t *cr, double tx, double ty);
+void cairo_translate(cairo_t *cr, double tx, double ty);
 
-void
-cairo_move_to (cairo_t *cr, double x, double y);
+void cairo_move_to(cairo_t *cr, double x, double y);
 
+void cairo_rectangle(cairo_t *cr,
+                     double x,
+                     double y,
+                     double width,
+                     double height);
 
-void
-cairo_rectangle (cairo_t *cr,
-                 double x,
-                 double y,
-                 double width,
-                 double height);
+void cairo_path_extents(cairo_t *cr,
+                        double *x1,
+                        double *y1,
+                        double *x2,
+                        double *y2);
 
-void
-cairo_path_extents (cairo_t *cr,
-                    double *x1,
-                    double *y1,
-                    double *x2,
-                    double *y2);
+void cairo_set_line_width(cairo_t *cr, double width);
 
-void
-cairo_set_line_width (cairo_t *cr, double width);
+void cairo_stroke(cairo_t *cr);
 
-void
-cairo_stroke (cairo_t *cr);
+void cairo_surface_flush(cairo_surface_t *surface);
 
-void
-cairo_surface_flush (cairo_surface_t *surface);
-
-void
-cairo_surface_mark_dirty (cairo_surface_t *surface);
+void cairo_surface_mark_dirty(cairo_surface_t *surface);
 
 cairo_surface_t *
-cairo_get_target (cairo_t *cr);
+cairo_get_target(cairo_t *cr);
 
 /* pango */
-typedef struct _PangoMatrix    PangoMatrix;
+typedef struct _PangoMatrix PangoMatrix;
 struct _PangoMatrix
 {
-  double xx;
-  double xy;
-  double yx;
-  double yy;
-  double x0;
-  double y0;
+    double xx;
+    double xy;
+    double yx;
+    double yy;
+    double x0;
+    double y0;
 };
 
 typedef ... PangoContext;
 typedef ... PangoLanguage;
 
-typedef enum {
-  PANGO_DIRECTION_LTR,
-  PANGO_DIRECTION_RTL,
-  PANGO_DIRECTION_TTB_LTR,
-  PANGO_DIRECTION_TTB_RTL,
-  PANGO_DIRECTION_WEAK_LTR,
-  PANGO_DIRECTION_WEAK_RTL,
-  PANGO_DIRECTION_NEUTRAL
+typedef enum
+{
+    PANGO_DIRECTION_LTR,
+    PANGO_DIRECTION_RTL,
+    PANGO_DIRECTION_TTB_LTR,
+    PANGO_DIRECTION_TTB_RTL,
+    PANGO_DIRECTION_WEAK_LTR,
+    PANGO_DIRECTION_WEAK_RTL,
+    PANGO_DIRECTION_NEUTRAL
 } PangoDirection;
 
-typedef enum {
-  PANGO_GRAVITY_SOUTH,
-  PANGO_GRAVITY_EAST,
-  PANGO_GRAVITY_NORTH,
-  PANGO_GRAVITY_WEST,
-  PANGO_GRAVITY_AUTO
+typedef enum
+{
+    PANGO_GRAVITY_SOUTH,
+    PANGO_GRAVITY_EAST,
+    PANGO_GRAVITY_NORTH,
+    PANGO_GRAVITY_WEST,
+    PANGO_GRAVITY_AUTO
 } PangoGravity;
 
-typedef enum {
-  PANGO_GRAVITY_HINT_NATURAL,
-  PANGO_GRAVITY_HINT_STRONG,
-  PANGO_GRAVITY_HINT_LINE
+typedef enum
+{
+    PANGO_GRAVITY_HINT_NATURAL,
+    PANGO_GRAVITY_HINT_STRONG,
+    PANGO_GRAVITY_HINT_LINE
 } PangoGravityHint;
 
 typedef ... PangoFontMap;
 
 struct _PangoRectangle
 {
-  int x;
-  int y;
-  int width;
-  int height;
+    int x;
+    int y;
+    int width;
+    int height;
 };
 
 typedef struct _PangoRectangle PangoRectangle;
@@ -362,143 +347,135 @@ typedef struct _PangoFontDescription PangoFontDescription;
 typedef ... PangoFont;
 typedef ... PangoFontMetrics;
 
-typedef struct _PangoLayout      PangoLayout;
+typedef struct _PangoLayout PangoLayout;
 
-typedef enum {
-  PANGO_ALIGN_LEFT,
-  PANGO_ALIGN_CENTER,
-  PANGO_ALIGN_RIGHT
+typedef enum
+{
+    PANGO_ALIGN_LEFT,
+    PANGO_ALIGN_CENTER,
+    PANGO_ALIGN_RIGHT
 } PangoAlignment;
 
-typedef enum {
-  PANGO_WRAP_WORD,
-  PANGO_WRAP_CHAR,
-  PANGO_WRAP_WORD_CHAR
+typedef enum
+{
+    PANGO_WRAP_WORD,
+    PANGO_WRAP_CHAR,
+    PANGO_WRAP_WORD_CHAR
 } PangoWrapMode;
 
-typedef enum {
-  PANGO_ELLIPSIZE_NONE,
-  PANGO_ELLIPSIZE_START,
-  PANGO_ELLIPSIZE_MIDDLE,
-  PANGO_ELLIPSIZE_END
+typedef enum
+{
+    PANGO_ELLIPSIZE_NONE,
+    PANGO_ELLIPSIZE_START,
+    PANGO_ELLIPSIZE_MIDDLE,
+    PANGO_ELLIPSIZE_END
 } PangoEllipsizeMode;
 
-const PangoMatrix *       pango_context_get_matrix           (PangoContext      *context);
-void                      pango_context_set_language         (PangoContext               *context,
-							      PangoLanguage              *language);
-void                      pango_context_set_base_dir         (PangoContext               *context,
-							      PangoDirection              direction);
-void                      pango_context_set_base_gravity     (PangoContext               *context,
-							      PangoGravity                gravity);
-void                      pango_context_set_gravity_hint     (PangoContext               *context,
-							      PangoGravityHint            hint);
-void                      pango_context_set_matrix           (PangoContext      *context,
-						              const PangoMatrix *matrix);
+const PangoMatrix *pango_context_get_matrix(PangoContext *context);
+void pango_context_set_language(PangoContext *context,
+                                PangoLanguage *language);
+void pango_context_set_base_dir(PangoContext *context,
+                                PangoDirection direction);
+void pango_context_set_base_gravity(PangoContext *context,
+                                    PangoGravity gravity);
+void pango_context_set_gravity_hint(PangoContext *context,
+                                    PangoGravityHint hint);
+void pango_context_set_matrix(PangoContext *context,
+                              const PangoMatrix *matrix);
 
-PangoContext * pango_font_map_create_context (PangoFontMap               *fontmap);
+PangoContext *pango_font_map_create_context(PangoFontMap *fontmap);
 
-PangoFont*
-pango_font_map_load_font (
-  PangoFontMap* fontmap,
-  PangoContext* context,
-  const PangoFontDescription* desc
-);
+PangoFont *
+pango_font_map_load_font(
+    PangoFontMap *fontmap,
+    PangoContext *context,
+    const PangoFontDescription *desc);
 
-PangoFontMetrics*
-pango_font_get_metrics (
-  PangoFont* font,
-  PangoLanguage* language
-);
+PangoFontMetrics *
+pango_font_get_metrics(
+    PangoFont *font,
+    PangoLanguage *language);
 
-void
-pango_font_metrics_unref (
-  PangoFontMetrics* metrics
-);
+void pango_font_metrics_unref(
+    PangoFontMetrics *metrics);
 
-int
-pango_font_metrics_get_height (
-  PangoFontMetrics* metrics
-);
+int pango_font_metrics_get_height(
+    PangoFontMetrics *metrics);
 
-int
-pango_font_metrics_get_ascent (
-  PangoFontMetrics* metrics
-);
+int pango_font_metrics_get_ascent(
+    PangoFontMetrics *metrics);
 
-int
-pango_font_metrics_get_descent (
-  PangoFontMetrics* metrics
-);
+int pango_font_metrics_get_descent(
+    PangoFontMetrics *metrics);
 
+PangoMatrix *pango_matrix_copy(const PangoMatrix *matrix);
+void pango_matrix_free(PangoMatrix *matrix);
+void pango_matrix_transform_pixel_rectangle(const PangoMatrix *matrix,
+                                            PangoRectangle *rect);
 
-PangoMatrix *pango_matrix_copy   (const PangoMatrix *matrix);
-void         pango_matrix_free   (PangoMatrix *matrix);
-void pango_matrix_transform_pixel_rectangle (const PangoMatrix *matrix,
-					     PangoRectangle    *rect);
+PangoLanguage *pango_language_from_string(const char *language);
 
-PangoLanguage *pango_language_from_string (const char *language);
+PangoFontDescription *pango_font_description_from_string(const char *str);
+void pango_font_description_set_size(PangoFontDescription *desc,
+                                     gint size);
+void pango_font_description_free(PangoFontDescription *desc);
 
-PangoFontDescription *pango_font_description_from_string (const char                  *str);
-void                 pango_font_description_set_size          (PangoFontDescription *desc,
-                                                               gint                  size);
-void                  pango_font_description_free        (PangoFontDescription        *desc);
+PangoFontDescription *pango_font_describe(PangoFont *font);
 
-PangoFontDescription* pango_font_describe (PangoFont* font);
+char *pango_font_description_to_string(PangoFontDescription *desc);
 
-char* pango_font_description_to_string (PangoFontDescription* desc);
-
-PangoLayout *pango_layout_new            (PangoContext   *context);
-void           pango_layout_set_markup     (PangoLayout    *layout,
-					    const char     *markup,
-					    int             length);
-void           pango_layout_set_text       (PangoLayout    *layout,
-					    const char     *text,
-					    int             length);
-void           pango_layout_set_auto_dir         (PangoLayout                *layout,
-						  gboolean                    auto_dir);
-void               pango_layout_set_ellipsize (PangoLayout        *layout,
-					       PangoEllipsizeMode  ellipsize);
-void           pango_layout_set_justify          (PangoLayout                *layout,
-						  gboolean                    justify);
-void           pango_layout_set_spacing          (PangoLayout                *layout,
-						  int                         spacing);
-void           pango_layout_set_single_paragraph_mode (PangoLayout                *layout,
-						       gboolean                    setting);
-void           pango_layout_set_wrap             (PangoLayout                *layout,
-						  PangoWrapMode               wrap);
-void           pango_layout_set_width            (PangoLayout                *layout,
-						  int                         width);
-void           pango_layout_set_height           (PangoLayout                *layout,
-						  int                         height);
-void           pango_layout_set_alignment        (PangoLayout                *layout,
-						  PangoAlignment              alignment);
-void           pango_layout_set_font_description (PangoLayout                *layout,
-						  const PangoFontDescription *desc);
-PangoContext  *pango_layout_get_context    (PangoLayout    *layout);
-void     pango_layout_context_changed (PangoLayout    *layout);
-void     pango_layout_get_pixel_extents    (PangoLayout    *layout,
-					    PangoRectangle *ink_rect,
-					    PangoRectangle *logical_rect);
-int            pango_layout_get_width            (PangoLayout                *layout);
-int            pango_layout_get_height           (PangoLayout                *layout);
+PangoLayout *pango_layout_new(PangoContext *context);
+void pango_layout_set_markup(PangoLayout *layout,
+                             const char *markup,
+                             int length);
+void pango_layout_set_text(PangoLayout *layout,
+                           const char *text,
+                           int length);
+void pango_layout_set_auto_dir(PangoLayout *layout,
+                               gboolean auto_dir);
+void pango_layout_set_ellipsize(PangoLayout *layout,
+                                PangoEllipsizeMode ellipsize);
+void pango_layout_set_justify(PangoLayout *layout,
+                              gboolean justify);
+void pango_layout_set_spacing(PangoLayout *layout,
+                              int spacing);
+void pango_layout_set_single_paragraph_mode(PangoLayout *layout,
+                                            gboolean setting);
+void pango_layout_set_wrap(PangoLayout *layout,
+                           PangoWrapMode wrap);
+void pango_layout_set_width(PangoLayout *layout,
+                            int width);
+void pango_layout_set_height(PangoLayout *layout,
+                             int height);
+void pango_layout_set_alignment(PangoLayout *layout,
+                                PangoAlignment alignment);
+void pango_layout_set_font_description(PangoLayout *layout,
+                                       const PangoFontDescription *desc);
+PangoContext *pango_layout_get_context(PangoLayout *layout);
+void pango_layout_context_changed(PangoLayout *layout);
+void pango_layout_get_pixel_extents(PangoLayout *layout,
+                                    PangoRectangle *ink_rect,
+                                    PangoRectangle *logical_rect);
+int pango_layout_get_width(PangoLayout *layout);
+int pango_layout_get_height(PangoLayout *layout);
 
 /* pangocairo */
-typedef struct _PangoCairoFontMap        PangoCairoFontMap;
+typedef struct _PangoCairoFontMap PangoCairoFontMap;
 
-PangoFontMap *pango_cairo_font_map_new               (void);
+PangoFontMap *pango_cairo_font_map_new(void);
 
-PangoFontMap* pango_cairo_font_map_get_default (void);
+PangoFontMap *pango_cairo_font_map_get_default(void);
 
-void          pango_cairo_font_map_set_resolution (PangoCairoFontMap *fontmap,
-						   double             dpi);
+void pango_cairo_font_map_set_resolution(PangoCairoFontMap *fontmap,
+                                         double dpi);
 
-void                        pango_cairo_context_set_font_options (PangoContext               *context,
-								  const cairo_font_options_t *options);
-const cairo_font_options_t *pango_cairo_context_get_font_options (PangoContext               *context);
-void         pango_cairo_update_context (cairo_t      *cr,
-					 PangoContext *context);
-void pango_cairo_show_layout       (cairo_t          *cr,
-				    PangoLayout      *layout);
+void pango_cairo_context_set_font_options(PangoContext *context,
+                                          const cairo_font_options_t *options);
+const cairo_font_options_t *pango_cairo_context_get_font_options(PangoContext *context);
+void pango_cairo_update_context(cairo_t *cr,
+                                PangoContext *context);
+void pango_cairo_show_layout(cairo_t *cr,
+                             PangoLayout *layout);
 
 /* quirky bits */
 
@@ -554,9 +531,9 @@ void pango_cairo_show_layout       (cairo_t          *cr,
  *
  * PANGO_PIXELS also behaves differently for +512 and -512.
  */
- int pango_pixels(int d);
+int pango_pixels(int d);
 
- void invert_a8_surface(cairo_surface_t* surface);
+void invert_a8_surface(cairo_surface_t *surface);
 """
 )
 
