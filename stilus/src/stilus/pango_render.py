@@ -142,9 +142,6 @@ class PangoCairoRenderer:
             clib.pango_font_map_create_context(self.fontmap), clib.g_object_unref
         )
         clib.pango_cairo_context_set_font_options(self.context, self.fontoptions)
-        clib.pango_context_set_round_glyph_positions(
-            self.context, (not self.opts.subpixel_positions)
-        )
 
         self.language = clib.pango_language_from_string(b"en-us")
         clib.pango_context_set_language(self.context, self.language)
@@ -190,10 +187,7 @@ class PangoCairoRenderer:
 
     def _paint_background(self, cr):
         clib.cairo_set_operator(cr, clib.CAIRO_OPERATOR_SOURCE)
-        if self.opts.transparent:
-            clib.cairo_set_source_rgba(cr, 1, 1, 1, 0)
-        else:
-            clib.cairo_set_source_rgb(cr, 1, 1, 1)
+        clib.cairo_set_source_rgba(cr, 1, 1, 1, 0)
         clib.cairo_paint(cr)
 
     def _set_cairo_transform(self, cairo, matrix):

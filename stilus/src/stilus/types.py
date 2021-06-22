@@ -83,8 +83,6 @@ class Opts:
     hint_metrics: HintMetrics = HintMetrics.DEFAULT
     subpixel_order: SubpixelOrder = SubpixelOrder.DEFAULT
     antialias: Antialias = Antialias.DEFAULT
-    subpixel_positions: bool = False
-    transparent: bool = True
     screen_size: Size = Size(width=0, height=0)
 
 
