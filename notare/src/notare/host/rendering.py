@@ -95,8 +95,14 @@ class Screen:
         if not need_to_reflow:
             # Only the last paragraph needs to be rerendered.
             relative_top = self.cursor_y - self.renders[-1].size.height
+            old_image = before_render[-1].rendered
             new_image = self.renders[-1].rendered
-            render_diff = new_image - before_render[-1].rendered
+            # if the images are identical after all, bbox will error
+            # this might happen if we load the currently-active session
+            # in that case, there's nothing to send.
+            if old_image.data == new_image.data:
+                return []
+            render_diff = new_image - old_image
             changed_box = bbox(render_diff)
             changed: npt.ArrayLike = new_image[
                 changed_box.top : changed_box.bottom,

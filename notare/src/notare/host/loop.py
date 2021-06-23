@@ -467,4 +467,5 @@ class Drafting(Loop):
             for para in paras
         ]
         framelets = self.screen.render_update(renderables)
-        await self.client.update_screen(framelets)
+        if framelets:
+            await self.client.update_screen(framelets)
