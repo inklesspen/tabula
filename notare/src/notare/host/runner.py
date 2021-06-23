@@ -14,6 +14,7 @@ from . import term, loop, wordcount
 from .config import Settings
 from .db import TabulaDb, make_db
 from .document import DocumentModel
+from .notify import notify_ready
 from .stub import Stub
 from ..protocol import DeviceInfo
 
@@ -52,6 +53,9 @@ class Application:
                 self.document,
             )
         self.current_loop = self.loops[loop.SystemMenu]
+
+        if self.settings.systemd_notify:
+            notify_ready()
 
         # the first time we switch into Drafting, it will try to restore the screen. so we save it here.
         await self.stub.save_screen()

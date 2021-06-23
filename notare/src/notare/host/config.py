@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     shutdown_host_on_exit: bool = Field(False)
 
     log_keys: bool = Field(False, hidden=True)
+    systemd_notify: bool = Field(False, hidden=True)
 
     @classmethod
     def create_toml_file(cls):
