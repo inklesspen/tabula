@@ -175,14 +175,15 @@ class PangoCairoRenderer:
         buf = ffi.buffer(dataptr, size.total())
         return buf
 
-    def surface_to_bytes(self, surface, size):
-        # The A8 surface type is treated by cairo as an alpha channel.
-        # To use it as a grayscale channel, we need to invert the bytes.
-        clib.cairo_surface_flush(surface)
-        clib.invert_a8_surface(surface)
-        # Technically this call is not necessary, as long as we immediately
-        # dispose of the surface. But better safe than sorry.
-        clib.cairo_surface_mark_dirty(surface)
+    def surface_to_bytes(self, surface, size, skip_inversion=False):
+        if not skip_inversion:
+            # The A8 surface type is treated by cairo as an alpha channel.
+            # To use it as a grayscale channel, we need to invert the bytes.
+            clib.cairo_surface_flush(surface)
+            clib.invert_a8_surface(surface)
+            # Technically this call is not necessary, as long as we immediately
+            # dispose of the surface. But better safe than sorry.
+            clib.cairo_surface_mark_dirty(surface)
         return bytes(self._surface_to_buffer(surface, size))
 
     def _paint_background(self, cr):
