@@ -95,7 +95,7 @@ class RenderOpts:
     justify: bool = False
     alignment: Alignment = Alignment.LEFT
     single_par: bool = False
-    wrap: WrapMode = WrapMode.WORD
+    wrap: WrapMode = WrapMode.WORD_CHAR
     margin_t: int = 10
     margin_r: int = 10
     margin_b: int = 10
