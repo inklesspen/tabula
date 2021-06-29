@@ -13,8 +13,6 @@
 # (the specific years vary in some of the files)
 from __future__ import annotations
 
-import numpy as np
-
 from ._cffi import ffi, lib as clib
 from .types import (
     Antialias,
@@ -78,28 +76,6 @@ class Renderer:
             margin_r=margin_lr,
         )
         return self._render(render_opts)
-
-    def render_to_numpy(
-        self,
-        markup: str,
-        font: str,
-        margin_lr: int = 10,
-        margin_tb: int = 0,
-        alignment: Alignment = Alignment.LEFT,
-    ):
-        render_opts = RenderOpts(
-            font=font,
-            markup=True,
-            text=markup,
-            alignment=alignment,
-            margin_t=margin_tb,
-            margin_b=margin_tb,
-            margin_l=margin_lr,
-            margin_r=margin_lr,
-        )
-        (buf, new_size) = self._render(render_opts)
-        new_rendered = np.ndarray(new_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
-        return new_rendered
 
     @staticmethod
     def calculate_line_height(font: str, dpi: int) -> float:

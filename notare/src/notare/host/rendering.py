@@ -74,14 +74,14 @@ class Screen:
             markup = renderable.markup
             if renderable.has_cursor:
                 markup += CURSOR
-            new_rendered: npt.ArrayLike = self.renderer.render_to_numpy(
-                markup, self.font
+            (buf, render_size) = self.renderer.render_to_bytes(markup, self.font)
+            new_rendered = np.ndarray(
+                render_size.as_numpy_shape(), dtype=np.uint8, buffer=buf
             )
-            new_size = stilus.types.Size.from_numpy_shape(new_rendered.shape)
             self.set_into(
                 self.renders,
                 renderable.index,
-                RenderPara(rendered=new_rendered, size=new_size),
+                RenderPara(rendered=new_rendered, size=render_size),
             )
 
         # It's possible this might fail to reflow if the font has changed
@@ -198,13 +198,14 @@ class ModalDialog:
 
     def render_header(self) -> Framelet:
         frame_offset = self.frame_offset()
-        rendered: npt.ArrayLike = self.renderer.render_to_numpy(
+        (buf, render_size) = self.renderer.render_to_bytes(
             markup="Tabula",
             font="Noto Serif Display 12",
             margin_lr=10,
             margin_tb=10,
             alignment=stilus.types.Alignment.CENTER,
         )
+        rendered = np.ndarray(render_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
         cropped: npt.ArrayLike = rendered[10:-10, 10:-10]
         size = stilus.types.Size.from_numpy_shape(cropped.shape)
         return Framelet(
@@ -222,9 +223,11 @@ class ModalDialog:
 
         frame_op = self.render_frame()
         header_op = self.render_header()
-        rendered = self.renderer.render_to_numpy(
+        (buf, render_size) = self.renderer.render_to_bytes(
             markup=markup, font=font, margin_lr=margin_lr, margin_tb=10
         )
+        rendered = np.ndarray(render_size.as_numpy_shape(), dtype=np.uint8, buffer=buf)
+
         cropped: npt.ArrayLike = rendered[10:-10, margin_lr:-margin_lr]
         size = stilus.types.Size.from_numpy_shape(cropped.shape)
         body_op = Framelet(
