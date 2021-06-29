@@ -80,7 +80,7 @@ def test_ti(
     renderer: PangoCairoRenderer,
 ):
     render_opts = RenderOpts(
-        font="B612 Regular 8", markup=True, text=TI, margin_t=0, margin_b=0
+        font="Noto Sans 8", markup=True, text=TI, margin_t=0, margin_b=0
     )
 
     with renderer.create_surface() as surface:
@@ -98,7 +98,7 @@ def test_border(
     renderer: PangoCairoRenderer,
 ):
     base_render_opts = RenderOpts(
-        font="TeX Gyre Pagella 8",
+        font="Noto Serif 6",
         markup=True,
         text="n/a",
         margin_t=0,
