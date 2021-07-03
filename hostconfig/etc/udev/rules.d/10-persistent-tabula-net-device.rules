@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="net", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="5200", NAME="tabula", ENV{SYSTEMD_WANTS}+="tabula.service"

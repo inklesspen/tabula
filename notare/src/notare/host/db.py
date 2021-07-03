@@ -199,7 +199,9 @@ class TabulaDb:
             )
             pstmt = insert(paragraph_table)
             p_on_update = pstmt.on_conflict_do_update(
-                index_elements=["id"],
+                # the unique constraint apparently fires before the id constraint
+                # and sqlite < 3.35.0 only allows a single conflict target.
+                index_elements=["session_id", "index"],
                 set_=dict(
                     sprint_id=pstmt.excluded.sprint_id, markdown=pstmt.excluded.markdown
                 ),

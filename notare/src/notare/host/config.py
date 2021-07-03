@@ -6,7 +6,7 @@ import logging
 import pathlib
 import typing
 
-from pydantic import BaseSettings, Field, IPvAnyAddress
+from pydantic import BaseSettings, Field, IPvAnyAddress, DirectoryPath, validator
 from pydantic.env_settings import SettingsSourceCallable, SettingsError
 from pydantic.fields import ModelField
 from pydantic.schema import encode_default
@@ -75,10 +75,22 @@ class Settings(BaseSettings):
 
     allow_setting_time: bool = Field(False, description="Handy if host lacks a RTC")
     allow_markdown_export_to_device: bool = Field(False)
-    shutdown_host_on_exit: bool = Field(False)
+    export_path: DirectoryPath = Field(
+        ...,
+        title="Markdown export path",
+        description="May contain ~ or ~user. If relative, will be resolved relative to the config file location. This path MUST point to an existing directory.",
+        sample="~/tabula",
+    )
 
     log_keys: bool = Field(False, hidden=True)
     systemd_notify: bool = Field(False, hidden=True)
+
+    @validator("export_path", pre=True)
+    def resolve_path(cls, val):
+        # print(f"{type(val)}, {repr(val)}")
+        return cls.__config__.toml_path.parent.joinpath(
+            pathlib.Path(val).expanduser()
+        ).resolve()
 
     @classmethod
     def create_toml_file(cls):

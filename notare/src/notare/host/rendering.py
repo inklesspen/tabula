@@ -240,3 +240,22 @@ class ModalDialog:
             image=Framelet.encode_bytes(cropped.tobytes()),
         )
         return [frame_op, header_op, body_op]
+
+
+# Line 1: Sprint status: timer, wordcount, hotkey reminder
+# Line 2: Session wordcount, current time, battery status
+class StatusDisplay:
+    def __init__(
+        self,
+        width: int,
+        dpi: int,
+    ):
+        # TODO: use https://github.com/polarsys/b612
+        self.font = "Literata-Regular 8"
+        line_height = math.ceil(
+            stilus.pango_render.Renderer.calculate_line_height(self.font, 300)
+        )
+        self.status_size = stilus.types.Size(width=width, height=line_height * 3)
+        self.renderer = stilus.pango_render.Renderer(
+            screen_size=self.status_size, dpi=dpi
+        )

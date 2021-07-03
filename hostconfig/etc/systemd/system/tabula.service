@@ -1,0 +1,22 @@
+[Unit]
+Description=tabula
+Wants=multi-user.target
+After=multi-user.target
+# After=syslog.target network.target
+
+
+[Service]
+User=rose
+Type=simple
+#Restart=on-failure
+# RootDirectory=/opt/chroots/alpine
+WorkingDirectory=/home/rose
+# RootDirectoryStartOnly=true
+ExecStartPre=!ip addr add 10.52.0.2/24 dev tabula
+ExecStartPre=!ip link set tabula up
+# ExecStart=/home/rose/tabulaenv/bin/notare-host
+ExecStart=!openvt -s -w /home/rose/start_tabula.sh
+
+
+# [Install]
+# WantedBy=multi-user.target
