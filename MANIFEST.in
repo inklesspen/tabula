@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+
+graft src
+graft tests
+include .bumpversion.cfg
+
+include README.md
+include pyproject.toml
+
+global-exclude *.py[cod] __pycache__/* *.so *.dylib

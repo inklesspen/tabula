@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[build-system]
+requires = ["setuptools >= 40.6.0", "wheel"]
+build-backend = "setuptools.build_meta"
