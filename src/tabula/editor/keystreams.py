@@ -54,5 +54,18 @@ class ModifierTracking:
             )
 
 
-# stage 2: convert key event + modifier into character or special key code
+# stage 2: convert key event + modifier into character
+class MakeCharacter:
+    def __init__(self, wrapped, maps):
+        self.wrapped = wrapped
+        self.maps = maps  # from settings
+
+    async def keystream(self) -> collections.abc.AsyncIterable[AnnotatedKeyEvent]:
+        event: AnnotatedKeyEvent
+        async for event in self.wrapped.keystream():
+            is_shifted = event.annotation.shift ^ event.annotation.capslock
+            keymap = self.maps[1] if is_shifted else self.maps[0]
+            if event.key in keymap:
+                yield attr.evolve(event, character=keymap[event.key])
+
 # stage 3: compose sequences

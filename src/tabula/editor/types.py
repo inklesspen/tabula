@@ -28,6 +28,7 @@ class AnnotatedKeyEvent:
     key: Key
     press: KeyPress
     annotation: ModifierAnnotation
+    character: typing.Optional[str] = attr.field(default=None)
 
 
 @attr.frozen(kw_only=True)
