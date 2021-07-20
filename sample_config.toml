@@ -1,7 +1,11 @@
+# SPDX-FileCopyrightText: Copyright in this file is disclaimed.
+#
+# SPDX-License-Identifier: CC0-1.0
+
 drafting_fonts = ["Tabula Quattro 8", "Comic Neue 8", "ETbb 8", "Special Elite 8"]
 export_path = "/var/tabula"
 
-[unshifted]
+[[keymaps]]
 KEY_GRAVE = "`"
 KEY_1 = "1"
 KEY_2 = "2"
@@ -27,7 +31,7 @@ KEY_O = "o"
 KEY_P = "p"
 KEY_LEFTBRACE = "["
 KEY_RIGHTBRACE = "]"
-KEY_BACKSLASH = "\\"
+KEY_BACKSLASH = '\'
 KEY_A = "a"
 KEY_S = "s"
 KEY_D = "d"
@@ -50,7 +54,7 @@ KEY_COMMA = ","
 KEY_DOT = "."
 KEY_SLASH = "/"
 
-[shifted]
+[[keymaps]]
 KEY_GRAVE = "~"
 KEY_1 = "!"
 KEY_2 = "@"
@@ -87,7 +91,8 @@ KEY_J = "J"
 KEY_K = "K"
 KEY_L = "L"
 KEY_SEMICOLON = ":"
-KEY_APOSTROPHE = "\""
+# use single quotes as workaround for https://github.com/uiri/toml/issues/368
+KEY_APOSTROPHE = '"'
 KEY_Z = "Z"
 KEY_X = "X"
 KEY_C = "C"
