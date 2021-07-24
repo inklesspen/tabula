@@ -53,6 +53,7 @@ KEY_M = "m"
 KEY_COMMA = ","
 KEY_DOT = "."
 KEY_SLASH = "/"
+KEY_SPACE = " "
 
 [[keymaps]]
 KEY_GRAVE = "~"
@@ -91,8 +92,7 @@ KEY_J = "J"
 KEY_K = "K"
 KEY_L = "L"
 KEY_SEMICOLON = ":"
-# use single quotes as workaround for https://github.com/uiri/toml/issues/368
-KEY_APOSTROPHE = '"'
+KEY_APOSTROPHE = "\""
 KEY_Z = "Z"
 KEY_X = "X"
 KEY_C = "C"
@@ -103,25 +103,26 @@ KEY_M = "M"
 KEY_COMMA = "<"
 KEY_DOT = ">"
 KEY_SLASH = "?"
+KEY_SPACE = " "
 
 [compose_sequences]
 # guillemets
-"< <" = "\u00ab"
-"> >" = "\u00bb"
+"< <" = "\u00ab" # LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+"> >" = "\u00bb" # RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
 # "smart" quotes
-"< '" = "\u2018"
-"' <" = "\u2018"
-"> '" = "\u2019"
-"' >" = "\u2019"
-"< \"" = "\u201c"
-"\" <" = "\u201c"
-"> \"" = "\u201d"
-"\" >" = "\u201d"
+"< '" = "\u2018" # LEFT SINGLE QUOTATION MARK
+"' <" = "\u2018" # LEFT SINGLE QUOTATION MARK
+"> '" = "\u2019" # RIGHT SINGLE QUOTATION MARK
+"' >" = "\u2019" # RIGHT SINGLE QUOTATION MARK
+"< \"" = "\u201c" # LEFT DOUBLE QUOTATION MARK
+"\" <" = "\u201c" # LEFT DOUBLE QUOTATION MARK
+"> \"" = "\u201d" # RIGHT DOUBLE QUOTATION MARK
+"\" >" = "\u201d" # RIGHT DOUBLE QUOTATION MARK
 # punctuation
-"' '" = "\u02bc"  # modifier letter apostrophe
-". ." = "…"
-"- - -" = "—"
-"- - ." = "–"
+"' '" = "\u02bc" # MODIFIER LETTER APOSTROPHE
+". ." = "\u2026" # HORIZONTAL ELLIPSIS
+"- - -" = "\u2014" # EM DASH
+"- - ." = "\u2013" # EN DASH
 "! !" = "\u00a1" # INVERTED EXCLAMATION MARK
 "? ?" = "\u00bf" # INVERTED QUESTION MARK
 # numerics

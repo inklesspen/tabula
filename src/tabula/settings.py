@@ -8,12 +8,15 @@ import typing
 
 import attr
 import pygtrie
-import toml
+import tomli
 import trio.lowlevel
 
+from .device.keyboard_consts import Key
 from .device.types import InputDevice
 
 SETTINGS = trio.lowlevel.RunVar("SETTINGS")
+
+# TODO: allow reading/writing some settings (keyboard info, etc) to sqlite db
 
 
 @attr.frozen(kw_only=True)
@@ -26,38 +29,7 @@ class Settings:
     compose_sequences: pygtrie.Trie = attr.field(
         converter=pygtrie.Trie, factory=pygtrie.Trie
     )
-
-
-def _dump_input_device(v: InputDevice):
-    fields = attr.fields(InputDevice)
-    return attr.asdict(
-        v,
-        filter=attr.filters.include(
-            fields.vendor_id, fields.product_id, fields.interface_id
-        ),
-    )
-
-
-def _text_repr(c):
-    d = ord(c)
-    if d >= 0x10000:
-        return "\\U{:08x}".format(d)
-    else:
-        return "\\u{:04x}".format(d)
-
-
-def unicode_escape(ex):
-    s, start, end = ex.object, ex.start, ex.end
-    return "".join(_text_repr(c) for c in s[start:end]), end
-
-
-codecs.register_error("unicode_escape", unicode_escape)
-
-
-class TabulaTomlEncoder(toml.TomlPathlibEncoder):
-    def __init__(self, _dict=dict, preserve=False):
-        super(TabulaTomlEncoder, self).__init__(_dict, preserve)
-        self.dump_funcs[InputDevice] = _dump_input_device
+    keymaps: list[dict[Key, str]]
 
 
 def _data_file():
@@ -72,7 +44,10 @@ def _data_file():
 def _load_settings():
     data_file = _data_file()
     if data_file.is_file():
-        settings_dict = toml.loads(data_file.read_text(encoding="utf-8"))
+        settings_dict = tomli.load(data_file.open(mode="rb"))
+        if "keymaps" in settings_dict:
+            for i, keymap in enumerate(settings_dict["keymaps"]):
+                settings_dict["keymaps"][i] = {Key[k]: v for k, v in keymap.items()}
         if "compose_sequences" in settings_dict:
             settings_dict["compose_sequences"] = {
                 tuple(k.split()): v
@@ -84,22 +59,3 @@ def _load_settings():
 
 def load_settings():
     SETTINGS.set(_load_settings())
-
-
-def _save_settings(settings):
-    settings_dict = attr.asdict(settings)
-    if "compose_sequences" in settings_dict:
-        # this way TOML will dump it as a table
-        settings_dict["compose_sequences"] = {
-            " ".join(k): v for k, v in settings_dict["compose_sequences"].items()
-        }
-    print(settings_dict)
-    with _data_file().open("w", encoding="ascii", errors="unicode_escape") as outfile:
-        toml.dump(settings_dict, outfile, encoder=TabulaTomlEncoder())
-
-
-def change_settings(**changes):
-    current = SETTINGS.get()
-    changed = attr.evolve(current, **changes)
-    # _save_settings(changed)
-    SETTINGS.set(changed)
