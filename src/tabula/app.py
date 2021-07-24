@@ -3,7 +3,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import typing
 
+import trio
+
 from .device.types import Display, Touchable, Keyboard
+from .editor.keystreams import (
+    ModifierTracking,
+    OnlyPresses,
+    MakeCharacter,
+    ComposeCharacters,
+)
+from .settings import SETTINGS, load_settings
 
 
 class Tabula:
@@ -34,3 +43,35 @@ def mac_tkinter():
         touchable_cls=TkTouchScreen,
         keyboard_cls=TkTouchScreen,
     )
+
+
+async def testit():
+    load_settings()
+    from .device.tkinter_screen import TkTouchScreen
+
+    with TkTouchScreen() as screen:
+        settings = SETTINGS.get()
+        keyboard = ComposeCharacters(
+            MakeCharacter(OnlyPresses(ModifierTracking(screen)), settings), settings
+        )
+        async with trio.open_nursery() as nursery:
+
+            async def log_keys():
+                async for event in keyboard.keystream():
+                    print(event)
+                    # if event.character is not None:
+                    #     print(event.character)
+                    # else:
+                    #     print(event)
+
+            async def log_touches():
+                async for event in screen.touchstream():
+                    print(event)
+
+            nursery.start_soon(log_keys)
+            nursery.start_soon(log_touches)
+            await screen.run()
+
+
+def stuff():
+    trio.run(testit)

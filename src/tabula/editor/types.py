@@ -29,6 +29,7 @@ class AnnotatedKeyEvent:
     press: KeyPress
     annotation: ModifierAnnotation
     character: typing.Optional[str] = attr.field(default=None)
+    is_modifier: bool = attr.field(default=False)
 
 
 @attr.frozen(kw_only=True)
@@ -50,8 +51,8 @@ class Paragraph:
     session_id: timeflake.Timeflake
     index: int
     sprint_id: typing.Optional[timeflake.Timeflake] = attr.field(default=None)
-    markdown: str = attr.field(repr=False, cmp=False)
-    markup: str = attr.field(repr=False, cmp=False, init=False)
+    markdown: str = attr.field(repr=False, eq=False, order=False)
+    markup: str = attr.field(repr=False, eq=False, order=False, init=False)
 
     @markup.default
     def _init_markup(self):

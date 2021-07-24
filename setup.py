@@ -70,6 +70,7 @@ setup(
         "markdown-it-py",
         "cardinality>=0.1.1",
         "numpy>=1.20.3",
+        "Pillow>=8.3.1",
         "pygtrie>=2.4.2",
         "python-dateutil>=2.8.1",
         "timeflake>=0.4.0",

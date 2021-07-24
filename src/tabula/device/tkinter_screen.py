@@ -29,6 +29,7 @@ MISC_KEYS = {
     "minus": Key.KEY_MINUS,
     "equal": Key.KEY_EQUAL,
     "quoteleft": Key.KEY_GRAVE,
+    "grave": Key.KEY_GRAVE,
     "asciitilde": Key.KEY_GRAVE,
     "exclam": Key.KEY_1,
     "at": Key.KEY_2,
@@ -52,6 +53,7 @@ MISC_KEYS = {
     "quoteright": Key.KEY_APOSTROPHE,
     "colon": Key.KEY_SEMICOLON,
     "quotedbl": Key.KEY_APOSTROPHE,
+    "apostrophe": Key.KEY_APOSTROPHE,
     "comma": Key.KEY_COMMA,
     "period": Key.KEY_DOT,
     "slash": Key.KEY_SLASH,
@@ -64,30 +66,16 @@ MISC_KEYS = {
     "Down": Key.KEY_DOWN,
 }
 
-# Tk on Mac OS reports the left key for all modifier keys, even if it was the right key.
-# Moreover, if the modifier key is the first key pressed on startup, it will have a different
-# keycode compared to a subsequent keypress. This is bonkers.
-MODIFIER_KEYSYMS = {"Meta_L", "Alt_L", "Control_L", "Shift_L"}
-
 MODIFIER_KEYS = {
-    1048840: Key.KEY_LEFTMETA,
-    1048592: Key.KEY_RIGHTMETA,
-    1048584: Key.KEY_LEFTMETA,
-    1048848: Key.KEY_RIGHTMETA,
-    524320: Key.KEY_LEFTALT,
-    524352: Key.KEY_RIGHTALT,
-    524576: Key.KEY_LEFTALT,
-    524608: Key.KEY_RIGHTALT,
-    262145: Key.KEY_LEFTCTRL,
-    270336: Key.KEY_RIGHTCTRL,
-    262401: Key.KEY_LEFTCTRL,
-    270592: Key.KEY_RIGHTCTRL,
-    131330: Key.KEY_LEFTSHIFT,
-    131076: Key.KEY_RIGHTSHIFT,
-    131074: Key.KEY_LEFTSHIFT,
-    131332: Key.KEY_RIGHTSHIFT,
+    "Meta_L": Key.KEY_LEFTMETA,
+    "Alt_L": Key.KEY_LEFTALT,
+    "Control_L": Key.KEY_LEFTCTRL,
+    "Shift_L": Key.KEY_LEFTSHIFT,
+    "Meta_R": Key.KEY_RIGHTMETA,
+    "Alt_R": Key.KEY_RIGHTALT,
+    "Control_R": Key.KEY_RIGHTCTRL,
+    "Shift_R": Key.KEY_RIGHTSHIFT,
 }
-
 
 # key mapping in Tk is kind of a mess. but this is really only for dev work anyway.
 def mapkeyevent(event) -> list[KeyEvent]:
@@ -107,8 +95,8 @@ def mapkeyevent(event) -> list[KeyEvent]:
     if event.keysym in MISC_KEYS:
         return [KeyEvent(key=MISC_KEYS[event.keysym], press=press)]
 
-    if event.keysym in MODIFIER_KEYSYMS and event.keycode in MODIFIER_KEYS:
-        return [KeyEvent(key=MODIFIER_KEYS[event.keycode], press=press)]
+    if event.keysym in MODIFIER_KEYS:
+        return [KeyEvent(key=MODIFIER_KEYS[event.keysym], press=press)]
 
     if event.keysym == "Caps_Lock":
         # Capslock produces only a KeyPress when enabled, and only a KeyRelease when disabled.
@@ -137,7 +125,7 @@ class TkTouchScreen(contextlib.AbstractContextManager):
             self.label.reconfigure(image=self._tk_img)
 
     def key_handler(self, event):
-        print(["key_handler", event])
+        # print(["key_handler", event])
         self.keyqueue.extend(mapkeyevent(event))
 
     def touch_handler(self, event):
@@ -209,20 +197,3 @@ class TkTouchScreen(contextlib.AbstractContextManager):
             except IndexError:
                 # No touch events, sleep a bit longer.
                 await trio.sleep(1 / 60)
-
-
-async def testit():
-    with TkTouchScreen() as screen:
-        async with trio.open_nursery() as nursery:
-
-            async def log_keys():
-                async for event in screen.keystream():
-                    print(event)
-
-            async def log_touches():
-                async for event in screen.touchstream():
-                    print(event)
-
-            nursery.start_soon(log_keys)
-            nursery.start_soon(log_touches)
-            await screen.run()
