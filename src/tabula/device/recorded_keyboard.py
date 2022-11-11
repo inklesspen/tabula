@@ -6,6 +6,7 @@ import collections.abc
 import json
 import pathlib
 
+import attr
 import trio
 
 from .types import Keyboard, KeyEvent
@@ -28,5 +29,10 @@ class Recorder:
             now = trio.current_time()
             if self.zero_time is None:
                 self.zero_time = now
-            self.events.append((now - self.zero_time, event))
+            self.events.append((now - self.zero_time, attr.asdict(event)))
             yield event
+
+
+class Replayer:
+    def __init__(self):
+        self.events = []

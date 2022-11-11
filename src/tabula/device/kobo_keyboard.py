@@ -15,7 +15,18 @@ import trio
 import trio_util
 
 from .keyboard_consts import Key, KeyPress
-from .types import ScreenInfo, ScreenRect, KeyEvent, TouchEvent, InputDevice
+from .types import (
+    InputDevice,
+    InputDeviceNotFound,
+    ScreenInfo,
+    ScreenRect,
+    KeyEvent,
+    TouchEvent,
+)
+
+# Evdev keyboard class should represent the concept of an evdev keyboard, not a specific
+# input path. Same class can handle enumerating keyboards and delivering input from chosen
+# keyboard. This means that the app object can take an instance and not just the class.
 
 
 # from trio_util import AsyncValue
@@ -60,33 +71,6 @@ def parse_eventnum(name):
         return -1
 
 
-def identify_inputs():
-    found = []
-    for input_symlink in pathlib.Path("/sys/class/input").iterdir():
-        if parse_eventnum(inputname := input_symlink.name) >= MIN_USB_INPUT:
-            inputpath = pathlib.Path("/dev/input") / inputname
-            resolved = input_symlink.resolve()
-            # this actually seems to be the least convoluted way to go about this…
-            interface = resolved.parent.parent.parent.parent
-            interface_id = (interface / "bInterfaceNumber").read_text("ascii").strip()
-            device = interface.parent
-            vendor_id = (device / "idVendor").read_text("ascii").strip()
-            product_id = (device / "idProduct").read_text("ascii").strip()
-            manufacturer = (device / "manufacturer").read_text("utf8").strip()
-            product = (device / "product").read_text("utf8").strip()
-            found.append(
-                InputDevice(
-                    inputpath=inputpath,
-                    interface_id=interface_id,
-                    vendor_id=vendor_id,
-                    product_id=product_id,
-                    manufacturer=manufacturer,
-                    product=product,
-                )
-            )
-    return found
-
-
 @contextmanager
 def open_device(devpath):
     f = open(devpath, "r+b", buffering=0)
@@ -99,20 +83,89 @@ def open_device(devpath):
         f.close()
 
 
-class EventKeyboard:
-    def __init__(self, devicespec: InputDevice):
-        self.devicespec = devicespec
-        self.keyqueue = collections.deque(maxlen=50)
-        self.presence = trio_util.AsyncBool(value=False)
+def identify_inputs():
+    found = []
+    for input_symlink in pathlib.Path("/sys/class/input").iterdir():
+        if parse_eventnum(inputname := input_symlink.name) < MIN_USB_INPUT:
+            continue
+        inputpath = pathlib.Path("/dev/input") / inputname
+        # check if inputpath can actually produce keyboard events
+        with open_device(inputpath) as d:
+            if not d.has(libevdev.EV_KEY.KEY_Q):
+                continue
+        resolved = input_symlink.resolve()
+        # this actually seems to be the least convoluted way to go about this…
+        interface = resolved.parent.parent.parent.parent
+        interface_id = (interface / "bInterfaceNumber").read_text("ascii").strip()
+        device = interface.parent
+        vendor_id = (device / "idVendor").read_text("ascii").strip()
+        product_id = (device / "idProduct").read_text("ascii").strip()
+        manufacturer = (device / "manufacturer").read_text("utf8").strip()
+        product = (device / "product").read_text("utf8").strip()
+        found.append(
+            InputDevice(
+                inputpath=inputpath,
+                interface_id=interface_id,
+                vendor_id=vendor_id,
+                product_id=product_id,
+                manufacturer=manufacturer,
+                product=product,
+            )
+        )
+    return found
 
-    async def _find_keyboard(self) -> pathlib.Path:
+
+def _contains_input_device_predicate(devicespec):
+    def predicate(current_inputs):
+        for device in current_inputs:
+            if device == devicespec:
+                return True
+        return False
+
+    return predicate
+
+
+class EventKeyboard:
+    def __init__(self):
+        self.keyqueue = collections.deque(maxlen=50)
+        self.present_devices = trio_util.AsyncValue(value=[])
+        self.devicespec = trio_util.AsyncValue(value=None)
+        self.connected = trio_util.AsyncBool(value=False)
+
+    def _update_available_inputs(self):
+        old_inputs = self.present_devices.value
+        current_inputs = identify_inputs()
+        devicespec = self.devicespec.value
+        if devicespec is not None:
+            for device in current_inputs:
+                if device == devicespec:
+                    # ensures we have the inputpath populated
+                    self.devicespec.value = device
+
+            self.connected.value = self.devicespec.value in current_inputs
+        if old_inputs != current_inputs:
+            self.present_devices.value = current_inputs
+
+    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        self._update_available_inputs()
+        task_status.started()
         while True:
-            available_inputs = identify_inputs()
-            for device in available_inputs:
-                if device == self.devicespec:
-                    self.presence.value = True
-                    return device.inputpath
-            await trio.sleep(0.2)
+            devicespec = self.devicespec.value
+            if self.connected.value:
+                await self._read_events(devicespec.inputpath)
+            elif devicespec is not None:
+                # if devicespec has a value, but connected is false: keep checking available inputs
+                # and waiting for the device to appear in present_devices
+                self._update_available_inputs()
+                wait_predicate = _contains_input_device_predicate(devicespec)
+                with trio.move_on_after(0.2):
+                    await self.present_devices.wait_value(wait_predicate)
+            else:
+                # if devicespec has no value: keep checking available inputs
+                # and waiting for devicespec to have a value
+                self._update_available_inputs()
+                with trio.move_on_after(0.2):
+                    await self.devicespec.await_transition()
 
     async def _read_events(self, eventpath):
         with open_device(eventpath) as d:
@@ -129,18 +182,15 @@ class EventKeyboard:
                 except OSError as e:
                     if e.errno == 19:
                         # device has gone away
-                        self.presence.value = False
-                        break
+                        self.connected.value = False
+                        return
                     # some other kind of error, let it rise
                     raise
 
-    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        task_status.started()
-        while True:
-            eventpath = await self._find_keyboard()
-            await self._read_events(eventpath)
-
-    async def keystream(self) -> collections.abc.AsyncIterable[KeyEvent]:
+    async def keystream(self, devicespec):
+        if devicespec != self.devicespec.value:
+            self.keyqueue.clear()
+            self.devicespec.value = devicespec
         while True:
             try:
                 yield self.keyqueue.popleft()
@@ -150,7 +200,7 @@ class EventKeyboard:
                 await trio.sleep(1 / 60)
 
 
-def print_event(e):
+def _print_event(e):
     print("Event: time {}.{:06d}, ".format(e.sec, e.usec), end="")
     if e.matches(libevdev.EV_SYN):
         if e.matches(libevdev.EV_SYN.SYN_MT_REPORT):
@@ -175,12 +225,4 @@ async def _devicewatch(eventpath, *, task_status=trio.TASK_STATUS_IGNORED):
             await trio.sleep(0)
             for e in d.events():
                 await trio.sleep(0)
-                print_event(e)
-
-
-def main():
-    trio.run(_devicewatch, "/dev/input/event2")
-
-
-if __name__ == "__main__":
-    main()
+                _print_event(e)

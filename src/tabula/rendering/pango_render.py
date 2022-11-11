@@ -77,11 +77,8 @@ class Renderer:
         )
         return self._render(render_opts)
 
-    @staticmethod
-    def calculate_line_height(font: str, dpi: int) -> float:
-        opts = Opts(dpi=dpi)
-        instance = PangoCairoRenderer(opts)
-        return instance.calculate_line_height(font)
+    def calculate_line_height(self, font: str) -> float:
+        return self.instance.calculate_line_height(font)
 
 
 class PangoCairoRenderer:

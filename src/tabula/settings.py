@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-import codecs
-import os
 import pathlib
 import typing
 
@@ -13,6 +11,7 @@ import trio.lowlevel
 
 from .device.keyboard_consts import Key
 from .device.types import InputDevice
+from .util import tabula_data_dir
 
 SETTINGS = trio.lowlevel.RunVar("SETTINGS")
 
@@ -33,12 +32,7 @@ class Settings:
 
 
 def _data_file():
-    if "TABULA_DATA_DIR" in os.environ:
-        data_dir = pathlib.Path(os.environ["TABULA_DATA_DIR"])
-    else:
-        data_dir = pathlib.Path.home() / ".local/share/tabula"
-    data_file = data_dir / "config.toml"
-    return data_file
+    return tabula_data_dir() / "config.toml"
 
 
 def _load_settings():
@@ -55,7 +49,11 @@ def _load_settings():
             }
         settings = Settings(**settings_dict)
         return settings
+    else:
+        raise Exception("Settings file not found")
 
 
 def load_settings():
-    SETTINGS.set(_load_settings())
+    loaded = _load_settings()
+    SETTINGS.set(loaded)
+    return loaded

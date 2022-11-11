@@ -17,7 +17,14 @@ from sqlalchemy import (
     or_,
     null,
 )
-from sqlalchemy.types import Integer, String, Unicode, UnicodeText, TypeDecorator
+from sqlalchemy.types import (
+    Boolean,
+    Integer,
+    String,
+    Unicode,
+    UnicodeText,
+    TypeDecorator,
+)
 from sqlalchemy.dialects.sqlite import CHAR, DATE, DATETIME, INTEGER, insert
 from sqlalchemy.engine import Engine, Connectable, URL as EngineURL, create_engine
 from sqlalchemy.sql import column, text
@@ -25,6 +32,7 @@ import timeflake
 
 from .device.keyboard_consts import Key
 from .editor.types import Paragraph, Session
+from .util import tabula_data_dir
 
 
 def now():
@@ -130,6 +138,7 @@ keyboard_table = Table(
     Column("manufacturer", Unicode, nullable=False),
     Column("product", Unicode, nullable=False),
     Column("compose_key", KeyCode, nullable=True),
+    Column("active", Boolean, nullable=False),
 )
 
 DB_VERSION = 1
@@ -154,17 +163,8 @@ def set_version(conn: Connectable, version: int):
     conn.execute(text(f"PRAGMA user_version = {version}"))
 
 
-# TODO: deduplicate between db.py and settings.py
-def _data_dir():
-    if "TABULA_DATA_DIR" in os.environ:
-        data_dir = pathlib.Path(os.environ["TABULA_DATA_DIR"])
-    else:
-        data_dir = pathlib.Path.home() / ".local/share/tabula"
-    return data_dir
-
-
 def make_db():
-    sqlite_path = _data_dir() / "tabula.db"
+    sqlite_path = tabula_data_dir() / "tabula.db"
     exists = sqlite_path.is_file()
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     engine_url = EngineURL.create(

@@ -29,6 +29,11 @@ class InputDevice:
             return InputDevice(**v)
 
 
+class InputDeviceNotFound(Exception):
+    def __init__(self, devicespec: InputDevice):
+        self.devicespec = devicespec
+
+
 @attr.frozen(kw_only=True)
 class ScreenInfo:
     width: int
@@ -93,7 +98,9 @@ class Touchable(typing.Protocol):
 
 
 class Keyboard(typing.Protocol):
-    presence: trio_util.AsyncBool
+    present_devices: trio_util.AsyncValue
 
-    async def keystream(self) -> collections.abc.AsyncIterable[KeyEvent]:
+    async def keystream(
+        self, devicespec: InputDevice
+    ) -> collections.abc.AsyncIterable[KeyEvent]:
         ...
