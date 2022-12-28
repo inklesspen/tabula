@@ -13,7 +13,7 @@
 # (the specific years vary in some of the files)
 from __future__ import annotations
 
-from ._cffi import ffi, lib as clib
+from ._cairopango import ffi, lib as clib
 from .types import (
     Antialias,
     HintMetrics,

@@ -5,7 +5,7 @@
 import attr
 import markdown_it
 
-from ._cffi import ffi, lib as clib
+from ._cairopango import ffi, lib as clib
 
 paragraph_splitter = markdown_it.MarkdownIt("zero")
 run_splitter = markdown_it.MarkdownIt("zero").enable("emphasis")

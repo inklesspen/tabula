@@ -7,14 +7,14 @@ import enum
 import os.path
 import typing
 
-from ._cffi import ffi, lib as clib
+from ._cairopango import ffi, lib as clib
 
 
 def _c_enum(enum_t: str, python_name: str, **extras: int) -> typing.Type[enum.IntEnum]:
     ctype = ffi.typeof(enum_t)
     prefix = os.path.commonprefix(tuple(ctype.relements.keys()))
     values: dict[str, int] = {
-        v[len(prefix) :]: k for k, v in sorted(ctype.elements.items())
+        k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())
     }
     values.update(extras)
     return enum.IntEnum(python_name, values)

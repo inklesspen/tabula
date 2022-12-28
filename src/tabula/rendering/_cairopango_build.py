@@ -538,7 +538,7 @@ void invert_a8_surface(cairo_surface_t *surface);
 )
 
 ffibuilder.set_source_pkgconfig(
-    "tabula.rendering._cffi",
+    "tabula.rendering._cairopango",
     ["glib-2.0", "gobject-2.0", "cairo", "pango", "pangocairo"],
     """
 #include <glib.h>

@@ -17,10 +17,10 @@ from setuptools import setup
 EXTENSIONBUILDERS_BY_PLATFORM = {
     "Linux": {
         "src/tabula/device/_fbink_build.py",
-        "src/tabula/rendering/_cffi_build.py",
+        "src/tabula/rendering/_cairopango_build.py",
     },
     # fbink can't build on Mac OS, so don't even bother.
-    "Darwin": {"src/tabula/rendering/_cffi_build.py"},
+    "Darwin": {"src/tabula/rendering/_cairopango_build.py"},
 }
 
 
@@ -75,10 +75,11 @@ setup(
         "python-dateutil>=2.8.1",
         "timeflake>=0.4.0",
         "tomli>=1.1.0",
-        "trio>=0.18.0",
-        "trio-util>=0.5.0",
+        "trio>=0.20.0",
+        "trio-util>=0.7.0",
         "tricycle>=0.2.1",
         "sqlalchemy>=1.4.18",
+        "msgspec",
         # eg: 'aspectlib==1.1.1', 'six>=1.7',
     ],
     tests_require=["pytest>=6.2.4", "Pillow>=8.2.0"],
