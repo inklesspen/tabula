@@ -14,8 +14,8 @@ from .hwtypes import (
     KeyEvent,
     AnnotatedKeyEvent,
     TouchReport,
-    LedState,
-    LED,
+    SetLed,
+    Led,
 )
 from .rpctypes import (
     KoboRequests,
@@ -29,10 +29,11 @@ from .rpctypes import (
     KeyEvent as RpcKeyEvent,
     TouchReport as RpcTouchReport,
     KeyboardDisconnect as RpcKeyboardDisconnect,
+    SetLed as RpcSetLed,
 )
 from .keystreams import make_keystream
 from .settings import Settings
-from .util import checkpoint, settings as app_settings
+from .util import checkpoint
 
 
 class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
@@ -90,7 +91,7 @@ class Hardware(metaclass=abc.ABCMeta):
         ...
 
     @abc.abstractmethod
-    async def set_led_state(self, state: LedState):
+    async def set_led_state(self, state: SetLed):
         ...
 
     async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
@@ -101,20 +102,20 @@ class Hardware(metaclass=abc.ABCMeta):
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.keystream_cancel_scope = cancel_scope
-                await self.set_led_state(LedState(led=LED.LED_CAPSL, state=False))
-                await self.set_led_state(LedState(led=LED.LED_COMPOSE, state=False))
+                await self.set_led_state(SetLed(led=Led.LED_CAPSL, state=False))
+                await self.set_led_state(SetLed(led=Led.LED_COMPOSE, state=False))
                 async with self.keystream as keystream:
                     event: AnnotatedKeyEvent
                     async for event in keystream:
                         if event.is_led_able:
                             await self.set_led_state(
-                                LedState(
-                                    led=LED.LED_CAPSL, state=event.annotation.capslock
+                                SetLed(
+                                    led=Led.LED_CAPSL, state=event.annotation.capslock
                                 )
                             )
                             await self.set_led_state(
-                                LedState(
-                                    led=LED.LED_COMPOSE, state=event.annotation.compose
+                                SetLed(
+                                    led=Led.LED_COMPOSE, state=event.annotation.compose
                                 )
                             )
                         await self.event_channel.send(event)
@@ -170,9 +171,9 @@ class RpcHardware(Hardware):
     async def clear_screen(self):
         await self.req_send_channel.send(RpcClearScreen())
 
-    async def set_led_state(self, state: LedState):
+    async def set_led_state(self, state: SetLed):
         print(state)
-        await checkpoint()
+        await self.req_send_channel.send(RpcSetLed(led=state.led, state=state.state))
 
     async def _send_host_requests(
         self,
@@ -250,12 +251,12 @@ class EventTestHardware(Hardware):
     async def clear_screen(self):
         await checkpoint()
 
-    async def set_led_state(self, state: LedState):
+    async def set_led_state(self, state: SetLed):
         await checkpoint()
         match state.led:
-            case LED.LED_CAPSL:
+            case Led.LED_CAPSL:
                 self.capslock_led = state.state
-            case LED.LED_COMPOSE:
+            case Led.LED_COMPOSE:
                 self.compose_led = state.state
 
     async def _handle_events(self, *, task_status=trio.TASK_STATUS_IGNORED):

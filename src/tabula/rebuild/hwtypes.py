@@ -3,7 +3,7 @@ import typing
 
 import msgspec
 
-from tabula.device.keyboard_consts import Key, KeyPress, LED
+from tabula.device.keyboard_consts import Key, KeyPress, Led
 
 
 class ScreenRect(msgspec.Struct, frozen=True):
@@ -84,6 +84,6 @@ class ScreenInfo(msgspec.Struct, frozen=True):
     dpi: int
 
 
-class LedState(msgspec.Struct, frozen=True):
-    led: LED
+class SetLed(msgspec.Struct, frozen=True):
+    led: Led
     state: bool

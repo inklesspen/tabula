@@ -225,7 +225,7 @@ class KeyPress(IntEnum):
     REPEATED = 2
 
 
-class LED(IntEnum):
+class Led(IntEnum):
     LED_NUML = 0
     LED_CAPSL = 1
     LED_SCROLLL = 2

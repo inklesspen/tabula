@@ -2,7 +2,7 @@ import typing
 
 import msgspec
 
-from tabula.device.keyboard_consts import Key, KeyPress
+from tabula.device.keyboard_consts import Key, KeyPress, Led
 from .hwtypes import ScreenRect, TouchEvent, ChargingState
 
 
@@ -28,7 +28,12 @@ class ClearScreen(msgspec.Struct, tag=True):
     pass
 
 
-HostRequests = GetBatteryState | GetScreenInfo | DisplayPixels | ClearScreen
+class SetLed(msgspec.Struct, tag=True):
+    led: Led
+    state: bool
+
+
+HostRequests = GetBatteryState | GetScreenInfo | DisplayPixels | ClearScreen | SetLed
 
 ### Kobo to Laptop
 
