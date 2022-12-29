@@ -60,12 +60,18 @@ class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
         await self.socket_stream.aclose()
 
 
-# Hardware should be an ABC, with subclasses RpcHardware, KoboHardware, TestHardware
-
-
 class Hardware(metaclass=abc.ABCMeta):
-    def __init__(self, event_channel: trio.abc.SendChannel):
+    def __init__(
+        self,
+        event_channel: trio.abc.SendChannel,
+        settings: Settings,
+    ):
         self.event_channel = event_channel
+        self.settings = settings
+        self.keystream_cancel_scope = trio.CancelScope()
+        self.keystream = None
+        self.keystream_send_channel = None
+        self.reset_keystream(False)
 
     @abc.abstractmethod
     async def get_battery_state(self) -> BatteryState:
@@ -87,28 +93,64 @@ class Hardware(metaclass=abc.ABCMeta):
     async def set_led_state(self, state: LedState):
         ...
 
-    # @abc.abstractmethod
-    # def reset_keystream(self, enable_composes: bool):
-    #     ...
+    async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        task_status.started()
+        while True:
+            if self.keystream is None:
+                await checkpoint()
+                continue
+            with trio.CancelScope() as cancel_scope:
+                self.keystream_cancel_scope = cancel_scope
+                await self.set_led_state(LedState(led=LED.LED_CAPSL, state=False))
+                await self.set_led_state(LedState(led=LED.LED_COMPOSE, state=False))
+                async with self.keystream as keystream:
+                    event: AnnotatedKeyEvent
+                    async for event in keystream:
+                        if event.is_led_able:
+                            await self.set_led_state(
+                                LedState(
+                                    led=LED.LED_CAPSL, state=event.annotation.capslock
+                                )
+                            )
+                            await self.set_led_state(
+                                LedState(
+                                    led=LED.LED_COMPOSE, state=event.annotation.compose
+                                )
+                            )
+                        await self.event_channel.send(event)
+
+    def reset_keystream(self, enable_composes: bool):
+        # when resetting the keystream, we want to cancel the current handler and start a new one.
+        old_send_channel = self.keystream_send_channel
+        (
+            new_keystream_send_channel,
+            new_keystream_receive_channel,
+        ) = trio.open_memory_channel(0)
+        self.keystream = make_keystream(
+            new_keystream_receive_channel, self.settings, enable_composes
+        )
+        self.keystream_send_channel = new_keystream_send_channel
+        if old_send_channel is not None:
+            old_send_channel.close()
+        self.keystream_cancel_scope.cancel()
 
 
 class RpcHardware(Hardware):
     battery_state_response: trio_util.AsyncValue[typing.Optional[BatteryState]]
     screen_info_response: trio_util.AsyncValue[typing.Optional[ScreenInfo]]
 
-    def __init__(self, event_channel: trio.abc.SendChannel):
-        super().__init__(event_channel)
+    def __init__(
+        self,
+        event_channel: trio.abc.SendChannel,
+        settings: Settings,
+    ):
+        super().__init__(event_channel, settings)
         self.host = "kobo.apollo"
         self.port = 1234
         self.battery_state_response = trio_util.AsyncValue(None)
         self.screen_info_response = trio_util.AsyncValue(None)
 
         self.req_send_channel, self.req_receive_channel = trio.open_memory_channel(0)
-        # Throwaways, so we never have to check if a channel is None
-        (
-            self.keystream_send_channel,
-            self.keystream_receive_channel,
-        ) = trio.open_memory_channel(0)
 
     async def get_battery_state(self) -> BatteryState:
         self.battery_state_response.value = None
@@ -186,18 +228,13 @@ class EventTestHardware(Hardware):
     def __init__(
         self,
         event_channel: trio.abc.SendChannel,
-        incoming_event_channel: trio.abc.ReceiveChannel,
         settings: Settings,
+        incoming_event_channel: trio.abc.ReceiveChannel,
     ):
-        super().__init__(event_channel)
+        super().__init__(event_channel, settings)
         self.incoming_event_channel = incoming_event_channel
-        self.settings = settings
         self.capslock_led = False
         self.compose_led = False
-        self.keystream_cancel_scope = trio.CancelScope()
-        self.keystream = None
-        self.keystream_send_channel = None
-        self.reset_keystream(False)
 
     async def get_battery_state(self) -> BatteryState:
         await checkpoint()
@@ -229,8 +266,6 @@ class EventTestHardware(Hardware):
                     case KeyEvent():
                         if self.keystream_send_channel is not None:
                             await self.keystream_send_channel.send(event)
-                    case TouchReport():
-                        await self.event_channel.send(event)
                     case _:
                         raise NotImplementedError(
                             f"Don't know how to handle {type(event)}."
@@ -241,44 +276,3 @@ class EventTestHardware(Hardware):
             task_status.started()
             nursery.start_soon(self._handle_events)
             nursery.start_soon(self._handle_keystream)
-
-    async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        task_status.started()
-        while True:
-            if self.keystream is None:
-                await checkpoint()
-                continue
-            with trio.CancelScope() as cancel_scope:
-                self.keystream_cancel_scope = cancel_scope
-                await self.set_led_state(LedState(led=LED.LED_CAPSL, state=False))
-                await self.set_led_state(LedState(led=LED.LED_COMPOSE, state=False))
-                async with self.keystream as keystream:
-                    event: AnnotatedKeyEvent
-                    async for event in keystream:
-                        if event.is_led_able:
-                            await self.set_led_state(
-                                LedState(
-                                    led=LED.LED_CAPSL, state=event.annotation.capslock
-                                )
-                            )
-                            await self.set_led_state(
-                                LedState(
-                                    led=LED.LED_COMPOSE, state=event.annotation.compose
-                                )
-                            )
-                        await self.event_channel.send(event)
-
-    def reset_keystream(self, enable_composes: bool):
-        # when resetting the keystream, we want to cancel the current handler and start a new one.
-        old_send_channel = self.keystream_send_channel
-        (
-            new_keystream_send_channel,
-            new_keystream_receive_channel,
-        ) = trio.open_memory_channel(0)
-        self.keystream = make_keystream(
-            new_keystream_receive_channel, self.settings, enable_composes
-        )
-        self.keystream_send_channel = new_keystream_send_channel
-        if old_send_channel is not None:
-            old_send_channel.close()
-        self.keystream_cancel_scope.cancel()

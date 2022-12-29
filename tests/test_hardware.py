@@ -96,9 +96,8 @@ async def test_event_handling_basic():
 
     async with trio.open_nursery() as nursery:
         hardware = EventTestHardware(
-            processed_send_channel, raw_receive_channel, settings
+            processed_send_channel, settings, raw_receive_channel
         )
-        hardware.reset_keystream(False)
         await nursery.start(hardware.run)
         nursery.start_soon(send_events, raw_events, raw_send_channel)
 
@@ -122,9 +121,8 @@ async def test_event_handling_resets():
 
     async with trio.open_nursery() as nursery:
         hardware = EventTestHardware(
-            processed_send_channel, raw_receive_channel, settings
+            processed_send_channel, settings, raw_receive_channel
         )
-        hardware.reset_keystream(False)
         await nursery.start(hardware.run)
 
         await send_events(
