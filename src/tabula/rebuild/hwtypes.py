@@ -3,7 +3,7 @@ import typing
 
 import msgspec
 
-from tabula.device.keyboard_consts import Key, KeyPress
+from tabula.device.keyboard_consts import Key, KeyPress, LED
 
 
 class ScreenRect(msgspec.Struct, frozen=True):
@@ -24,6 +24,14 @@ class ScreenRect(msgspec.Struct, frozen=True):
 class KeyEvent(msgspec.Struct, frozen=True):
     key: Key
     press: KeyPress
+
+    @classmethod
+    def pressed(cls, key: Key):
+        return cls(key=key, press=KeyPress.PRESSED)
+
+    @classmethod
+    def released(cls, key: Key):
+        return cls(key=key, press=KeyPress.RELEASED)
 
 
 class ModifierAnnotation(msgspec.Struct, frozen=True):
@@ -74,3 +82,8 @@ class ScreenInfo(msgspec.Struct, frozen=True):
     width: int
     height: int
     dpi: int
+
+
+class LedState(msgspec.Struct, frozen=True):
+    led: LED
+    state: bool
