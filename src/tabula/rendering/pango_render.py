@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from ._cairopango import ffi, lib as clib
-from .types import (
+from .rendertypes import (
     Antialias,
     HintMetrics,
     HintMode,

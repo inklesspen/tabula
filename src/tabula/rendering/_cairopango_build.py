@@ -255,6 +255,8 @@ void cairo_matrix_init_identity(cairo_matrix_t *matrix);
 
 void cairo_set_matrix(cairo_t *cr,
                       const cairo_matrix_t *matrix);
+void cairo_get_matrix(cairo_t *cr,
+                       cairo_matrix_t *matrix);
 
 void cairo_identity_matrix(cairo_t *cr);
 
@@ -345,6 +347,8 @@ typedef struct _PangoRectangle PangoRectangle;
 
 typedef struct _PangoFontDescription PangoFontDescription;
 typedef ... PangoFont;
+typedef ... PangoFontFace;
+typedef ... PangoFontFamily;
 typedef ... PangoFontMetrics;
 
 typedef struct _PangoLayout PangoLayout;
@@ -390,6 +394,24 @@ pango_font_map_load_font(
     PangoFontMap *fontmap,
     PangoContext *context,
     const PangoFontDescription *desc);
+
+void
+pango_font_map_list_families (
+  PangoFontMap* fontmap,
+  PangoFontFamily*** families,
+  int* n_families);
+
+void
+pango_font_family_list_faces (
+  PangoFontFamily* family,
+  PangoFontFace*** faces,
+  int* n_faces
+);
+
+PangoFontDescription*
+pango_font_face_describe (
+  PangoFontFace* face
+);
 
 PangoFontMetrics *
 pango_font_get_metrics(

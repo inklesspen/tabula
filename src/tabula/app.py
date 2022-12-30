@@ -12,7 +12,7 @@ from .editor.keystreams import (
 )
 from .editor.document import DocumentModel
 from .rendering.pango_render import Renderer
-from .rendering.types import Size
+from .rendering.rendertypes import Size
 from .db import make_db
 from .settings import SETTINGS, load_settings
 
