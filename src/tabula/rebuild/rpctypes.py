@@ -3,7 +3,7 @@ import typing
 import msgspec
 
 from tabula.device.keyboard_consts import Key, KeyPress, Led
-from .hwtypes import ScreenRect, TouchEvent, ChargingState
+from .hwtypes import ScreenRect, TouchEvent, ChargingState, TouchCoordinateTransform
 
 
 ### Request Types
@@ -47,6 +47,7 @@ class ScreenInfo(msgspec.Struct, tag=True):
     width: int
     height: int
     dpi: int
+    touch_coordinate_transform: TouchCoordinateTransform
 
 
 class KeyEvent(msgspec.Struct, tag=True):

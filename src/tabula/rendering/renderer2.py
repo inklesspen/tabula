@@ -1,16 +1,21 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
+import math
+
 from ._cairopango import ffi, lib as clib
 from .rendertypes import (
     Antialias,
     HintMetrics,
     HintMode,
     SubpixelOrder,
+    Point,
     Size,
+    Rect,
     Alignment,
     WrapMode,
     Margins,
     AffineTransform,
+    ScreenInfo,
 )
 
 
@@ -18,8 +23,11 @@ from .rendertypes import (
 
 
 class Renderer:
+    screen_info: ScreenInfo
+
     def __init__(
         self,
+        screen_info: ScreenInfo,
         *,
         language: str = "en-us",
         hinting: HintMode = HintMode.DEFAULT,
@@ -27,6 +35,7 @@ class Renderer:
         subpixel_order: SubpixelOrder = SubpixelOrder.DEFAULT,
         antialias: Antialias = Antialias.DEFAULT,
     ):
+        self.screen_info = screen_info
         # language must be a valid RFC-3066 code, but there is currently no validation for this
 
         # This fontmap is owned by Pango, not by us; we must not free it.
@@ -75,13 +84,19 @@ class Renderer:
         cast = ffi.cast("PangoCairoFontMap *", self.fontmap)
         clib.pango_cairo_font_map_set_resolution(cast, dpi)
 
-    def create_surface(self, size: Size):
+    def create_surface(self, size: Size = None):
+        if size is None:
+            size = self.screen_info.size
         return ffi.gc(
             clib.cairo_image_surface_create(
                 clib.CAIRO_FORMAT_A8, size.width, size.height
             ),
             clib.cairo_surface_destroy,
         )
+
+    @staticmethod
+    def create_cairo_context(surface):
+        return ffi.gc(clib.cairo_create(surface), clib.cairo_destroy)
 
     def _surface_to_buffer(self, surface, size):
         dataptr = clib.cairo_image_surface_get_data(surface)
@@ -104,27 +119,6 @@ class Renderer:
         clib.cairo_set_source_rgba(cr, 1, 1, 1, 0)
         clib.cairo_paint(cr)
 
-    def _set_cairo_transform_old(self, cairo, matrix):
-        # in the C version, this struct is stack allocated
-        with ffi.new("cairo_matrix_t *") as cairo_matrix:
-            if matrix:
-                clib.cairo_matrix_init(
-                    cairo_matrix,
-                    matrix.xx,
-                    matrix.yx,
-                    matrix.xy,
-                    matrix.yy,
-                    matrix.x0,
-                    matrix.y0,
-                )
-            else:
-                clib.cairo_matrix_init_identity(cairo_matrix)
-
-            clib.cairo_set_matrix(cairo, cairo_matrix)
-            # https://gitlab.gnome.org/GNOME/pango/-/blob/main/pango/pangocairo-context.c#L93
-            # This sets the pango context matrix based on the cairo matrix
-            clib.pango_cairo_update_context(cairo, self.context)
-
     def _set_cairo_transform(self, cairo, matrix: AffineTransform):
         with ffi.new("cairo_matrix_t *") as cairo_matrix:
             clib.cairo_matrix_init(
@@ -142,7 +136,13 @@ class Renderer:
             # This sets the pango context matrix based on the cairo matrix
             clib.pango_cairo_update_context(cairo, self.context)
 
-    def calculate_line_height(self, font: str, dpi: float):
+    def prepare_background(self, cairo_context):
+        self._set_cairo_transform(cairo_context, AffineTransform.identity())
+        self._paint_background(cairo_context)
+
+    def calculate_line_height(self, font: str, dpi: float = None) -> float:
+        if dpi is None:
+            dpi = self.screen_info.dpi
         self.set_fontmap_resolution(dpi)
         with self._make_font_description(font) as font_description, ffi.gc(
             clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
@@ -191,7 +191,7 @@ class Renderer:
 
     def render_border(self, surface, size: Size) -> Size:
         # could use clib.cairo_image_surface_get_width (and height) instead of size param
-        with ffi.gc(clib.cairo_create(surface), clib.cairo_destroy) as cairo:
+        with self.create_cairo_context(surface) as cairo:
             # ensure identity matrix
             self._set_cairo_transform(cairo, AffineTransform.identity())
             clib.cairo_set_line_width(cairo, 1)
@@ -204,6 +204,164 @@ class Renderer:
             )
             clib.cairo_stroke(cairo)
         return size
+
+    @staticmethod
+    def move_to(cairo_context, point: Point):
+        clib.cairo_move_to(cairo_context, point.x, point.y)
+
+    def roundrect(
+        self,
+        cairo_context,
+        rect: Rect,
+        radius: float,
+        line_width: float = 2.0,
+    ):
+        clib.cairo_new_sub_path(cairo_context)
+        # This basically just draws the corners, and relies on cairo_arc to draw line segments connecting them.
+        # Angles are given in radians; see https://www.cairographics.org/manual/cairo-Paths.html#cairo-arc for more info.
+        # upper left
+        clib.cairo_arc(
+            cairo_context,
+            rect.origin.x + radius,
+            rect.origin.y + radius,
+            radius,
+            math.radians(180),
+            math.radians(270),
+        )
+        # upper right
+        clib.cairo_arc(
+            cairo_context,
+            rect.origin.x + rect.spread.width - radius,
+            rect.origin.y + radius,
+            radius,
+            math.radians(270),
+            math.radians(0),
+        )
+        # lower right
+        clib.cairo_arc(
+            cairo_context,
+            rect.origin.x + rect.spread.width - radius,
+            rect.origin.y + rect.spread.height - radius,
+            radius,
+            math.radians(0),
+            math.radians(90),
+        )
+        # lower left
+        clib.cairo_arc(
+            cairo_context,
+            rect.origin.x + radius,
+            rect.origin.y + rect.spread.height - radius,
+            radius,
+            math.radians(90),
+            math.radians(180),
+        )
+        clib.cairo_close_path(cairo_context)
+        clib.cairo_set_line_width(cairo_context, line_width)
+        clib.cairo_stroke(cairo_context)
+
+    def button(
+        self,
+        cairo_context,
+        *,
+        text: str,
+        font: str,
+        rect: Rect,
+        markup: bool = False,
+        dpi: float = None,
+    ):
+        if dpi is None:
+            dpi = self.screen_info.dpi
+        self.roundrect(
+            cairo_context,
+            rect=rect,
+            radius=50,
+            line_width=2.5,
+        )
+        line_height = math.ceil(self.calculate_line_height(font, dpi))
+        text_x = rect.origin.x
+        text_y = rect.origin.y + (rect.spread.height - line_height) / 2
+
+        self.move_to(cairo_context, Point(x=text_x, y=text_y))
+        self.simple_render(
+            cairo_context,
+            font,
+            text,
+            markup=markup,
+            alignment=Alignment.CENTER,
+            width=rect.spread.width,
+        )
+
+    def _setup_layout(
+        self,
+        pango_layout,
+        width: float,
+        font: str,
+        text: str,
+        markup: bool = False,
+        justify: bool = False,
+        alignment: Alignment = Alignment.LEFT,
+        single_par: bool = False,
+        wrap: WrapMode = WrapMode.WORD_CHAR,
+    ):
+        utf8bytes = text.encode("utf-8")
+        if markup:
+            # -1 means null-terminated
+            clib.pango_layout_set_markup(pango_layout, utf8bytes, -1)
+        else:
+            clib.pango_layout_set_text(pango_layout, utf8bytes, -1)
+
+        # don't try auto-detecting text direction
+        clib.pango_layout_set_auto_dir(pango_layout, False)
+        clib.pango_layout_set_ellipsize(pango_layout, clib.PANGO_ELLIPSIZE_NONE)
+        clib.pango_layout_set_justify(pango_layout, justify)
+        clib.pango_layout_set_single_paragraph_mode(pango_layout, single_par)
+        clib.pango_layout_set_wrap(pango_layout, wrap)
+
+        with self._make_font_description(font) as font_description:
+            clib.pango_layout_set_font_description(pango_layout, font_description)
+
+        clib.pango_layout_set_width(
+            pango_layout,
+            width * clib.PANGO_SCALE,
+        )
+
+        clib.pango_layout_set_alignment(pango_layout, alignment)
+
+    def setup_drawing(self, cairo_context):
+        clib.cairo_set_operator(cairo_context, clib.CAIRO_OPERATOR_OVER)
+        clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 1)
+
+    def simple_render(
+        self,
+        cairo_context,
+        font: str,
+        text: str,
+        markup: bool = False,
+        justify: bool = False,
+        alignment: Alignment = Alignment.LEFT,
+        wrap: WrapMode = WrapMode.CHAR,
+        width: float = 0.0,
+        dpi: float = None,
+    ):
+        if dpi is None:
+            dpi = self.screen_info.dpi
+        self.set_fontmap_resolution(dpi)
+        self.setup_drawing(cairo_context)
+
+        with ffi.gc(clib.pango_layout_new(self.context), clib.g_object_unref) as layout:
+            self._setup_layout(
+                layout,
+                width=width,
+                font=font,
+                text=text,
+                markup=markup,
+                justify=justify,
+                alignment=alignment,
+                single_par=True,
+                wrap=wrap,
+            )
+            clib.pango_cairo_show_layout(cairo_context, layout)
+        clib.cairo_surface_flush(clib.cairo_get_target(cairo_context))
 
     def render(
         self,
@@ -219,17 +377,18 @@ class Renderer:
         margins: Margins = Margins(top=10, bottom=10, left=10, right=10),
         clear_before_render: bool = True,
         render_size: Size = Size(width=0, height=0),
-        dpi: float = 96.0,
+        dpi: float = None,
     ) -> Size:
+        if dpi is None:
+            dpi = self.screen_info.dpi
         self.set_fontmap_resolution(dpi)
-        with ffi.gc(clib.cairo_create(surface), clib.cairo_destroy) as cairo_context:
+        with self.create_cairo_context(surface) as cairo_context:
             self._set_cairo_transform(cairo_context, AffineTransform.identity())
 
             if clear_before_render:
                 self._paint_background(cairo_context)
 
-            clib.cairo_set_operator(cairo_context, clib.CAIRO_OPERATOR_OVER)
-            clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 1)
+            self.setup_drawing(cairo_context)
 
             self._set_cairo_transform(
                 cairo_context,
@@ -239,34 +398,23 @@ class Renderer:
             with ffi.gc(
                 clib.pango_layout_new(self.context), clib.g_object_unref
             ) as layout:
-                utf8bytes = text.encode("utf-8")
-                if markup:
-                    # -1 means null-terminated
-                    clib.pango_layout_set_markup(layout, utf8bytes, -1)
-                else:
-                    clib.pango_layout_set_text(layout, utf8bytes, -1)
-
-                # don't try auto-detecting text direction
-                clib.pango_layout_set_auto_dir(layout, False)
-                clib.pango_layout_set_ellipsize(layout, clib.PANGO_ELLIPSIZE_NONE)
-                clib.pango_layout_set_justify(layout, justify)
-                clib.pango_layout_set_single_paragraph_mode(layout, single_par)
-                clib.pango_layout_set_wrap(layout, wrap)
-
-                with self._make_font_description(font) as font_description:
-                    clib.pango_layout_set_font_description(layout, font_description)
-
-                clib.pango_layout_set_width(
+                self._setup_layout(
                     layout,
-                    (render_size.width - (margins.left + margins.right))
-                    * clib.PANGO_SCALE,
+                    width=(render_size.width - (margins.left + margins.right)),
+                    font=font,
+                    text=text,
+                    markup=markup,
+                    justify=justify,
+                    alignment=alignment,
+                    single_par=single_par,
+                    wrap=wrap,
                 )
 
-                clib.pango_layout_set_alignment(layout, alignment)
                 with ffi.new("PangoRectangle *") as logical_rect:
                     clib.pango_layout_get_pixel_extents(layout, ffi.NULL, logical_rect)
 
                     clib.cairo_save(cairo_context)
+                    # Does this even do anything? Probably not.
                     clib.cairo_translate(cairo_context, 0, 0)
 
                     clib.cairo_move_to(cairo_context, 0, 0)

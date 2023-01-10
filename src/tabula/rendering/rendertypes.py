@@ -9,6 +9,7 @@ import typing
 import msgspec
 
 from ._cairopango import ffi, lib as clib
+from tabula.rebuild.commontypes import Point, Size, Rect, ScreenInfo
 
 
 def _c_enum(enum_t: str, python_name: str, **extras: int) -> typing.Type[enum.IntEnum]:
@@ -54,44 +55,9 @@ class AffineTransform(msgspec.Struct, frozen=True):
         return cls(xx=1, xy=0, yx=0, yy=1, x0=tx, y0=ty)
 
 
-class Point(msgspec.Struct, frozen=True):
-    x: int
-    y: int
-
-
-class Size(msgspec.Struct, frozen=True):
-    width: int
-    height: int
-
-    def total(self):
-        return self.width * self.height
-
-    def as_tuple(self):
-        return (self.width, self.height)
-
-    def as_numpy_shape(self):
-        return (self.height, self.width)
-
-    @classmethod
-    def from_tuple(cls, tup):
-        return cls(width=tup[0], height=tup[1])
-
-    @classmethod
-    def from_numpy_shape(cls, shape):
-        return cls(height=shape[0], width=shape[1])
-
-
-class Rect(msgspec.Struct, frozen=True):
-    origin: Point
-    spread: Size
-
-    def as_pillow_box(self):
-        return (
-            self.origin.x,
-            self.origin.y,
-            self.origin.x + self.spread.width,
-            self.origin.y + self.spread.height,
-        )
+class Rendered(msgspec.Struct, frozen=True):
+    image: bytes
+    extent: Rect
 
 
 class Margins(msgspec.Struct, frozen=True):

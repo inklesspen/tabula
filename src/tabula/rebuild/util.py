@@ -1,28 +1,9 @@
-from typing import TYPE_CHECKING
-
 import msgspec
 import trio
-
-if TYPE_CHECKING:
-    from .app import Tabula
-    from .hardware import Hardware
-    from .settings import Settings
-
-APP_CONTROLLER = trio.lowlevel.RunVar("APP_CONTROLLER")
 
 
 async def checkpoint():
     await trio.sleep(0)
-
-
-def hardware() -> "Hardware":
-    app: "Tabula" = APP_CONTROLLER.get()
-    return app.hardware
-
-
-def settings() -> "Settings":
-    app: "Tabula" = APP_CONTROLLER.get()
-    return app.settings
 
 
 def evolve(obj: msgspec.Struct, **changes):

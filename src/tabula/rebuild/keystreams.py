@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, aclosing
 
-from async_generator import aclosing
 from slurry import Pipeline
 from slurry.environments import TrioSection
 import pygtrie

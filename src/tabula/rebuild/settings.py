@@ -152,5 +152,5 @@ def _load_settings():
 
 
 async def load_settings():
-    trio.sleep(0)
+    await trio.sleep(0)
     return _load_settings()

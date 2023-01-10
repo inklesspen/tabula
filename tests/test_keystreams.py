@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 import collections.abc
+from contextlib import aclosing
+import typing
 
-from async_generator import aclosing
 import pygtrie
 import slurry
 import trio
-from trio.testing import trio_test
 
 from tabula.rebuild.keystreams import (
     ModifierTracking,
@@ -26,19 +26,20 @@ from tabula.rebuild.hwtypes import (
 from tabula.rebuild.settings import Settings
 from tabula.rebuild.util import checkpoint
 
+T = typing.TypeVar("T")
 
-async def make_key_event_source(
-    key_events: list[KeyEvent],
-) -> collections.abc.AsyncIterable[KeyEvent]:
-    for event in key_events:
+
+async def make_async_source(
+    items: collections.abc.Sequence[T],
+):
+    for item in items:
         await checkpoint()
-        yield event
+        yield item
 
 
-@trio_test
 async def test_modifier_tracking_basics():
     async with aclosing(
-        make_key_event_source(
+        make_async_source(
             [
                 KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
                 KeyEvent(key=Key.KEY_H, press=KeyPress.PRESSED),
@@ -213,7 +214,6 @@ async def test_modifier_tracking_basics():
         assert results == expected
 
 
-@trio_test
 async def test_make_characters():
     keymaps = {
         Key.KEY_H: ["h", "H"],
@@ -225,7 +225,7 @@ async def test_make_characters():
         Key.KEY_D: ["d", "D"],
     }
     async with aclosing(
-        make_key_event_source(
+        make_async_source(
             [
                 KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
                 KeyEvent(key=Key.KEY_H, press=KeyPress.PRESSED),
@@ -351,7 +351,6 @@ async def test_make_characters():
         assert results == expected
 
 
-@trio_test
 async def test_composes():
     raw_composes = {
         "A E": "Æ",
@@ -363,7 +362,7 @@ async def test_composes():
         Key.KEY_E: ["e", "E"],
     }
     async with aclosing(
-        make_key_event_source(
+        make_async_source(
             [
                 KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
                 KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
@@ -487,7 +486,6 @@ async def test_composes():
         assert actual == expected
 
 
-@trio_test
 async def test_composes_sequence_failure():
     raw_composes = {
         "A E": "Æ",
@@ -500,7 +498,7 @@ async def test_composes_sequence_failure():
         Key.KEY_B: ["b", "B"],
     }
     async with aclosing(
-        make_key_event_source(
+        make_async_source(
             [
                 KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
                 KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
@@ -555,7 +553,6 @@ async def test_composes_sequence_failure():
         assert actual == expected
 
 
-@trio_test
 async def test_keystream_factory():
     from tabula.rebuild.settings import COMPOSE_SEQUENCES, KEYMAPS
 

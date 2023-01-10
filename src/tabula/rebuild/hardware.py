@@ -10,13 +10,15 @@ from .hwtypes import (
     ScreenRect,
     BatteryState,
     ChargingState,
-    ScreenInfo,
     KeyEvent,
     AnnotatedKeyEvent,
     TouchReport,
+    TouchEvent,
     SetLed,
     Led,
+    TouchCoordinateTransform,
 )
+from .commontypes import Size, ScreenInfo
 from .rpctypes import (
     KoboRequests,
     HostRequests,
@@ -62,6 +64,9 @@ class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
 
 
 class Hardware(metaclass=abc.ABCMeta):
+    screen_size: Size
+    touch_coordinate_transform: TouchCoordinateTransform
+
     def __init__(
         self,
         event_channel: trio.abc.SendChannel,
@@ -73,6 +78,8 @@ class Hardware(metaclass=abc.ABCMeta):
         self.keystream = None
         self.keystream_send_channel = None
         self.reset_keystream(False)
+        self.screen_size = Size(0, 0)
+        self.touch_coordinate_transform = TouchCoordinateTransform.IDENTITY
 
     @abc.abstractmethod
     async def get_battery_state(self) -> BatteryState:
@@ -108,6 +115,7 @@ class Hardware(metaclass=abc.ABCMeta):
                     event: AnnotatedKeyEvent
                     async for event in keystream:
                         if event.is_led_able:
+                            # TODO: only set these if different from previous value
                             await self.set_led_state(
                                 SetLed(
                                     led=Led.LED_CAPSL, state=event.annotation.capslock
@@ -134,6 +142,9 @@ class Hardware(metaclass=abc.ABCMeta):
         if old_send_channel is not None:
             old_send_channel.close()
         self.keystream_cancel_scope.cancel()
+
+    def _transform_touch_event(self, event: TouchEvent):
+        return self.touch_coordinate_transform.apply(event, self.screen_size)
 
 
 class RpcHardware(Hardware):
@@ -172,7 +183,6 @@ class RpcHardware(Hardware):
         await self.req_send_channel.send(RpcClearScreen())
 
     async def set_led_state(self, state: SetLed):
-        print(state)
         await self.req_send_channel.send(RpcSetLed(led=state.led, state=state.state))
 
     async def _send_host_requests(
@@ -202,27 +212,36 @@ class RpcHardware(Hardware):
                         state=req.state, current_charge=req.current_charge
                     )
                 case RpcScreenInfo():
+                    screen_size = Size(width=req.width, height=req.height)
+                    self.screen_size = screen_size
+                    self.touch_coordinate_transform = req.touch_coordinate_transform
                     self.screen_info_response.value = ScreenInfo(
-                        width=req.width, height=req.height, dpi=req.dpi
+                        size=screen_size, dpi=req.dpi
                     )
                 case RpcKeyEvent():
                     await self.keystream_send_channel.send(
                         KeyEvent(key=req.key, press=req.press)
                     )
                 case RpcTouchReport():
-                    await self.event_channel.send(TouchReport(touches=req.touches))
+                    await self.event_channel.send(
+                        TouchReport(
+                            touches=[
+                                self._transform_touch_event(evt) for evt in req.touches
+                            ]
+                        )
+                    )
                 case RpcKeyboardDisconnect():
                     raise Exception("implement this, dingus")
             await checkpoint()
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        async with tricycle.open_service_nursery() as nursery:
-            client_stream = await trio.open_tcp_stream(self.host, self.port)
-            async with client_stream:
-                task_status.started()
-                network_channel = LengthPrefixedMsgpackStreamChannel(client_stream)
-                nursery.start_soon(self._handle_kobo_requests, network_channel)
-                nursery.start_soon(self._send_host_requests, network_channel)
+        client_stream = await trio.open_tcp_stream(self.host, self.port)
+        async with client_stream, tricycle.open_service_nursery() as nursery:
+            task_status.started()
+            network_channel = LengthPrefixedMsgpackStreamChannel(client_stream)
+            nursery.start_soon(self._handle_kobo_requests, network_channel)
+            nursery.start_soon(self._send_host_requests, network_channel)
+            nursery.start_soon(self._handle_keystream)
 
 
 class EventTestHardware(Hardware):

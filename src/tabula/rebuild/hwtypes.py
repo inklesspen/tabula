@@ -1,9 +1,11 @@
+import datetime
 import enum
 import typing
 
 import msgspec
 
 from tabula.device.keyboard_consts import Key, KeyPress, Led
+from .commontypes import Point, Size
 
 
 class ScreenRect(msgspec.Struct, frozen=True):
@@ -56,6 +58,17 @@ class TouchEvent(msgspec.Struct, frozen=True):
     x: int
     y: int
     pressure: int
+    sec: int
+    usec: int
+    slot: int
+
+    @property
+    def point(self):
+        return Point(x=self.x, y=self.y)
+
+    @property
+    def timestamp(self):
+        return datetime.timedelta(seconds=self.sec, microseconds=self.usec)
 
 
 class TouchReport(msgspec.Struct, frozen=True):
@@ -78,12 +91,45 @@ class BatteryState(msgspec.Struct, frozen=True):
     current_charge: int
 
 
-class ScreenInfo(msgspec.Struct, frozen=True):
-    width: int
-    height: int
-    dpi: int
-
-
 class SetLed(msgspec.Struct, frozen=True):
     led: Led
     state: bool
+
+
+class TouchCoordinateTransform(enum.IntEnum):
+    IDENTITY = 0
+    SWAP_AND_MIRROR_Y = 1
+    MIRROR_X_AND_MIRROR_Y = 2
+    SWAP_AND_MIRROR_X = 3
+
+    def apply(self, event: TouchEvent, screen_size: Size):
+        match self:
+            case TouchCoordinateTransform.IDENTITY:
+                return event
+            case TouchCoordinateTransform.SWAP_AND_MIRROR_Y:
+                return TouchEvent(
+                    x=event.y,
+                    y=screen_size.height - event.x,
+                    pressure=event.pressure,
+                    sec=event.sec,
+                    usec=event.usec,
+                    slot=event.slot,
+                )
+            case TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y:
+                return TouchEvent(
+                    x=screen_size.width - event.x,
+                    y=screen_size.height - event.y,
+                    pressure=event.pressure,
+                    sec=event.sec,
+                    usec=event.usec,
+                    slot=event.slot,
+                )
+            case TouchCoordinateTransform.SWAP_AND_MIRROR_X:
+                return TouchEvent(
+                    x=screen_size.width - event.y,
+                    y=event.x,
+                    pressure=event.pressure,
+                    sec=event.sec,
+                    usec=event.usec,
+                    slot=event.slot,
+                )
