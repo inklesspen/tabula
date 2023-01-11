@@ -5,7 +5,7 @@ import typing
 import msgspec
 import trio
 
-from .hwtypes import AnnotatedKeyEvent, TouchReport, ScreenRect
+from .hwtypes import AnnotatedKeyEvent, TouchReport, ScreenRect, TapEvent
 from .commontypes import Point, Size, Rect, ScreenInfo
 from ..rendering.rendertypes import (
     Rendered,
@@ -14,7 +14,6 @@ from ..rendering.rendertypes import (
     Alignment,
     WrapMode,
 )
-from .gestures import TapRecognizer, RecognitionState
 
 if typing.TYPE_CHECKING:
     from .hardware import Hardware
@@ -110,27 +109,16 @@ class KeyboardDetect(Screen):
                 height=screen.extent.spread.height,
             ),
         )
-        recognizer = TapRecognizer()
         while True:
             event = await event_channel.receive()
             match event:
                 case AnnotatedKeyEvent():
-                    print(event)
                     if self.on_startup:
                         return Switch(new_screen=SystemMenu, kwargs={"modal": False})
                     return Close()
-                case TouchReport():
-                    recognizer.handle_report(event)
-                    if recognizer.state is RecognitionState.RECOGNIZED:
-                        tap_location = recognizer.location
-                        if tap_location in button:
-                            return Shutdown()
-                        recognizer.reset()
-                    elif (
-                        recognizer.state is RecognitionState.FAILED
-                        and len(event.touches) == 0
-                    ):
-                        recognizer.reset()
+                case TapEvent():
+                    if event.location in button:
+                        return Shutdown()
 
     def make_screen(self):
         screen_size = self.renderer.screen_info.size

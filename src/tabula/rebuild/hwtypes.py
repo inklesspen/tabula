@@ -1,3 +1,4 @@
+import collections.abc
 import datetime
 import enum
 import typing
@@ -133,3 +134,29 @@ class TouchCoordinateTransform(enum.IntEnum):
                     usec=event.usec,
                     slot=event.slot,
                 )
+
+
+class TouchPhase(enum.Enum):
+    BEGAN = enum.auto()
+    MOVED = enum.auto()
+    STATIONARY = enum.auto()
+    ENDED = enum.auto()
+    CANCELLED = enum.auto()
+
+
+class PersistentTouch(msgspec.Struct):
+    touch_id: int
+    location: Point
+    max_pressure: int
+    timestamp: datetime.timedelta
+    phase: TouchPhase
+
+
+class PersistentTouchReport(msgspec.Struct, frozen=True):
+    began: collections.abc.Sequence[PersistentTouch]
+    moved: collections.abc.Sequence[PersistentTouch]
+    ended: collections.abc.Sequence[PersistentTouch]
+
+
+class TapEvent(msgspec.Struct, frozen=True):
+    location: Point

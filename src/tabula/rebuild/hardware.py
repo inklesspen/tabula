@@ -34,6 +34,7 @@ from .rpctypes import (
     SetLed as RpcSetLed,
 )
 from .keystreams import make_keystream
+from .gestures import make_tapstream
 from .settings import Settings
 from .util import checkpoint
 
@@ -80,6 +81,10 @@ class Hardware(metaclass=abc.ABCMeta):
         self.reset_keystream(False)
         self.screen_size = Size(0, 0)
         self.touch_coordinate_transform = TouchCoordinateTransform.IDENTITY
+        self.touchstream_cancel_scope = trio.CancelScope()
+        self.touchstream = None
+        self.touchstream_send_channel = None
+        self.reset_touchstream()
 
     @abc.abstractmethod
     async def get_battery_state(self) -> BatteryState:
@@ -128,6 +133,18 @@ class Hardware(metaclass=abc.ABCMeta):
                             )
                         await self.event_channel.send(event)
 
+    async def _handle_touchstream(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        task_status.started()
+        while True:
+            if self.touchstream is None:
+                await checkpoint()
+                continue
+            with trio.CancelScope() as cancel_scope:
+                self.touchstream_cancel_scope = cancel_scope
+                async with self.touchstream as touchstream:
+                    async for event in touchstream:
+                        await self.event_channel.send(event)
+
     def reset_keystream(self, enable_composes: bool):
         # when resetting the keystream, we want to cancel the current handler and start a new one.
         old_send_channel = self.keystream_send_channel
@@ -142,6 +159,19 @@ class Hardware(metaclass=abc.ABCMeta):
         if old_send_channel is not None:
             old_send_channel.close()
         self.keystream_cancel_scope.cancel()
+
+    def reset_touchstream(self):
+        # we would reset it when changing screens, for instance
+        old_send_channel = self.touchstream_send_channel
+        (
+            new_touchstream_send_channel,
+            new_touchstream_receive_channel,
+        ) = trio.open_memory_channel(0)
+        self.touchstream = make_tapstream(new_touchstream_receive_channel)
+        self.touchstream_send_channel = new_touchstream_send_channel
+        if old_send_channel is not None:
+            old_send_channel.close()
+        self.touchstream_cancel_scope.cancel()
 
     def _transform_touch_event(self, event: TouchEvent):
         return self.touch_coordinate_transform.apply(event, self.screen_size)
@@ -223,7 +253,8 @@ class RpcHardware(Hardware):
                         KeyEvent(key=req.key, press=req.press)
                     )
                 case RpcTouchReport():
-                    await self.event_channel.send(
+                    # TODO: incorporate the transform into the touchscreen evdev procesing
+                    await self.touchstream_send_channel.send(
                         TouchReport(
                             touches=[
                                 self._transform_touch_event(evt) for evt in req.touches
@@ -242,6 +273,7 @@ class RpcHardware(Hardware):
             nursery.start_soon(self._handle_kobo_requests, network_channel)
             nursery.start_soon(self._send_host_requests, network_channel)
             nursery.start_soon(self._handle_keystream)
+            nursery.start_soon(self._handle_touchstream)
 
 
 class EventTestHardware(Hardware):
@@ -286,6 +318,9 @@ class EventTestHardware(Hardware):
                     case KeyEvent():
                         if self.keystream_send_channel is not None:
                             await self.keystream_send_channel.send(event)
+                    case TouchReport():
+                        if self.touchstream_send_channel is not None:
+                            await self.touchstream_send_channel.send(event)
                     case _:
                         raise NotImplementedError(
                             f"Don't know how to handle {type(event)}."
@@ -296,3 +331,4 @@ class EventTestHardware(Hardware):
             task_status.started()
             nursery.start_soon(self._handle_events)
             nursery.start_soon(self._handle_keystream)
+            nursery.start_soon(self._handle_touchstream)
