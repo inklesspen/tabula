@@ -271,16 +271,29 @@ class Renderer:
     ):
         if dpi is None:
             dpi = self.screen_info.dpi
+        rects = self.calculate_rendered_rects(
+            font=font,
+            text=text,
+            markup=markup,
+            alignment=Alignment.CENTER,
+            width=rect.spread.width,
+            dpi=dpi,
+        )
+        ink_rect = rects["ink_rect"]
+
         self.roundrect(
             cairo_context,
             rect=rect,
             radius=50,
             line_width=2.5,
         )
-        line_height = math.ceil(self.calculate_line_height(font, dpi))
-        print(f"Button line height is {line_height} for font {font}")
         text_x = rect.origin.x
-        text_y = rect.origin.y + (rect.spread.height - line_height) / 2
+        text_y = math.floor(
+            rect.origin.y
+            + rect.spread.height / 2
+            - ink_rect.origin.y
+            - ink_rect.spread.height / 2
+        )
 
         self.move_to(cairo_context, Point(x=text_x, y=text_y))
         self.simple_render(
@@ -332,6 +345,48 @@ class Renderer:
         clib.cairo_set_operator(cairo_context, clib.CAIRO_OPERATOR_OVER)
         clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 1)
 
+    def calculate_rendered_rects(
+        self,
+        font: str,
+        text: str,
+        markup: bool = False,
+        justify: bool = False,
+        alignment: Alignment = Alignment.LEFT,
+        wrap: WrapMode = WrapMode.CHAR,
+        width: float = 0.0,
+        dpi: float = None,
+    ):
+        if dpi is None:
+            dpi = self.screen_info.dpi
+        self.set_fontmap_resolution(dpi)
+        with ffi.gc(clib.pango_layout_new(self.context), clib.g_object_unref) as layout:
+            self._setup_layout(
+                layout,
+                width=width,
+                font=font,
+                text=text,
+                markup=markup,
+                justify=justify,
+                alignment=alignment,
+                single_par=True,
+                wrap=wrap,
+            )
+
+            with ffi.new("PangoRectangle *") as ink_rect, ffi.new(
+                "PangoRectangle *"
+            ) as logical_rect:
+                clib.pango_layout_get_pixel_extents(layout, ink_rect, logical_rect)
+                return {
+                    name: Rect(
+                        origin=Point(x=pango_rect.x, y=pango_rect.y),
+                        spread=Size(width=pango_rect.width, height=pango_rect.height),
+                    )
+                    for name, pango_rect in {
+                        "ink_rect": ink_rect,
+                        "logical_rect": logical_rect,
+                    }.items()
+                }
+
     def simple_render(
         self,
         cairo_context,
@@ -349,7 +404,6 @@ class Renderer:
         self.set_fontmap_resolution(dpi)
         self.setup_drawing(cairo_context)
 
-        # TODO: use pango_layout_get_pixel_extents to report the extents to the caller
         with ffi.gc(clib.pango_layout_new(self.context), clib.g_object_unref) as layout:
             self._setup_layout(
                 layout,

@@ -266,18 +266,14 @@ class SystemMenu(ButtonMenu):
             handler = None
             match event:
                 case AnnotatedKeyEvent():
-                    print(event)
                     if event.key in self.buttons_by_key:
                         button = self.buttons_by_key[event.key]
                         handler = getattr(self, button["handler"])
-                        print(self.buttons_by_key[event.key])
                 case TapEvent():
-                    print(event)
                     for button_handler, button_rect in self.button_rects.items():
                         if event.location in button_rect:
                             button = self.buttons_by_handler[button_handler]
                             handler = getattr(self, button["handler"])
-                            print(self.buttons_by_handler[button_handler])
             if handler is not None:
                 return await handler()
 
@@ -298,7 +294,6 @@ class SystemMenu(ButtonMenu):
                     origin=Point(x=button_x, y=button_y), spread=self.button_size
                 )
                 self.button_rects[button["handler"]] = button_rect
-                print(button, button_rect)
                 button_title = f"<span font=\"Noto Sans Symbols 8\">{CIRCLED_ALPHANUMERICS[str(button['number'])]}</span> — {button['title']}"
                 # button_title = f"{button['number']} — {button['title']}"
                 self.renderer.button(
