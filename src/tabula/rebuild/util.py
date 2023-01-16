@@ -1,3 +1,6 @@
+import inspect
+import typing
+
 import msgspec
 import trio
 
@@ -12,3 +15,9 @@ def evolve(obj: msgspec.Struct, **changes):
         if field_name not in changes:
             changes[field_name] = getattr(obj, field_name)
     return cls(**changes)
+
+
+def invoke(c: typing.Callable, **provided_kwargs):
+    sig = inspect.signature(c)
+    used_kwargs = {k: v for k, v in provided_kwargs.items() if k in sig.parameters}
+    return c(**used_kwargs)

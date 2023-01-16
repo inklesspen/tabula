@@ -33,7 +33,18 @@ class SetLed(msgspec.Struct, tag=True):
     state: bool
 
 
-HostRequests = GetBatteryState | GetScreenInfo | DisplayPixels | ClearScreen | SetLed
+class SetWaveformMode(msgspec.Struct, tag=True):
+    wfm_mode: str
+
+
+HostRequests = (
+    GetBatteryState
+    | GetScreenInfo
+    | DisplayPixels
+    | ClearScreen
+    | SetLed
+    | SetWaveformMode
+)
 
 ### Kobo to Laptop
 
@@ -56,6 +67,8 @@ class KeyEvent(msgspec.Struct, tag=True):
 
 
 class TouchReport(msgspec.Struct, tag=True):
+    # TODO: make the timestamp part of the report, and not the touch
+    # So that a report with no touches still has a timestamp
     touches: typing.List[TouchEvent]
 
 

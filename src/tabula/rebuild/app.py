@@ -1,5 +1,6 @@
 import collections.abc
 import sys
+import typing
 
 import trio
 import trio_util
@@ -8,6 +9,9 @@ from .hardware import Hardware, RpcHardware
 from .settings import load_settings, Settings
 from ..rendering.renderer2 import Renderer
 from .screens import Screen, KeyboardDetect, SystemMenu, Switch, Modal, Close, Shutdown
+from .util import invoke
+from .db import make_db
+from .document import DocumentModel
 
 
 class Tabula:
@@ -18,7 +22,20 @@ class Tabula:
     def __init__(self, settings: Settings):
         # TODO: pick a subclass of Hardware based on some config knob
         self.settings = settings
+        self.db = make_db(settings.db_path)
+        self.document = DocumentModel(self.db)
         self.screen_stack = trio_util.AsyncValue([])
+
+    def invoke_screen(self, screen: typing.Type[Screen], **additional_kwargs):
+        return invoke(
+            screen,
+            settings=self.settings,
+            renderer=self.renderer,
+            hardware=self.hardware,
+            db=self.db,
+            document=self.document,
+            **additional_kwargs
+        )
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         event_send_channel, event_receive_channel = trio.open_memory_channel(0)
@@ -32,12 +49,7 @@ class Tabula:
             screen_info = await self.hardware.get_screen_info()
             self.renderer = Renderer(screen_info)
             self.screen_stack.value = [
-                KeyboardDetect(
-                    settings=self.settings,
-                    renderer=self.renderer,
-                    hardware=self.hardware,
-                    on_startup=True,
-                )
+                self.invoke_screen(KeyboardDetect, on_startup=True)
             ]
             await self.hardware.clear_screen()
             task_status.started()
@@ -56,17 +68,19 @@ class Tabula:
             next_action = await current_screen.run(receive_channel)
             match next_action:
                 case Switch():
-                    new_screen = next_action.new_screen(
-                        settings=self.settings,
-                        renderer=self.renderer,
-                        hardware=self.hardware,
-                        **next_action.kwargs
+                    new_screen = self.invoke_screen(
+                        next_action.new_screen, **next_action.kwargs
                     )
                     self.screen_stack.value[-1] = new_screen
                 case Modal():
                     print(next_action)
+                    modal_screen = self.invoke_screen(
+                        next_action.modal, **next_action.kwargs
+                    )
+                    self.screen_stack.value.append(modal_screen)
                 case Close():
                     print(next_action)
+                    self.screen_stack.value.pop()
                 case Shutdown():
                     # TODO: clean shutdown tasks?
                     print("Shutting down…")

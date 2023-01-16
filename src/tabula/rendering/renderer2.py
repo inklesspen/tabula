@@ -278,6 +278,7 @@ class Renderer:
             line_width=2.5,
         )
         line_height = math.ceil(self.calculate_line_height(font, dpi))
+        print(f"Button line height is {line_height} for font {font}")
         text_x = rect.origin.x
         text_y = rect.origin.y + (rect.spread.height - line_height) / 2
 
@@ -348,6 +349,7 @@ class Renderer:
         self.set_fontmap_resolution(dpi)
         self.setup_drawing(cairo_context)
 
+        # TODO: use pango_layout_get_pixel_extents to report the extents to the caller
         with ffi.gc(clib.pango_layout_new(self.context), clib.g_object_unref) as layout:
             self._setup_layout(
                 layout,

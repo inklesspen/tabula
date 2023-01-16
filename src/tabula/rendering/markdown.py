@@ -2,32 +2,11 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import attr
 import markdown_it
 
 from ._cairopango import ffi, lib as clib
 
-paragraph_splitter = markdown_it.MarkdownIt("zero")
 run_splitter = markdown_it.MarkdownIt("zero").enable("emphasis")
-
-
-def make_paragraphs(markdown):
-    result = []
-    tokens = paragraph_splitter.parse(markdown)
-    current = None
-    for token in tokens:
-        # would love to have the match statement now.
-        if token.type == "paragraph_open":
-            current = Paragraph.empty()
-        elif token.type == "paragraph_close":
-            current.make_markup()
-            result.append(current)
-            current = None
-        elif token.type == "inline":
-            current.markdown = token.content
-        else:
-            raise TypeError("Unexpected token type %r" % token)
-    return result
 
 
 def make_markup(markdown):
@@ -61,16 +40,3 @@ def _escape_for_markup(text):
         clib.g_markup_escape_text(text.encode("utf-8"), -1), clib.g_free
     ) as result:
         return ffi.string(result).decode("utf-8")
-
-
-@attr.s()
-class Paragraph:
-    markdown = attr.ib()
-    markup = attr.ib()
-
-    def make_markup(self):
-        self.markup = make_markup(self.markdown)
-
-    @classmethod
-    def empty(cls):
-        return cls(markdown="", markup="")

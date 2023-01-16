@@ -1,6 +1,9 @@
-import msgspec
+import pathlib
+
+import attrs
 import pygtrie
 import trio
+import xdg
 
 from tabula.device.keyboard_consts import Key
 
@@ -133,21 +136,26 @@ KEYMAPS = {
 COMPOSE_KEY = "KEY_RIGHTMETA"
 
 
-class Settings(msgspec.Struct, frozen=True):
+@attrs.define(kw_only=True, frozen=True)
+class Settings:
     drafting_fonts: list[str]
+    current_font: str
     compose_key: Key
     compose_sequences: pygtrie.Trie
     keymaps: dict[Key, list[str]]
+    db_path: pathlib.Path
 
 
 def _load_settings():
     return Settings(
         drafting_fonts=DRAFTING_FONTS,
+        current_font=DRAFTING_FONTS[0],
         compose_key=Key[COMPOSE_KEY],
         compose_sequences=pygtrie.Trie(
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
         ),
         keymaps={Key[k]: v for k, v in KEYMAPS.items()},
+        db_path=xdg.xdg_state_home() / "tabula" / "tabula.db",
     )
 
 

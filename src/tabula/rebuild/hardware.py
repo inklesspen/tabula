@@ -1,4 +1,5 @@
 import abc
+import logging
 import typing
 
 import msgspec
@@ -17,6 +18,7 @@ from .hwtypes import (
     SetLed,
     Led,
     TouchCoordinateTransform,
+    KeyboardDisconnect,
 )
 from .commontypes import Size, ScreenInfo
 from .rpctypes import (
@@ -187,7 +189,7 @@ class RpcHardware(Hardware):
         settings: Settings,
     ):
         super().__init__(event_channel, settings)
-        self.host = "kobo.apollo"
+        self.host = "kobo"
         self.port = 1234
         self.battery_state_response = trio_util.AsyncValue(None)
         self.screen_info_response = trio_util.AsyncValue(None)
@@ -207,6 +209,8 @@ class RpcHardware(Hardware):
         return resp
 
     async def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
+        if not isinstance(imagebytes, bytes):
+            raise TypeError("can only display bytes")
         await self.req_send_channel.send(RpcDisplayPixels(imagebytes, rect))
 
     async def clear_screen(self):
@@ -262,7 +266,7 @@ class RpcHardware(Hardware):
                         )
                     )
                 case RpcKeyboardDisconnect():
-                    raise Exception("implement this, dingus")
+                    await self.event_channel.send(KeyboardDisconnect())
             await checkpoint()
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):

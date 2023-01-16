@@ -385,6 +385,28 @@ typedef enum
     PANGO_ELLIPSIZE_END
 } PangoEllipsizeMode;
 
+struct _PangoLogAttr
+{
+  guint is_line_break               : 1;
+  guint is_mandatory_break          : 1;
+  guint is_char_break               : 1;
+  guint is_white                    : 1;
+  guint is_cursor_position          : 1;
+  guint is_word_start               : 1;
+  guint is_word_end                 : 1;
+  guint is_sentence_boundary        : 1;
+  guint is_sentence_start           : 1;
+  guint is_sentence_end             : 1;
+  guint backspace_deletes_character : 1;
+  guint is_expandable_space         : 1;
+  guint is_word_boundary            : 1;
+  guint break_inserts_hyphen        : 1;
+  guint break_removes_preceding     : 1;
+
+  guint reserved                    : 17;
+};
+typedef struct _PangoLogAttr PangoLogAttr;
+
 const PangoMatrix *pango_context_get_matrix(PangoContext *context);
 void pango_context_set_language(PangoContext *context,
                                 PangoLanguage *language);
@@ -490,6 +512,16 @@ void pango_layout_get_pixel_extents(PangoLayout *layout,
                                     PangoRectangle *logical_rect);
 int pango_layout_get_width(PangoLayout *layout);
 int pango_layout_get_height(PangoLayout *layout);
+
+const PangoLogAttr*
+pango_layout_get_log_attrs_readonly (
+  PangoLayout* layout,
+  gint* n_attrs
+);
+const char*
+pango_layout_get_text (
+  PangoLayout* layout
+);
 
 /* pangocairo */
 typedef struct _PangoCairoFontMap PangoCairoFontMap;

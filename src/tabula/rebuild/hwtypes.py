@@ -24,6 +24,10 @@ class ScreenRect(msgspec.Struct, frozen=True):
         return (self.x, self.y)
 
 
+class KeyboardDisconnect(msgspec.Struct, frozen=True):
+    pass
+
+
 class KeyEvent(msgspec.Struct, frozen=True):
     key: Key
     press: KeyPress
