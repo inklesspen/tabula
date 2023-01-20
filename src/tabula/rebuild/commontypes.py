@@ -50,6 +50,13 @@ class Rect(msgspec.Struct, frozen=True):
     origin: Point
     spread: Size
 
+    @classmethod
+    def from_pango_rect(cls, pango_rect):
+        return cls(
+            origin=Point(x=pango_rect.x, y=pango_rect.y),
+            spread=Size(width=pango_rect.width, height=pango_rect.height),
+        )
+
     def as_pillow_box(self):
         return (
             self.origin.x,

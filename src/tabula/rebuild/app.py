@@ -8,7 +8,7 @@ import trio_util
 from .hardware import Hardware, RpcHardware
 from .settings import load_settings, Settings
 from ..rendering.renderer2 import Renderer
-from .screens import Screen, KeyboardDetect, SystemMenu, Switch, Modal, Close, Shutdown
+from .screens import Screen, KeyboardDetect, Switch, Modal, Close, Shutdown
 from .util import invoke
 from .db import make_db
 from .document import DocumentModel
@@ -23,7 +23,7 @@ class Tabula:
         # TODO: pick a subclass of Hardware based on some config knob
         self.settings = settings
         self.db = make_db(settings.db_path)
-        self.document = DocumentModel(self.db)
+        self.document = DocumentModel()
         self.screen_stack = trio_util.AsyncValue([])
 
     def invoke_screen(self, screen: typing.Type[Screen], **additional_kwargs):
@@ -52,7 +52,13 @@ class Tabula:
                 self.invoke_screen(KeyboardDetect, on_startup=True)
             ]
             await self.hardware.clear_screen()
+            nursery.start_soon(self.periodic_save_doc, trio_util.periodic(5))
+
             task_status.started()
+
+    async def periodic_save_doc(self, trigger):
+        async for _ in trigger:
+            self.document.save_session(self.db)
 
     async def dispatch_events(
         self,

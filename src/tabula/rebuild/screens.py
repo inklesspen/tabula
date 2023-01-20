@@ -16,9 +16,8 @@ from ..rendering.rendertypes import (
     Alignment,
     WrapMode,
 )
-from .doctypes import Renderable
 from .util import checkpoint
-from . import draft_rendering
+from .layout import LayoutManager
 
 if typing.TYPE_CHECKING:
     from .hardware import Hardware
@@ -33,6 +32,8 @@ if typing.TYPE_CHECKING:
 # U+2460 is 1, U+2468 is 9
 # U+24CE is Y; U+24C3 is N
 # these are all in Noto Sans Symbols.
+# B612 has similar glyphs but in a different block:
+# https://en.wikipedia.org/wiki/Dingbats_(Unicode_block)
 CIRCLED_ALPHANUMERICS = {
     "0": "\u24ea",
     "1": "\u2460",
@@ -46,6 +47,19 @@ CIRCLED_ALPHANUMERICS = {
     "9": "\u2468",
     "Y": "\u24ce",
     "N": "\u24c3",
+}
+
+B612_CIRCLED_DIGITS = {
+    1: "\u2780",
+    2: "\u2781",
+    3: "\u2782",
+    4: "\u2783",
+    5: "\u2784",
+    6: "\u2785",
+    7: "\u2786",
+    8: "\u2787",
+    9: "\u2788",
+    0: "\u2789",
 }
 
 
@@ -161,7 +175,7 @@ class KeyboardDetect(Screen):
             button = Rect(origin=origin, spread=spread)
             # need to save the button rect for touch detection
             self.renderer.button(
-                cairo_context, text="Exit", font="Crimson Pro 10", rect=button
+                cairo_context, text="Exit", font="B612 10", rect=button
             )
 
             self.renderer.move_to(cairo_context, Point(x=0, y=1280))
@@ -294,12 +308,13 @@ class SystemMenu(ButtonMenu):
                     origin=Point(x=button_x, y=button_y), spread=self.button_size
                 )
                 self.button_rects[button["handler"]] = button_rect
-                button_title = f"<span font=\"Noto Sans Symbols 8\">{CIRCLED_ALPHANUMERICS[str(button['number'])]}</span> — {button['title']}"
-                # button_title = f"{button['number']} — {button['title']}"
+                button_title = (
+                    f"{B612_CIRCLED_DIGITS[button['number']]} — {button['title']}"
+                )
                 self.renderer.button(
                     cairo_context,
                     text=button_title,
-                    font="Noto Serif 8",
+                    font="B612 8",
                     rect=button_rect,
                     markup=True,
                 )
@@ -311,7 +326,7 @@ class SystemMenu(ButtonMenu):
 
     async def new_session(self):
         session_id = self.db.new_session()
-        self.document.load_session(session_id)
+        self.document.load_session(session_id, self.db)
         await checkpoint()
         return Switch(Drafting, kwargs={})
 
@@ -349,10 +364,14 @@ class Drafting(Screen):
         )
         self.db = db
         self.document = document
-        self.draft_screen = draft_rendering.Screen(self.renderer, self.settings)
+        self.layout_manager = LayoutManager(self.renderer, self.document)
 
     # titlebar/statusbar/etc only needs to be shown on drafting screen, so that does not have to be independent
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+        # TODO: draw status area
+        # Line 1: Sprint status: timer, wordcount, hotkey reminder
+        # Line 2: Session wordcount, current time, battery status, capslock, compose
+
         self.hardware.reset_keystream(enable_composes=True)
         await self.hardware.clear_screen()
         await self.handle_dirty_updates(
@@ -363,20 +382,22 @@ class Drafting(Screen):
             event = await event_channel.receive()
             match event:
                 case AnnotatedKeyEvent():
-                    dirties = tuple()
                     if self.document.graphical_char(event.character):
-                        dirties = self.document.keystroke(event.character)
+                        await self.handle_dirty_updates(
+                            self.document.keystroke(event.character)
+                        )
                     elif event.key is Key.KEY_ENTER:
-                        dirties = self.document.new_para()
+                        await self.handle_dirty_updates(self.document.new_para())
+                        self.document.save_session(self.db)
                     elif event.key is Key.KEY_BACKSPACE:
-                        dirties = self.document.backspace()
+                        await self.handle_dirty_updates(self.document.backspace())
                     elif event.key is Key.KEY_F1:
                         return Modal(Help, kwargs={})
                     elif event.key is Key.KEY_F12:
+                        self.document.save_session(self.db)
                         return Modal(SystemMenu, kwargs={"modal": True})
-                    if dirties:
-                        await self.handle_dirty_updates(dirties)
                 case KeyboardDisconnect():
+                    self.document.save_session(self.db)
                     print("Time to detect keyboard again.")
                     return Modal(KeyboardDetect, kwargs={})
 
@@ -385,23 +406,11 @@ class Drafting(Screen):
         dirty_paragraph_ids: collections.abc.Iterable[timeflake.Timeflake],
         force=False,
     ):
-        paras = [self.document[para_id] for para_id in dirty_paragraph_ids]
-        renderables = [
-            Renderable(
-                index=para.index,
-                markup=para.markup,
-                has_cursor=(para.id == self.document.cursor_para_id),
-            )
-            for para in paras
-        ]
-        # renderer
-        framelets = self.draft_screen.render_update(renderables, force=force)
-        # hardware
-        # there are only ever 0 or 1 framelets, so…
-        for framelet in framelets:
-            await self.hardware.display_pixels(
-                imagebytes=bytes(framelet.image), rect=framelet.rect
-            )
+        # TODO: remove unused arguments
+        framelet = self.layout_manager.render_update(self.settings.current_font)
+        await self.hardware.display_pixels(
+            imagebytes=framelet.image, rect=framelet.rect
+        )
 
 
 class SessionList(ButtonMenu):

@@ -193,6 +193,25 @@ typedef enum _cairo_hint_metrics
     CAIRO_HINT_METRICS_ON
 } cairo_hint_metrics_t;
 
+typedef enum _cairo_content {
+    CAIRO_CONTENT_COLOR		= 0x1000,
+    CAIRO_CONTENT_ALPHA		= 0x2000,
+    CAIRO_CONTENT_COLOR_ALPHA	= 0x3000
+} cairo_content_t;
+
+
+typedef struct {
+    double x, y, width, height;
+} cairo_rectangle_t;
+
+typedef struct {
+    int x, y;
+    int width, height;
+} cairo_rectangle_int_t;
+
+
+typedef int cairo_bool_t;
+
 typedef cairo_status_t (*cairo_write_func_t)(void *closure,
                                              const unsigned char *data,
                                              unsigned int length);
@@ -300,6 +319,25 @@ void cairo_surface_mark_dirty(cairo_surface_t *surface);
 
 cairo_surface_t *
 cairo_get_target(cairo_t *cr);
+
+void cairo_clip (cairo_t *cr);
+void cairo_reset_clip (cairo_t *cr);
+void cairo_set_source_surface (cairo_t *cr, cairo_surface_t *surface, double x, double y);
+
+cairo_surface_t * cairo_recording_surface_create (cairo_content_t content, const cairo_rectangle_t *extents);
+void cairo_recording_surface_ink_extents (cairo_surface_t *surface, double *x0, double *y0, double *width, double *height);
+cairo_bool_t cairo_recording_surface_get_extents (cairo_surface_t *surface, cairo_rectangle_t *extents);
+cairo_surface_t * cairo_surface_create_for_rectangle (cairo_surface_t *target, double x, double y, double width, double height);
+cairo_surface_t * cairo_surface_map_to_image (cairo_surface_t *surface, const cairo_rectangle_int_t *extents);
+void cairo_surface_unmap_image (cairo_surface_t *surface, cairo_surface_t *image);
+
+cairo_status_t cairo_surface_write_to_png (cairo_surface_t *surface, const char *filename);
+cairo_surface_t *
+cairo_image_surface_create_for_data (unsigned char *data,
+                                     cairo_format_t format,
+                                     int width,
+                                     int height,
+                                     int stride);
 
 /* pango */
 typedef struct _PangoMatrix PangoMatrix;

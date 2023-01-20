@@ -2,15 +2,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import collections.abc
 import typing
 import unicodedata
 
 import timeflake
 
-from .db import TabulaDb
 from .doctypes import Paragraph
 from . import wordcount
+
+if typing.TYPE_CHECKING:
+    from .db import TabulaDb
 
 
 # https://gankra.github.io/blah/text-hates-you/
@@ -31,8 +32,7 @@ from . import wordcount
 # is a subsection of the document (starting and ending between paragraphs, so a paragraph
 # is always completely in the sprint or completely out of it)
 class DocumentModel:
-    def __init__(self, db: TabulaDb):
-        self.db = db
+    def __init__(self):
         self.session_id: timeflake.Timeflake = None
         self.sprint_id: timeflake.Timeflake = None
         self.currently: typing.Optional[Paragraph] = None
@@ -55,7 +55,6 @@ class DocumentModel:
 
     @contents.setter
     def contents(self, value: typing.List[Paragraph]):
-        p: Paragraph
         self._contents_by_id = {}
         self._contents_by_index = {}
         for p in value:
@@ -64,16 +63,20 @@ class DocumentModel:
 
     @property
     def cursor_para_id(self):
-        # TODO: handle the None case
+        if self.currently is None:
+            raise ValueError("The cursor para does not exist.")
         return self.currently.id
+
+    def __len__(self):
+        return len(self._contents_by_id)
 
     def __getitem__(self, key: typing.Union[timeflake.Timeflake, int]):
         if isinstance(key, timeflake.Timeflake):
             return self._contents_by_id[key]
         return self._contents_by_index[key]
 
-    def load_session(self, session_id):
-        paras = self.db.load_session_paragraphs(session_id)
+    def load_session(self, session_id, db: "TabulaDb"):
+        paras = db.load_session_paragraphs(session_id)
         new_para_needed = paras[-1].markdown != ""
         if new_para_needed:
             new_para = Paragraph(
@@ -90,20 +93,14 @@ class DocumentModel:
         self.sprint_id = None
         self.unsaved_changes = False
 
-    def save_session(self):
+    def save_session(self, db: "TabulaDb"):
         if not self.has_session or not self.unsaved_changes:
             return
         paras = self.contents
         doc_wc = wordcount.count_plain_text(
             wordcount.make_plain_text("\n".join([p.markdown for p in paras]))
         )
-        self.db.save_session(self.session_id, doc_wc, paras)
-
-    # async def set_font(self, font):
-    #     self.font = font
-    #     if self.has_session:
-    #         await self.dispatch_channel.send([p.id for p in self.contents])
-    #         await self.notify_document_changed([p.id for p in self.contents])
+        db.save_session(self.session_id, doc_wc, paras)
 
     def _update_currently(self, evolve=True):
         if evolve:
@@ -118,8 +115,6 @@ class DocumentModel:
         self.unsaved_changes = True
         changed = (self.currently.id,)
         return changed
-        # await self.dispatch_channel.send(changed)
-        # await self.notify_document_changed(changed)
 
     def backspace(self) -> tuple[timeflake.Timeflake, ...]:
         if len(self.buffer) == 0:
@@ -131,8 +126,6 @@ class DocumentModel:
         self.unsaved_changes = True
         changed = (self.currently.id,)
         return changed
-        # await self.dispatch_channel.send(changed)
-        # await self.notify_document_changed(changed)
 
     def new_para(self) -> tuple[timeflake.Timeflake, ...]:
         if len(self.buffer) == 0:
@@ -151,8 +144,6 @@ class DocumentModel:
         self.unsaved_changes = True
         changed = (prev.id, self.currently.id)
         return changed
-        # await self.dispatch_channel.send(changed)
-        # await self.notify_document_changed(changed)
 
     def get_markups(self):
         return [p.markup for p in self.contents]

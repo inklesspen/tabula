@@ -34,6 +34,8 @@ WrapMode = _c_enum("PangoWrapMode", "WrapMode")
 
 Alignment = _c_enum("PangoAlignment", "Alignment")
 
+CairoStatus = _c_enum("cairo_status_t", "CairoStatus")
+
 
 class AffineTransform(msgspec.Struct, frozen=True):
     # Both Cairo and Pango represent affine transforms as 6-tuples

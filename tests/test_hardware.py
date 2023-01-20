@@ -70,6 +70,8 @@ async def test_event_handling_basic():
     processed_send_channel, processed_receive_channel = trio.open_memory_channel(60)
     settings = Settings(
         drafting_fonts=[],
+        current_font="",
+        db_path="",
         compose_key=Key.KEY_RIGHTMETA,
         compose_sequences=pygtrie.Trie(
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
@@ -112,6 +114,8 @@ async def test_event_handling_resets():
     processed_send_channel, processed_receive_channel = trio.open_memory_channel(60)
     settings = Settings(
         drafting_fonts=[],
+        current_font="",
+        db_path="",
         compose_key=Key.KEY_RIGHTMETA,
         compose_sequences=pygtrie.Trie(
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}

@@ -559,6 +559,8 @@ async def test_keystream_factory():
     send_channel, receive_channel = trio.open_memory_channel(60)
     settings = Settings(
         drafting_fonts=[],
+        current_font="",
+        db_path="",
         compose_key=Key.KEY_RIGHTMETA,
         compose_sequences=pygtrie.Trie(
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}

@@ -98,7 +98,8 @@ class Renderer:
     def create_cairo_context(surface):
         return ffi.gc(clib.cairo_create(surface), clib.cairo_destroy)
 
-    def _surface_to_buffer(self, surface, size):
+    @staticmethod
+    def _surface_to_buffer(surface, size):
         dataptr = clib.cairo_image_surface_get_data(surface)
         buf = ffi.buffer(dataptr, size.total())
         return buf
@@ -114,9 +115,10 @@ class Renderer:
             clib.cairo_surface_mark_dirty(surface)
         return bytes(self._surface_to_buffer(surface, size))
 
-    def _paint_background(self, cr):
+    @staticmethod
+    def _paint_background(cr, alpha: float = 0):
         clib.cairo_set_operator(cr, clib.CAIRO_OPERATOR_SOURCE)
-        clib.cairo_set_source_rgba(cr, 1, 1, 1, 0)
+        clib.cairo_set_source_rgba(cr, 1, 1, 1, alpha)
         clib.cairo_paint(cr)
 
     def _set_cairo_transform(self, cairo, matrix: AffineTransform):
@@ -342,7 +344,7 @@ class Renderer:
         clib.pango_layout_set_alignment(pango_layout, alignment)
 
     def setup_drawing(self, cairo_context):
-        clib.cairo_set_operator(cairo_context, clib.CAIRO_OPERATOR_OVER)
+        clib.cairo_set_operator(cairo_context, clib.CAIRO_OPERATOR_SOURCE)
         clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 1)
 
     def calculate_rendered_rects(

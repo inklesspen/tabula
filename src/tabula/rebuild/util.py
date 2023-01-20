@@ -21,3 +21,12 @@ def invoke(c: typing.Callable, **provided_kwargs):
     sig = inspect.signature(c)
     used_kwargs = {k: v for k, v in provided_kwargs.items() if k in sig.parameters}
     return c(**used_kwargs)
+
+
+V = typing.TypeVar("V")
+
+
+def set_into(list: list[typing.Optional[V]], index: int, item: V):
+    while index >= len(list):
+        list.append(None)
+    list[index] = item
