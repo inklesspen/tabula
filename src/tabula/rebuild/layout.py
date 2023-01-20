@@ -5,13 +5,22 @@ import msgspec
 
 from .commontypes import Size
 from .hwtypes import ScreenRect
-from .draft_rendering import CURSOR, Framelet
 from ..rendering._cairopango import ffi, lib as clib
 from ..rendering.rendertypes import Alignment, WrapMode
 
 if typing.TYPE_CHECKING:
     from ..rendering.renderer2 import Renderer
     from .document import DocumentModel
+
+
+# https://en.wikipedia.org/wiki/Macron_below
+# https://en.wikipedia.org/wiki/Underscore
+CURSOR = '<span alpha="50%">_</span>'
+
+
+class Framelet(msgspec.Struct, frozen=True):
+    rect: ScreenRect
+    image: bytes
 
 
 class RenderedMarkup(msgspec.Struct, frozen=True):
