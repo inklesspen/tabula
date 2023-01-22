@@ -67,6 +67,12 @@ class DocumentModel:
             raise ValueError("The cursor para does not exist.")
         return self.currently.id
 
+    @property
+    def wordcount(self):
+        return wordcount.count_plain_text(
+            wordcount.make_plain_text("\n".join([p.markdown for p in self.contents]))
+        )
+
     def __len__(self):
         return len(self._contents_by_id)
 
@@ -75,7 +81,7 @@ class DocumentModel:
             return self._contents_by_id[key]
         return self._contents_by_index[key]
 
-    def load_session(self, session_id, db: "TabulaDb"):
+    def load_session(self, session_id: timeflake.Timeflake, db: "TabulaDb"):
         paras = db.load_session_paragraphs(session_id)
         new_para_needed = paras[-1].markdown != ""
         if new_para_needed:
@@ -96,11 +102,16 @@ class DocumentModel:
     def save_session(self, db: "TabulaDb"):
         if not self.has_session or not self.unsaved_changes:
             return
-        paras = self.contents
-        doc_wc = wordcount.count_plain_text(
-            wordcount.make_plain_text("\n".join([p.markdown for p in paras]))
-        )
-        db.save_session(self.session_id, doc_wc, paras)
+        db.save_session(self.session_id, self.wordcount, self.contents)
+
+    def delete_session(self, db: "TabulaDb"):
+        db.delete_session(self.session_id)
+        self.contents = []
+        self.buffer = []
+        self.currently = None
+        self.session_id = None
+        self.sprint_id = None
+        self.unsaved_changes = None
 
     def _update_currently(self, evolve=True):
         if evolve:
@@ -150,6 +161,9 @@ class DocumentModel:
 
     def get_markup(self, i: int) -> str:
         return self.contents[i].markup
+
+    def export_markdown(self):
+        return "\n\n".join(p.markdown for p in self.contents)
 
     @staticmethod
     def graphical_char(c: typing.Optional[str]):

@@ -23,10 +23,7 @@ from sqlalchemy.sql import column, text
 import timeflake
 
 from .doctypes import Paragraph, Session
-
-
-def now():
-    return datetime.datetime.now(tzlocal())
+from .util import now
 
 
 @event.listens_for(Engine, "connect")
@@ -68,6 +65,30 @@ class Timeflake(TypeDecorator):
         return timeflake.random()
 
 
+class AwareDateTime(TypeDecorator):
+    """
+    A DateTime type which can only store tz-aware DateTimes
+    """
+
+    impl = DATETIME
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, datetime.datetime):
+            if value.tzinfo is None:
+                raise ValueError("{!r} must be TZ-aware".format(value))
+            else:
+                value = value.astimezone(datetime.timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, datetime.datetime):
+            value = value.replace(tzinfo=datetime.timezone.utc).astimezone(tzlocal())
+        return value
+
+    def __repr__(self):
+        return "AwareDateTime()"
+
+
 metadata = MetaData()
 
 session_table = Table(
@@ -75,8 +96,8 @@ session_table = Table(
     metadata,
     Column("id", Timeflake, primary_key=True),
     Column("started_on", DATE, nullable=False, index=True),
-    Column("updated_at", DATETIME, nullable=False, index=True),
-    Column("exported_at", DATETIME, nullable=True, index=True),
+    Column("updated_at", AwareDateTime, nullable=False, index=True),
+    Column("exported_at", AwareDateTime, nullable=True, index=True),
     Column("wordcount", Integer, nullable=True),
 )
 
@@ -86,8 +107,8 @@ sprint_table = Table(
     Column("id", Timeflake, primary_key=True),
     Column("session_id", ForeignKey("sessions.id"), nullable=False, index=True),
     Column("wordcount", Integer, nullable=True),
-    Column("started_at", DATETIME, nullable=False),
-    Column("ended_at", DATETIME, nullable=True),
+    Column("started_at", AwareDateTime, nullable=False),
+    Column("ended_at", AwareDateTime, nullable=True),
 )
 
 paragraph_table = Table(
@@ -207,3 +228,23 @@ class TabulaDb:
                 ),
             )
             conn.execute(p_on_update, [para.to_db_dict() for para in paragraphs])
+
+    def set_exported_time(self, session_id, timestamp):
+        with self.engine.begin() as conn:
+            conn.execute(
+                session_table.update()
+                .where(session_table.c.id == session_id)
+                .values(exported_at=timestamp)
+            )
+
+    def delete_session(self, session_id):
+        with self.engine.begin() as conn:
+            conn.execute(
+                paragraph_table.delete().where(
+                    paragraph_table.c.session_id == session_id
+                )
+            )
+            conn.execute(
+                sprint_table.delete().where(sprint_table.c.session_id == session_id)
+            )
+            conn.execute(session_table.delete().where(session_table.c.id == session_id))

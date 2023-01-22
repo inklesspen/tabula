@@ -471,6 +471,8 @@ pango_font_map_list_families (
   PangoFontFamily*** families,
   int* n_families);
 
+const char* pango_font_family_get_name (PangoFontFamily* family);
+
 void
 pango_font_family_list_faces (
   PangoFontFamily* family,

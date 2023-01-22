@@ -1,5 +1,4 @@
 import abc
-import logging
 import typing
 
 import msgspec
@@ -20,7 +19,7 @@ from .hwtypes import (
     TouchCoordinateTransform,
     KeyboardDisconnect,
 )
-from .commontypes import Size, ScreenInfo
+from .commontypes import Rect, Size, ScreenInfo
 from .rpctypes import (
     KoboRequests,
     HostRequests,
@@ -97,7 +96,7 @@ class Hardware(metaclass=abc.ABCMeta):
         ...
 
     @abc.abstractmethod
-    async def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
+    async def display_pixels(self, imagebytes: bytes, rect: Rect):
         ...
 
     @abc.abstractmethod
@@ -208,10 +207,12 @@ class RpcHardware(Hardware):
         resp = await self.screen_info_response.wait_value(lambda v: v is not None)
         return resp
 
-    async def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
+    async def display_pixels(self, imagebytes: bytes, rect: Rect):
         if not isinstance(imagebytes, bytes):
             raise TypeError("can only display bytes")
-        await self.req_send_channel.send(RpcDisplayPixels(imagebytes, rect))
+        await self.req_send_channel.send(
+            RpcDisplayPixels(imagebytes, ScreenRect.from_rect(rect))
+        )
 
     async def clear_screen(self):
         await self.req_send_channel.send(RpcClearScreen())
@@ -300,7 +301,7 @@ class EventTestHardware(Hardware):
         await checkpoint()
         return ScreenInfo(width=100, height=100, dpi=100)
 
-    async def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
+    async def display_pixels(self, imagebytes: bytes, rect: Rect):
         await checkpoint()
 
     async def clear_screen(self):

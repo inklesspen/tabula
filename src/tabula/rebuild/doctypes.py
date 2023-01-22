@@ -41,11 +41,3 @@ class Paragraph:
         return attrs.asdict(
             self, filter=attrs.filters.exclude(attrs.fields(Paragraph).markup)
         )
-
-
-@define(kw_only=True, frozen=True)
-class Renderable:
-    # TODO: make Struct?
-    index: int
-    markup: str
-    has_cursor: bool

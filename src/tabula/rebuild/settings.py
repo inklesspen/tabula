@@ -1,3 +1,4 @@
+import datetime
 import pathlib
 
 import attrs
@@ -144,6 +145,8 @@ class Settings:
     compose_sequences: pygtrie.Trie
     keymaps: dict[Key, list[str]]
     db_path: pathlib.Path
+    export_path: pathlib.Path
+    max_editable_age: datetime.timedelta
 
 
 def _load_settings():
@@ -156,6 +159,8 @@ def _load_settings():
         ),
         keymaps={Key[k]: v for k, v in KEYMAPS.items()},
         db_path=xdg.xdg_state_home() / "tabula" / "tabula.db",
+        export_path=xdg.xdg_data_home() / "tabula",
+        max_editable_age=datetime.timedelta(hours=3),
     )
 
 

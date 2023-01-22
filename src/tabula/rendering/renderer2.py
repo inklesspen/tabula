@@ -167,29 +167,13 @@ class Renderer:
             return ffi.string(loaded_font_string).decode("utf-8")
 
     def list_available_fonts(self) -> list[str]:
-        font_description_strings = []
-        with ffi.new("int *") as size_p, ffi.new(
-            "PangoFontFamily***"
-        ) as families_p, ffi.new("PangoFontFace***") as faces_p:
+        with ffi.new("int *") as size_p, ffi.new("PangoFontFamily***") as families_p:
             clib.pango_font_map_list_families(self.fontmap, families_p, size_p)
-            families = ffi.unpack(ffi.gc(families_p[0], clib.g_free), size_p[0])
-            for family in families:
-                clib.pango_font_family_list_faces(family, faces_p, size_p)
-                faces = ffi.unpack(ffi.gc(faces_p[0], clib.g_free), size_p[0])
-                for face in faces:
-                    with ffi.gc(
-                        clib.pango_font_face_describe(face),
-                        clib.pango_font_description_free,
-                    ) as face_description, ffi.gc(
-                        clib.pango_font_description_to_string(face_description),
-                        clib.g_free,
-                    ) as face_description_cstring:
-                        font_description_string = ffi.string(
-                            face_description_cstring
-                        ).decode("utf-8")
-                        # print(font_description_string)
-                        font_description_strings.append(font_description_string)
-        return sorted(font_description_strings)
+            font_names = [
+                ffi.string(clib.pango_font_family_get_name(family)).decode("utf-8")
+                for family in ffi.unpack(ffi.gc(families_p[0], clib.g_free), size_p[0])
+            ]
+        return sorted(font_names)
 
     def render_border(self, surface, size: Size) -> Size:
         # could use clib.cairo_image_surface_get_width (and height) instead of size param
@@ -399,6 +383,7 @@ class Renderer:
         alignment: Alignment = Alignment.LEFT,
         wrap: WrapMode = WrapMode.CHAR,
         width: float = 0.0,
+        single_par: bool = True,
         dpi: float = None,
     ):
         if dpi is None:
@@ -415,7 +400,7 @@ class Renderer:
                 markup=markup,
                 justify=justify,
                 alignment=alignment,
-                single_par=True,
+                single_par=single_par,
                 wrap=wrap,
             )
             clib.pango_cairo_show_layout(cairo_context, layout)

@@ -3,10 +3,9 @@ import typing
 
 import msgspec
 
-from .commontypes import Size
-from .hwtypes import ScreenRect
+from .commontypes import Size, Rect, Point
 from ..rendering._cairopango import ffi, lib as clib
-from ..rendering.rendertypes import Alignment, WrapMode
+from ..rendering.rendertypes import Alignment, WrapMode, Rendered
 
 if typing.TYPE_CHECKING:
     from ..rendering.renderer2 import Renderer
@@ -16,11 +15,6 @@ if typing.TYPE_CHECKING:
 # https://en.wikipedia.org/wiki/Macron_below
 # https://en.wikipedia.org/wiki/Underscore
 CURSOR = '<span alpha="50%">_</span>'
-
-
-class Framelet(msgspec.Struct, frozen=True):
-    rect: ScreenRect
-    image: bytes
 
 
 class RenderedMarkup(msgspec.Struct, frozen=True):
@@ -175,11 +169,12 @@ class LayoutManager:
             used_rendereds[CURSOR] = self.rendered_markups[CURSOR]
         self.rendered_markups = used_rendereds
 
-        return Framelet(
-            rect=ScreenRect(
-                x=0, y=0, width=self.render_width, height=self.render_height
-            ),
+        return Rendered(
             image=self.renderer.surface_to_bytes(
                 self.target_surface, self.render_size, skip_inversion=True
+            ),
+            extent=Rect(
+                origin=Point(0, 0),
+                spread=Size(width=self.render_width, height=self.render_height),
             ),
         )

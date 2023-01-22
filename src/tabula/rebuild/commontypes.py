@@ -37,6 +37,10 @@ class Size(msgspec.Struct, frozen=True):
     def as_numpy_shape(self):
         return (self.height, self.width)
 
+    @property
+    def pillow_size(self):
+        return (self.width, self.height)
+
     @classmethod
     def from_tuple(cls, tup):
         return cls(width=tup[0], height=tup[1])
@@ -57,6 +61,7 @@ class Rect(msgspec.Struct, frozen=True):
             spread=Size(width=pango_rect.width, height=pango_rect.height),
         )
 
+    @property
     def as_pillow_box(self):
         return (
             self.origin.x,
@@ -65,10 +70,18 @@ class Rect(msgspec.Struct, frozen=True):
             self.origin.y + self.spread.height,
         )
 
+    @property
+    def pillow_size(self):
+        return self.spread.pillow_size
+
+    @property
+    def pillow_origin(self):
+        return (self.origin.x, self.origin.y)
+
     def __contains__(self, item):
         if not isinstance(item, Point):
             return NotImplemented
-        min_x, min_y, max_x, max_y = self.as_pillow_box()
+        min_x, min_y, max_x, max_y = self.as_pillow_box
         return (
             item.x >= min_x and item.x <= max_x and item.y >= min_y and item.y <= max_y
         )

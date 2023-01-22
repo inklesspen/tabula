@@ -1,5 +1,6 @@
 import abc
 import collections.abc
+import functools
 import math
 import typing
 
@@ -7,16 +8,18 @@ import msgspec
 import timeflake
 import trio
 
-from .hwtypes import AnnotatedKeyEvent, ScreenRect, TapEvent, Key, KeyboardDisconnect
-from .commontypes import Point, Size, Rect, ScreenInfo
+from .hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
+from .commontypes import Point, Size, Rect
 from ..rendering.rendertypes import (
     Rendered,
     Margins,
-    AffineTransform,
     Alignment,
     WrapMode,
 )
-from .util import checkpoint
+from ..rendering._cairopango import ffi, lib as clib
+from .document import DocumentModel
+from .doctypes import Session
+from .util import checkpoint, now, humanized_delta
 from .layout import LayoutManager
 
 if typing.TYPE_CHECKING:
@@ -24,7 +27,7 @@ if typing.TYPE_CHECKING:
     from .settings import Settings
     from ..rendering.renderer2 import Renderer
     from .db import TabulaDb
-    from .document import DocumentModel
+    import pathlib
 
 
 # https://en.wikipedia.org/wiki/Enclosed_Alphanumerics
@@ -62,6 +65,19 @@ B612_CIRCLED_DIGITS = {
     0: "\u2789",
 }
 
+NUMBER_KEYS = {
+    1: Key.KEY_1,
+    2: Key.KEY_2,
+    3: Key.KEY_3,
+    4: Key.KEY_4,
+    5: Key.KEY_5,
+    6: Key.KEY_6,
+    7: Key.KEY_7,
+    8: Key.KEY_8,
+    9: Key.KEY_9,
+    0: Key.KEY_0,
+}
+
 
 class Switch(msgspec.Struct, frozen=True):
     new_screen: typing.Type["Screen"]
@@ -82,6 +98,20 @@ class Shutdown(msgspec.Struct, frozen=True):
 
 
 RetVal = Switch | Shutdown | Modal | Close
+
+
+def export_session(
+    session_document: DocumentModel, db: "TabulaDb", export_path: "pathlib.Path"
+):
+    # TODO: maybe move this to a method on the db class
+    export_path.mkdir(parents=True, exist_ok=True)
+    timestamp = now()
+    session_id = session_document.session_id
+    export_filename = f"{session_id} - {timestamp} - {session_document.wordcount}.md"
+    export_file = export_path / export_filename
+    with export_file.open(mode="w", encoding="utf-8") as out:
+        out.write(session_document.export_markdown())
+    db.set_exported_time(session_id, timestamp)
 
 
 class Screen(abc.ABC):
@@ -122,15 +152,7 @@ class KeyboardDetect(Screen):
     async def run(self, event_channel: trio.abc.ReceiveChannel):
         self.hardware.reset_keystream(enable_composes=False)
         screen, button = self.make_screen()
-        await self.hardware.display_pixels(
-            screen.image,
-            ScreenRect(
-                x=screen.extent.origin.x,
-                y=screen.extent.origin.y,
-                width=screen.extent.spread.width,
-                height=screen.extent.spread.height,
-            ),
-        )
+        await self.hardware.display_pixels(screen.image, screen.extent)
         while True:
             event = await event_channel.receive()
             match event:
@@ -201,10 +223,114 @@ class KeyboardDetect(Screen):
         )
 
 
+class Button(msgspec.Struct):
+    handler: collections.abc.Callable[
+        [], collections.abc.Awaitable[typing.Optional[RetVal]]
+    ]
+    rect: Rect
+    text: str
+    font: str = "B612 8"
+    markup: bool = False
+    key: typing.Optional[Key] = None
+    inverted: bool = False
+
+
+class MenuText(msgspec.Struct):
+    text: str
+    y_top: int
+    font: str
+    markup: bool = False
+
+
+MenuItem = Button | MenuText
+
+
 class ButtonMenu(Screen):
     # Buttons are 400 px wide, 100 px high
     # Spread them as equally as possible along the screen height.
     button_size = Size(width=400, height=100)
+
+    def __init__(
+        self,
+        *,
+        settings: "Settings",
+        renderer: "Renderer",
+        hardware: "Hardware",
+    ):
+        super().__init__(
+            settings=settings,
+            renderer=renderer,
+            hardware=hardware,
+        )
+
+    async def run(self, event_channel: trio.abc.ReceiveChannel):
+        self.hardware.reset_keystream(enable_composes=False)
+        await self.render()
+        while True:
+            event = await event_channel.receive()
+            handler = None
+            match event:
+                case AnnotatedKeyEvent():
+                    for button in self.buttons:
+                        if event.key == button.key:
+                            handler = button.handler
+                case TapEvent():
+                    for button in self.buttons:
+                        if event.location in button.rect:
+                            handler = button.handler
+                case KeyboardDisconnect():
+                    print("Time to detect keyboard again.")
+                    return Modal(KeyboardDetect, kwargs={})
+            if handler is not None:
+                result = await handler()
+                if result is not None:
+                    return result
+                await self.render()
+
+    async def render(self):
+        self.menu = tuple(self.define_menu())
+        self.buttons = tuple(b for b in self.menu if isinstance(b, Button))
+        screen = self.make_screen()
+        await self.hardware.display_pixels(screen.image, screen.extent)
+
+    def make_screen(self):
+        screen_size = self.renderer.screen_info.size
+        x_center = math.floor(screen_size.width / 2)
+        with self.renderer.create_surface(
+            screen_size
+        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
+            self.renderer.prepare_background(cairo_context)
+            self.renderer.setup_drawing(cairo_context)
+            for menuitem in self.menu:
+                if isinstance(menuitem, Button):
+                    # TODO: support inverted
+                    self.renderer.button(
+                        cairo_context,
+                        text=menuitem.text,
+                        font=menuitem.font,
+                        rect=menuitem.rect,
+                        markup=menuitem.markup,
+                    )
+                if isinstance(menuitem, MenuText):
+                    center_top = Point(x=0, y=menuitem.y_top)
+                    self.renderer.move_to(cairo_context, center_top)
+                    self.renderer.simple_render(
+                        cairo_context,
+                        menuitem.font,
+                        menuitem.text,
+                        markup=menuitem.markup,
+                        alignment=Alignment.CENTER,
+                        width=screen_size.width,
+                        single_par=False,
+                    )
+            buf = self.renderer.surface_to_bytes(surface, screen_size)
+        return Rendered(
+            image=buf, extent=Rect(origin=Point(x=0, y=0), spread=screen_size)
+        )
+
+    @abc.abstractmethod
+    def define_menu(self) -> collections.abc.Iterable[MenuItem]:
+        ...
 
 
 class SystemMenu(ButtonMenu):
@@ -218,110 +344,81 @@ class SystemMenu(ButtonMenu):
         document: "DocumentModel",
         modal: bool = False,
     ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
+        super().__init__(settings=settings, renderer=renderer, hardware=hardware)
         self.db = db
         self.document = document
         self.modal = modal
-        self.button_rects = {}
+
+    def define_menu(self):
+
         buttons = [
             {
-                "handler": "new_session",
+                "handler": self.new_session,
                 "number": 1,
                 "title": "New Session",
-                "key": Key.KEY_1,
             },
             {
-                "handler": "resume_session",
+                "handler": self.previous_session,
                 "number": 2,
-                "title": "Resume Session",
-                "key": Key.KEY_2,
+                "title": "Previous Session",
             },
-            {"handler": "set_font", "number": 3, "title": "Set Font", "key": Key.KEY_3},
-            {
-                "handler": "export",
-                "number": 4,
-                "title": "Export Markdown",
-                "key": Key.KEY_4,
-            },
-            {"handler": "shutdown", "number": 0, "title": "Shutdown", "key": Key.KEY_0},
         ]
-        if self.modal:
-            buttons.insert(
-                -1,
+        next_number = 3
+        if self.document.has_session:
+            buttons.append(
                 {
-                    "handler": "close_modal",
+                    "handler": self.export_current_session,
+                    "number": next_number,
+                    "title": "Export Current Session",
+                }
+            )
+            next_number += 1
+        buttons.append(
+            {
+                "handler": self.set_font,
+                "number": next_number,
+                "title": "Fonts",
+            }
+        )
+        next_number += 1
+        if self.document.has_session:
+            buttons.append(
+                {
+                    "handler": self.resume_drafting,
                     "number": 9,
                     "title": "Resume Drafting",
-                    "key": Key.KEY_9,
-                },
+                }
             )
-
-        self.buttons_by_handler = {button["handler"]: button for button in buttons}
-        self.buttons_by_key = {button["key"]: button for button in buttons}
-
-    async def run(self, event_channel: trio.abc.ReceiveChannel):
-        self.hardware.reset_keystream(enable_composes=False)
-        screen = self.make_screen()
-        await self.hardware.display_pixels(
-            screen.image,
-            ScreenRect(
-                x=screen.extent.origin.x,
-                y=screen.extent.origin.y,
-                width=screen.extent.spread.width,
-                height=screen.extent.spread.height,
-            ),
+        buttons.append(
+            {
+                "handler": self.shutdown,
+                "number": 0,
+                "title": "Shutdown",
+            }
         )
-        while True:
-            event = await event_channel.receive()
-            handler = None
-            match event:
-                case AnnotatedKeyEvent():
-                    if event.key in self.buttons_by_key:
-                        button = self.buttons_by_key[event.key]
-                        handler = getattr(self, button["handler"])
-                case TapEvent():
-                    for button_handler, button_rect in self.button_rects.items():
-                        if event.location in button_rect:
-                            button = self.buttons_by_handler[button_handler]
-                            handler = getattr(self, button["handler"])
-            if handler is not None:
-                return await handler()
 
-    def make_screen(self):
         screen_size = self.renderer.screen_info.size
         button_x = math.floor((screen_size.width - self.button_size.width) / 2)
-        button_total_height = self.button_size.height * len(self.buttons_by_handler)
+        button_total_height = self.button_size.height * len(buttons)
         whitespace_height = screen_size.height - button_total_height
-        skip_height = math.floor(whitespace_height / (len(self.buttons_by_handler) + 1))
+        skip_height = math.floor(whitespace_height / (len(buttons) + 1))
         button_y = skip_height
-        with self.renderer.create_surface(
-            screen_size
-        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
-            self.renderer.prepare_background(cairo_context)
-            self.renderer.setup_drawing(cairo_context)
-            for button in self.buttons_by_handler.values():
-                button_rect = Rect(
-                    origin=Point(x=button_x, y=button_y), spread=self.button_size
-                )
-                self.button_rects[button["handler"]] = button_rect
-                button_title = (
-                    f"{B612_CIRCLED_DIGITS[button['number']]} — {button['title']}"
-                )
-                self.renderer.button(
-                    cairo_context,
-                    text=button_title,
-                    font="B612 8",
-                    rect=button_rect,
-                    markup=True,
-                )
-                button_y += self.button_size.height + skip_height
-            buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(
-            image=buf, extent=Rect(origin=Point(x=0, y=0), spread=screen_size)
+
+        for button in buttons:
+            button_rect = Rect(
+                origin=Point(x=button_x, y=button_y), spread=self.button_size
+            )
+            button["rect"] = button_rect
+            button_y += self.button_size.height + skip_height
+
+        return tuple(
+            Button(
+                handler=b["handler"],
+                key=NUMBER_KEYS[b["number"]],
+                text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
+                rect=b["rect"],
+            )
+            for b in buttons
         )
 
     async def new_session(self):
@@ -330,17 +427,24 @@ class SystemMenu(ButtonMenu):
         await checkpoint()
         return Switch(Drafting, kwargs={})
 
-    async def resume_session(self):
+    async def previous_session(self):
         await checkpoint()
         return Switch(SessionList, kwargs={})
+
+    async def export_current_session(self):
+        export_session(self.document, self.db, self.settings.export_path)
+        # TODO: add some sort of Confirmation dialog
+        await checkpoint()
 
     async def set_font(self):
         await checkpoint()
         return Switch(Fonts, kwargs={})
 
-    async def close_modal(self):
+    async def resume_drafting(self):
         await checkpoint()
-        return Close()
+        if self.modal:
+            return Close()
+        return Switch(Drafting, kwargs={})
 
     async def shutdown(self):
         await checkpoint()
@@ -348,6 +452,8 @@ class SystemMenu(ButtonMenu):
 
 
 class Drafting(Screen):
+    status_font = "Crimson Pro 12"
+
     def __init__(
         self,
         *,
@@ -368,10 +474,6 @@ class Drafting(Screen):
 
     # titlebar/statusbar/etc only needs to be shown on drafting screen, so that does not have to be independent
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        # TODO: draw status area
-        # Line 1: Sprint status: timer, wordcount, hotkey reminder
-        # Line 2: Session wordcount, current time, battery status, capslock, compose
-
         self.hardware.reset_keystream(enable_composes=True)
         await self.hardware.clear_screen()
         await self.handle_dirty_updates(
@@ -394,6 +496,9 @@ class Drafting(Screen):
                     elif event.key is Key.KEY_F1:
                         return Modal(Help, kwargs={})
                     elif event.key is Key.KEY_F12:
+                        if self.document.wordcount == 0:
+                            self.document.delete_session(self.db)
+                            return Switch(SystemMenu, kwargs={})
                         self.document.save_session(self.db)
                         return Modal(SystemMenu, kwargs={"modal": True})
                 case KeyboardDisconnect():
@@ -407,9 +512,59 @@ class Drafting(Screen):
         force=False,
     ):
         # TODO: remove unused arguments
-        framelet = self.layout_manager.render_update(self.settings.current_font)
+        # TODO: draw status area
+        # Line 1: Sprint status: timer, wordcount, hotkey reminder
+        # Line 2: Session wordcount, current time, battery status, capslock, compose
+        # TODO: Add various symbols (battery, capslock, compose) to Tabula Quattro
+        rendered = self.layout_manager.render_update(self.settings.current_font)
         await self.hardware.display_pixels(
-            imagebytes=framelet.image, rect=framelet.rect
+            imagebytes=rendered.image, rect=rendered.extent
+        )
+
+        # TODO: update the status line on a tick, instead of just whenever there's a text change
+        # that way the clock can be kept up to date
+        # TODO: extract into a status line version of LayoutManager
+        screen_size = self.renderer.screen_info.size
+        status_y_bottom = screen_size.height - 50
+        layout = ffi.gc(
+            clib.pango_layout_new(self.renderer.context), clib.g_object_unref
+        )
+        clib.pango_layout_set_auto_dir(layout, False)
+        clib.pango_layout_set_ellipsize(layout, clib.PANGO_ELLIPSIZE_NONE)
+        clib.pango_layout_set_justify(layout, False)
+        clib.pango_layout_set_single_paragraph_mode(layout, False)
+        clib.pango_layout_set_wrap(layout, WrapMode.WORD_CHAR)
+        clib.pango_layout_set_width(
+            layout,
+            screen_size.width * clib.PANGO_SCALE,
+        )
+        clib.pango_layout_set_alignment(layout, Alignment.CENTER)
+
+        with self.renderer._make_font_description(self.status_font) as font_description:
+            clib.pango_layout_set_font_description(layout, font_description)
+
+        status_line = "{0:,} words — {1:%H:%M}".format(self.document.wordcount, now())
+        clib.pango_layout_set_text(layout, status_line.encode("utf-8"), -1)
+        with ffi.new("PangoRectangle *") as logical_rect:
+            clib.pango_layout_get_pixel_extents(layout, ffi.NULL, logical_rect)
+            status_y_top = status_y_bottom - logical_rect.height
+            markup_size = Size(width=screen_size.width, height=logical_rect.height)
+        markup_surface = self.renderer.create_surface(markup_size)
+        with self.renderer.create_cairo_context(markup_surface) as markup_context:
+            clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
+            clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
+            clib.cairo_paint(markup_context)
+            clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
+            clib.pango_cairo_show_layout(markup_context, layout)
+        clib.cairo_surface_flush(markup_surface)
+        rendered = Rendered(
+            image=self.renderer.surface_to_bytes(
+                markup_surface, markup_size, skip_inversion=True
+            ),
+            extent=Rect(origin=Point(x=0, y=status_y_top), spread=markup_size),
+        )
+        await self.hardware.display_pixels(
+            imagebytes=rendered.image, rect=rendered.extent
         )
 
 
@@ -431,14 +586,122 @@ class SessionList(ButtonMenu):
         )
         self.db = db
         self.document = document
+        self.offset = 0
+        self.selected_session = None
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         self.sessions = self.db.list_sessions()
-        self.hardware.reset_keystream(enable_composes=False)
-        screen = self.make_screen()
+        return await super().run(event_channel)
 
-    def make_screen(self):
+    def define_menu(self):
+        if self.selected_session is None:
+            return self.define_buttons_session_list()
+        timestamp = now()
+        edit_cutoff = timestamp - self.settings.max_editable_age
         screen_size = self.renderer.screen_info.size
+        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
+        menuitems = [
+            MenuText(
+                text="Hello world\nGoodbye cruel world", y_top=10, font="Crimson Pro 12"
+            ),
+            Button(
+                handler=self.load_session,
+                rect=Rect(origin=Point(x=button_x, y=150), spread=self.button_size),
+                text="Load Session",
+            ),
+        ]
+        # if self.selected_session.needs_export:
+        menuitems.append(
+            Button(
+                handler=self.export_session,
+                rect=Rect(origin=Point(x=button_x, y=450), spread=self.button_size),
+                text="Export Session",
+            )
+        )
+        menuitems.append(
+            Button(
+                handler=self.delete_session,
+                rect=Rect(origin=Point(x=button_x, y=650), spread=self.button_size),
+                text="Delete Session",
+            )
+        )
+        menuitems.append(
+            Button(
+                handler=self.back_to_session_list,
+                rect=Rect(origin=Point(x=button_x, y=850), spread=self.button_size),
+                text="Back",
+            )
+        )
+        return tuple(menuitems)
+
+    def define_buttons_session_list(self) -> collections.abc.Iterable[Button]:
+        timestamp = now()
+        screen_size = self.renderer.screen_info.size
+        min_skip_height = math.floor(self.button_size.height * 0.75)
+        usable_height = screen_size.height - (min_skip_height + self.button_size.height)
+        num_session_buttons = usable_height // (
+            min_skip_height + self.button_size.height
+        )
+        session_page = self.sessions[self.offset : self.offset + num_session_buttons]
+
+        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
+        button_total_height = self.button_size.height * num_session_buttons
+        whitespace_height = usable_height - button_total_height
+        skip_height = math.floor(whitespace_height / (num_session_buttons + 1))
+        button_y = skip_height
+
+        buttons = []
+        for session in session_page:
+            button_rect = Rect(
+                origin=Point(x=button_x, y=button_y), spread=self.button_size
+            )
+            session_delta = session.updated_at - timestamp
+            button_text = f"{humanized_delta(session_delta)} - {session.wordcount}"
+            if session.needs_export:
+                button_text += " \ue0a7"
+            else:
+                button_text += " \ue0a2"
+            buttons.append(
+                Button(
+                    handler=functools.partial(self.select_session, session),
+                    rect=button_rect,
+                    text=button_text,
+                )
+            )
+            button_y += self.button_size.height + skip_height
+
+        # TODO: add page buttons, export all, back to menu, etc
+
+        return tuple(buttons)
+
+    async def select_session(self, selected_session: Session):
+        self.selected_session = selected_session
+        await checkpoint()
+        return
+
+    async def load_session(self):
+        self.document.load_session(self.selected_session.id, self.db)
+        await checkpoint()
+        return Switch(Drafting, kwargs={})
+
+    async def export_session(self):
+        session_document = DocumentModel()
+        session_document.load_session(self.selected_session.id, self.db)
+
+        export_session(session_document, self.db, self.settings.export_path)
+        await checkpoint()
+        self.selected_session = None
+        return
+
+    async def delete_session(self):
+        await checkpoint()
+        self.selected_session = None
+        return
+
+    async def back_to_session_list(self):
+        self.selected_session = None
+        await checkpoint()
+        return
 
 
 class Fonts(Screen):

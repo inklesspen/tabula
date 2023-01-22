@@ -6,22 +6,24 @@ import typing
 import msgspec
 
 from tabula.device.keyboard_consts import Key, KeyPress, Led
-from .commontypes import Point, Size
+from .commontypes import Point, Size, Rect
 
 
 class ScreenRect(msgspec.Struct, frozen=True):
+    # TODO: unify with Rect
     x: int
     y: int
     width: int
     height: int
 
-    @property
-    def pillow_size(self):
-        return (self.width, self.height)
-
-    @property
-    def pillow_origin(self):
-        return (self.x, self.y)
+    @classmethod
+    def from_rect(cls, rect: Rect):
+        return cls(
+            x=rect.origin.x,
+            y=rect.origin.y,
+            width=rect.spread.width,
+            height=rect.spread.height,
+        )
 
 
 class KeyboardDisconnect(msgspec.Struct, frozen=True):
