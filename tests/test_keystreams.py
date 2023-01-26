@@ -23,8 +23,8 @@ from tabula.rebuild.hwtypes import (
     AnnotatedKeyEvent,
     ModifierAnnotation,
 )
-from tabula.rebuild.settings import Settings
-from tabula.rebuild.util import checkpoint
+from tabula.settings import Settings
+from tabula.util import checkpoint
 
 T = typing.TypeVar("T")
 
@@ -616,7 +616,7 @@ async def test_composes_sequence_failure():
 
 
 async def test_keystream_factory():
-    from tabula.rebuild.settings import COMPOSE_SEQUENCES, KEYMAPS
+    from tabula.settings import COMPOSE_SEQUENCES, KEYMAPS
 
     send_channel, receive_channel = trio.open_memory_channel(60)
     settings = Settings(

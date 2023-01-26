@@ -3,14 +3,14 @@ import typing
 
 import msgspec
 
-from .commontypes import Size, Rect, Point
+from ..commontypes import Size, Rect, Point
 from ..rendering._cairopango import ffi, lib as clib
 from ..rendering.rendertypes import Alignment, WrapMode, Rendered
-from .util import now
+from ..util import now
 
 if typing.TYPE_CHECKING:
-    from ..rendering.renderer2 import Renderer
-    from .document import DocumentModel
+    from ..rendering.renderer import Renderer
+    from ..editor.document import DocumentModel
 
 
 # https://en.wikipedia.org/wiki/Macron_below

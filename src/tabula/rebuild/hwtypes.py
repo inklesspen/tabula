@@ -6,7 +6,7 @@ import typing
 import msgspec
 
 from tabula.device.keyboard_consts import Key, KeyPress, Led
-from .commontypes import Point, Size, Rect
+from ..commontypes import Point, Size, Rect
 
 
 class ScreenRect(msgspec.Struct, frozen=True):

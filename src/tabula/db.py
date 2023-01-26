@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 import datetime
-import os
 import pathlib
 
 from dateutil.tz import tzlocal
@@ -17,26 +16,14 @@ from sqlalchemy import (
     or_,
     null,
 )
-from sqlalchemy.types import (
-    Boolean,
-    Integer,
-    String,
-    Unicode,
-    UnicodeText,
-    TypeDecorator,
-)
-from sqlalchemy.dialects.sqlite import CHAR, DATE, DATETIME, INTEGER, insert
+from sqlalchemy.types import Integer, UnicodeText, TypeDecorator
+from sqlalchemy.dialects.sqlite import CHAR, DATE, DATETIME, insert
 from sqlalchemy.engine import Engine, Connectable, URL as EngineURL, create_engine
 from sqlalchemy.sql import column, text
 import timeflake
 
-from .device.keyboard_consts import Key
-from .editor.types import Paragraph, Session
-from .util import tabula_data_dir
-
-
-def now():
-    return datetime.datetime.now(tzlocal())
+from .editor.doctypes import Paragraph, Session
+from .util import now
 
 
 @event.listens_for(Engine, "connect")
@@ -78,22 +65,28 @@ class Timeflake(TypeDecorator):
         return timeflake.random()
 
 
-class KeyCode(TypeDecorator):
-    impl = INTEGER
-    cache_ok = True
+class AwareDateTime(TypeDecorator):
+    """
+    A DateTime type which can only store tz-aware DateTimes
+    """
+
+    impl = DATETIME
 
     def process_bind_param(self, value, dialect):
-        if isinstance(value, Key):
-            return value.value
+        if isinstance(value, datetime.datetime):
+            if value.tzinfo is None:
+                raise ValueError("{!r} must be TZ-aware".format(value))
+            else:
+                value = value.astimezone(datetime.timezone.utc)
         return value
 
     def process_result_value(self, value, dialect):
-        if isinstance(value, int):
-            return Key(value)
+        if isinstance(value, datetime.datetime):
+            value = value.replace(tzinfo=datetime.timezone.utc).astimezone(tzlocal())
         return value
 
     def __repr__(self):
-        return "KeyCode()"
+        return "AwareDateTime()"
 
 
 metadata = MetaData()
@@ -103,8 +96,8 @@ session_table = Table(
     metadata,
     Column("id", Timeflake, primary_key=True),
     Column("started_on", DATE, nullable=False, index=True),
-    Column("updated_at", DATETIME, nullable=False, index=True),
-    Column("exported_at", DATETIME, nullable=True, index=True),
+    Column("updated_at", AwareDateTime, nullable=False, index=True),
+    Column("exported_at", AwareDateTime, nullable=True, index=True),
     Column("wordcount", Integer, nullable=True),
 )
 
@@ -114,8 +107,8 @@ sprint_table = Table(
     Column("id", Timeflake, primary_key=True),
     Column("session_id", ForeignKey("sessions.id"), nullable=False, index=True),
     Column("wordcount", Integer, nullable=True),
-    Column("started_at", DATETIME, nullable=False),
-    Column("ended_at", DATETIME, nullable=True),
+    Column("started_at", AwareDateTime, nullable=False),
+    Column("ended_at", AwareDateTime, nullable=True),
 )
 
 paragraph_table = Table(
@@ -127,18 +120,6 @@ paragraph_table = Table(
     UniqueConstraint("session_id", "index"),
     Column("sprint_id", ForeignKey("sprints.id"), nullable=True),
     Column("markdown", UnicodeText, nullable=False),
-)
-
-keyboard_table = Table(
-    "keyboards",
-    metadata,
-    Column("vendor_id", String, primary_key=True),
-    Column("product_id", String, primary_key=True),
-    Column("interface_id", String, primary_key=True),
-    Column("manufacturer", Unicode, nullable=False),
-    Column("product", Unicode, nullable=False),
-    Column("compose_key", KeyCode, nullable=True),
-    Column("active", Boolean, nullable=False),
 )
 
 DB_VERSION = 1
@@ -163,8 +144,7 @@ def set_version(conn: Connectable, version: int):
     conn.execute(text(f"PRAGMA user_version = {version}"))
 
 
-def make_db():
-    sqlite_path = tabula_data_dir() / "tabula.db"
+def make_db(sqlite_path: pathlib.Path):
     exists = sqlite_path.is_file()
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     engine_url = EngineURL.create(
@@ -206,8 +186,10 @@ class TabulaDb:
 
         return session_id
 
-    def list_sessions(self, limit, only_exportable=False):
-        s = select(session_table).order_by(session_table.c.id.desc()).limit(limit)
+    def list_sessions(self, limit=None, only_exportable=False):
+        s = select(session_table).order_by(session_table.c.id.desc())
+        if limit is not None:
+            s = s.limit(limit)
         if only_exportable:
             s = s.where(
                 or_(
@@ -246,3 +228,23 @@ class TabulaDb:
                 ),
             )
             conn.execute(p_on_update, [para.to_db_dict() for para in paragraphs])
+
+    def set_exported_time(self, session_id, timestamp):
+        with self.engine.begin() as conn:
+            conn.execute(
+                session_table.update()
+                .where(session_table.c.id == session_id)
+                .values(exported_at=timestamp)
+            )
+
+    def delete_session(self, session_id):
+        with self.engine.begin() as conn:
+            conn.execute(
+                paragraph_table.delete().where(
+                    paragraph_table.c.session_id == session_id
+                )
+            )
+            conn.execute(
+                sprint_table.delete().where(sprint_table.c.session_id == session_id)
+            )
+            conn.execute(session_table.delete().where(session_table.c.id == session_id))

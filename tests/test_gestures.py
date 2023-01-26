@@ -4,7 +4,7 @@ import typing
 
 import slurry
 
-from tabula.rebuild.commontypes import Point
+from tabula.commontypes import Point
 from tabula.rebuild.hwtypes import (
     TouchEvent,
     TouchReport,
@@ -17,7 +17,7 @@ from tabula.rebuild.gestures import (
     TapRecognizer,
     make_tapstream,
 )
-from tabula.rebuild.util import checkpoint
+from tabula.util import checkpoint
 
 T = typing.TypeVar("T")
 

@@ -9,7 +9,7 @@ from slurry import Pipeline
 from slurry.environments import TrioSection
 import trio
 
-from .commontypes import Point
+from ..commontypes import Point
 from .hwtypes import (
     TouchEvent,
     TouchReport,

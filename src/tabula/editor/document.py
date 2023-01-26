@@ -1,13 +1,17 @@
-# SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
+# SPDX-FileCopyrightText: 2023 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import typing
+import unicodedata
 
 import timeflake
-import trio
 
-from .types import Paragraph
+from .doctypes import Paragraph
+from . import wordcount
+
+if typing.TYPE_CHECKING:
+    from ..db import TabulaDb
 
 
 # https://gankra.github.io/blah/text-hates-you/
@@ -18,7 +22,7 @@ from .types import Paragraph
 # insert U+0302 (COMBINING CIRCUMFLEX ACCENT) into the middle of this cluster, I instead get ế
 # (LATIN SMALL LETTER E WITH CIRCUMFLEX AND ACUTE). This example may sound contrived, but it
 # happens all the time with non-Latin scripts.
-# Notare currently handles attributed text by wrapping portions of the Markdown text in
+# Tabula currently handles attributed text by wrapping portions of the Markdown text in
 # Pango Markup (HTML-ish tags). If we wanted to know about the grapheme clusters and glyphs,
 # we'd have to switch to using PangoAttrList. So we're not going to do that.
 # The cursor is always at the end of the final paragraph. That's it. That's all there is.
@@ -28,14 +32,14 @@ from .types import Paragraph
 # is a subsection of the document (starting and ending between paragraphs, so a paragraph
 # is always completely in the sprint or completely out of it)
 class DocumentModel:
-    def __init__(self, dispatch_channel: trio.abc.SendChannel):
-        self.dispatch_channel = dispatch_channel
+    def __init__(self):
         self.session_id: timeflake.Timeflake = None
         self.sprint_id: timeflake.Timeflake = None
         self.currently: typing.Optional[Paragraph] = None
-        self.buffer: typing.List[str] = []
-        self._contents_by_id: typing.Mapping[timeflake.Timeflake, Paragraph] = {}
-        self._contents_by_index: typing.Mapping[int, Paragraph] = {}
+        self.buffer: list[str] = []
+        self._contents_by_id: dict[timeflake.Timeflake, Paragraph] = {}
+        self._contents_by_index: dict[int, Paragraph] = {}
+        self.unsaved_changes = False
 
     @property
     def has_session(self):
@@ -51,7 +55,6 @@ class DocumentModel:
 
     @contents.setter
     def contents(self, value: typing.List[Paragraph]):
-        p: Paragraph
         self._contents_by_id = {}
         self._contents_by_index = {}
         for p in value:
@@ -60,21 +63,32 @@ class DocumentModel:
 
     @property
     def cursor_para_id(self):
+        if self.currently is None:
+            raise ValueError("The cursor para does not exist.")
         return self.currently.id
+
+    @property
+    def wordcount(self):
+        return wordcount.count_plain_text(
+            wordcount.make_plain_text("\n".join([p.markdown for p in self.contents]))
+        )
+
+    def __len__(self):
+        return len(self._contents_by_id)
 
     def __getitem__(self, key: typing.Union[timeflake.Timeflake, int]):
         if isinstance(key, timeflake.Timeflake):
             return self._contents_by_id[key]
         return self._contents_by_index[key]
 
-    async def load_session(self, session_id, paras):
-        # paras = self.db.load_session_paragraphs(session_id)
+    def load_session(self, session_id: timeflake.Timeflake, db: "TabulaDb"):
+        paras = db.load_session_paragraphs(session_id)
         new_para_needed = paras[-1].markdown != ""
         if new_para_needed:
             new_para = Paragraph(
                 id=timeflake.random(),
                 session_id=session_id,
-                index=len(self.contents),
+                index=len(paras),
                 markdown="",
             )
             paras.append(new_para)
@@ -82,7 +96,22 @@ class DocumentModel:
         self.buffer = []
         self.currently = paras[-1]
         self.session_id = session_id
-        await self.dispatch_channel.send([p.id for p in self.contents])
+        self.sprint_id = None
+        self.unsaved_changes = False
+
+    def save_session(self, db: "TabulaDb"):
+        if not self.has_session or not self.unsaved_changes:
+            return
+        db.save_session(self.session_id, self.wordcount, self.contents)
+
+    def delete_session(self, db: "TabulaDb"):
+        db.delete_session(self.session_id)
+        self.contents = []
+        self.buffer = []
+        self.currently = None
+        self.session_id = None
+        self.sprint_id = None
+        self.unsaved_changes = None
 
     def _update_currently(self, evolve=True):
         if evolve:
@@ -90,26 +119,24 @@ class DocumentModel:
         self._contents_by_id[self.currently.id] = self.currently
         self._contents_by_index[self.currently.index] = self.currently
 
-    async def keystroke(self, keystroke):
+    def keystroke(self, keystroke) -> tuple[timeflake.Timeflake, ...]:
         self.buffer.append(keystroke)
         self._update_currently()
 
-        changed = (self.currently.id,)
-        await self.dispatch_channel.send(changed)
+        self.unsaved_changes = True
 
-    async def backspace(self):
+    def backspace(self) -> tuple[timeflake.Timeflake, ...]:
         if len(self.buffer) == 0:
             # no going back
             return
         del self.buffer[-1]
         self._update_currently()
-        changed = (self.currently.id,)
-        await self.dispatch_channel.send(changed)
 
-    async def new_para(self):
+        self.unsaved_changes = True
+
+    def new_para(self) -> tuple[timeflake.Timeflake, ...]:
         if len(self.buffer) == 0:
             return
-        prev = self.currently
         self.buffer = []
         self.currently = Paragraph(
             id=timeflake.random(),
@@ -119,11 +146,21 @@ class DocumentModel:
             markdown="",
         )
         self._update_currently(evolve=False)
-        changed = (prev.id, self.currently.id)
-        await self.dispatch_channel.send(changed)
+
+        self.unsaved_changes = True
 
     def get_markups(self):
         return [p.markup for p in self.contents]
 
     def get_markup(self, i: int) -> str:
         return self.contents[i].markup
+
+    def export_markdown(self):
+        return "\n\n".join(p.markdown for p in self.contents)
+
+    @staticmethod
+    def graphical_char(c: typing.Optional[str]):
+        if c is None:
+            return False
+        category = unicodedata.category(c)
+        return category == "Zs" or category[0] in ("L", "M", "N", "P", "S")

@@ -1,59 +1,169 @@
-# SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
-#
-# SPDX-License-Identifier: GPL-3.0-or-later
+import datetime
 import pathlib
-import typing
 
-import attr
+import attrs
 import pygtrie
-import tomli
-import trio.lowlevel
+import trio
+import xdg
 
 from .device.keyboard_consts import Key
-from .device.types import InputDevice
-from .util import tabula_data_dir
 
-SETTINGS = trio.lowlevel.RunVar("SETTINGS")
+# Eventually these will be stored in a config file, hence the async load_settings()
+COMPOSE_SEQUENCES = {
+    "< <": "«",
+    "> >": "»",
+    "< '": "‘",
+    "' <": "‘",
+    "> '": "’",
+    "' >": "’",
+    '< "': "“",
+    '" <': "“",
+    '> "': "”",
+    '" >': "”",
+    "' '": "ʼ",
+    ". .": "…",
+    "- - -": "—",
+    "- - .": "–",
+    "! !": "¡",
+    "? ?": "¿",
+    "1 4": "¼",
+    "1 2": "½",
+    "3 4": "¾",
+    "o x": "¤",
+    "x o": "¤",
+    "o c": "©",
+    "o C": "©",
+    "O c": "©",
+    "O C": "©",
+    "p !": "¶",
+    "P !": "¶",
+    "P P": "¶",
+    "A E": "Æ",
+    "a e": "æ",
+    "O E": "Œ",
+    "o e": "œ",
+    "` A": "À",
+    "' A": "Á",
+    "- A": "Ā",
+    "` a": "à",
+    "' a": "á",
+    "- a": "ā",
+    ", C": "Ç",
+    ", c": "ç",
+    "` E": "È",
+    "' E": "É",
+    "- E": "Ē",
+    "` e": "è",
+    "' e": "é",
+    "- e": "ē",
+    "` I": "Ì",
+    "' I": "Í",
+    "- I": "Ī",
+    "` i": "ì",
+    "' i": "í",
+    "- i": "ī",
+    "~ N": "Ñ",
+    "~ n": "ñ",
+    "` O": "Ò",
+    "' O": "Ó",
+    "- O": "Ō",
+    "` o": "ò",
+    "' o": "ó",
+    "- o": "ō",
+    "` U": "Ù",
+    "' U": "Ú",
+    "- U": "Ū",
+    "` u": "ù",
+    "' u": "ú",
+    "- u": "ū",
+    '" u': "ü",
+    "' Y": "Ý",
+    "' y": "ý",
+}
 
-# TODO: allow reading/writing some settings (keyboard info, etc) to sqlite db
+DRAFTING_FONTS = ["Tabula Quattro 8", "Comic Neue 8", "Special Elite 8"]
+
+KEYMAPS = {
+    "KEY_GRAVE": ["`", "~"],
+    "KEY_1": ["1", "!"],
+    "KEY_2": ["2", "@"],
+    "KEY_3": ["3", "#"],
+    "KEY_4": ["4", "$"],
+    "KEY_5": ["5", "%"],
+    "KEY_6": ["6", "^"],
+    "KEY_7": ["7", "&"],
+    "KEY_8": ["8", "*"],
+    "KEY_9": ["9", "("],
+    "KEY_0": ["0", ")"],
+    "KEY_MINUS": ["-", "_"],
+    "KEY_EQUAL": ["=", "+"],
+    "KEY_Q": ["q", "Q"],
+    "KEY_W": ["w", "W"],
+    "KEY_E": ["e", "E"],
+    "KEY_R": ["r", "R"],
+    "KEY_T": ["t", "T"],
+    "KEY_Y": ["y", "Y"],
+    "KEY_U": ["u", "U"],
+    "KEY_I": ["i", "I"],
+    "KEY_O": ["o", "O"],
+    "KEY_P": ["p", "P"],
+    "KEY_LEFTBRACE": ["[", "{"],
+    "KEY_RIGHTBRACE": ["]", "}"],
+    "KEY_BACKSLASH": ["\\", "|"],
+    "KEY_A": ["a", "A"],
+    "KEY_S": ["s", "S"],
+    "KEY_D": ["d", "D"],
+    "KEY_F": ["f", "F"],
+    "KEY_G": ["g", "G"],
+    "KEY_H": ["h", "H"],
+    "KEY_J": ["j", "J"],
+    "KEY_K": ["k", "K"],
+    "KEY_L": ["l", "L"],
+    "KEY_SEMICOLON": [";", ":"],
+    "KEY_APOSTROPHE": ["'", '"'],
+    "KEY_Z": ["z", "Z"],
+    "KEY_X": ["x", "X"],
+    "KEY_C": ["c", "C"],
+    "KEY_V": ["v", "V"],
+    "KEY_B": ["b", "B"],
+    "KEY_N": ["n", "N"],
+    "KEY_M": ["m", "M"],
+    "KEY_COMMA": [",", "<"],
+    "KEY_DOT": [".", ">"],
+    "KEY_SLASH": ["/", "?"],
+    "KEY_SPACE": [" ", " "],
+}
+
+COMPOSE_KEY = "KEY_RIGHTMETA"
 
 
-@attr.frozen(kw_only=True)
+@attrs.define(kw_only=True, frozen=True)
 class Settings:
     drafting_fonts: list[str]
-    export_path: pathlib.Path = attr.field(converter=pathlib.Path)
-    evdev_keyboard: typing.Optional[InputDevice] = attr.field(
-        default=None, converter=InputDevice.from_dict
-    )
-    compose_sequences: pygtrie.Trie = attr.field(
-        converter=pygtrie.Trie, factory=pygtrie.Trie
-    )
-    keymaps: list[dict[Key, str]]
-
-
-def _data_file():
-    return tabula_data_dir() / "config.toml"
+    current_font: str
+    compose_key: Key
+    compose_sequences: pygtrie.Trie
+    keymaps: dict[Key, list[str]]
+    db_path: pathlib.Path
+    export_path: pathlib.Path
+    max_editable_age: datetime.timedelta
 
 
 def _load_settings():
-    data_file = _data_file()
-    if data_file.is_file():
-        settings_dict = tomli.load(data_file.open(mode="rb"))
-        if "keymaps" in settings_dict:
-            for i, keymap in enumerate(settings_dict["keymaps"]):
-                settings_dict["keymaps"][i] = {Key[k]: v for k, v in keymap.items()}
-        if "compose_sequences" in settings_dict:
-            settings_dict["compose_sequences"] = {
-                tuple(k.split()): v
-                for k, v in settings_dict["compose_sequences"].items()
-            }
-        settings = Settings(**settings_dict)
-        return settings
-    else:
-        raise Exception("Settings file not found")
+    return Settings(
+        drafting_fonts=DRAFTING_FONTS,
+        current_font=DRAFTING_FONTS[0],
+        compose_key=Key[COMPOSE_KEY],
+        compose_sequences=pygtrie.Trie(
+            {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
+        ),
+        keymaps={Key[k]: v for k, v in KEYMAPS.items()},
+        db_path=xdg.xdg_state_home() / "tabula" / "tabula.db",
+        export_path=xdg.xdg_data_home() / "tabula",
+        max_editable_age=datetime.timedelta(hours=3),
+    )
 
 
-def load_settings():
-    loaded = _load_settings()
-    SETTINGS.set(loaded)
-    return loaded
+async def load_settings():
+    await trio.sleep(0)
+    return _load_settings()

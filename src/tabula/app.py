@@ -1,102 +1,129 @@
-# SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
-#
-# SPDX-License-Identifier: GPL-3.0-or-later
+import collections.abc
+import sys
+import typing
+
 import trio
+import trio_util
 
-from .device.types import Display, Touchable, Keyboard
-from .editor.keystreams import (
-    ModifierTracking,
-    OnlyPresses,
-    MakeCharacter,
-    ComposeCharacters,
-)
-from .editor.document import DocumentModel
-from .rendering.pango_render import Renderer
-from .rendering.rendertypes import Size
+from .rebuild.hardware import Hardware, RpcHardware
+from .settings import load_settings, Settings
+from .rendering.renderer import Renderer
+from .rebuild.screens import Screen, KeyboardDetect, Switch, Modal, Close, Shutdown
+from .util import invoke
 from .db import make_db
-from .settings import SETTINGS, load_settings
-
-# if known keyboard is not present, launch into keyboard select screen
-# otherwise launch into new/resume session screen
-
-# screens (do the same "loops" approach as in notare, but with a shared renderer from the Tabula class):
-# drafting
-# main menu
-# font menu
-# keyboard settings (select/forget/compose key)
-# session list -> drafting
-# session list -> export
-# help (primary, compose sequences)
-# sprint control
-
-# wordcount on sprint/session/daily levels. daily wc reset time configurable in settings.
+from .editor.document import DocumentModel
 
 
 class Tabula:
-    def __init__(self, *, display: Display, touchable: Touchable, keyboard: Keyboard):
-        self.settings = load_settings()
-        self.db = make_db()
-        self.display = display
-        self.touchable = touchable
-        self.keyboard = keyboard
-        screen_info = display.get_screen_info()
-        self.renderer = Renderer(
-            screen_size=Size(width=screen_info.width, height=screen_info.height),
-            dpi=screen_info.dpi,
+    hardware: Hardware
+    renderer: Renderer
+    screen_stack: trio_util.AsyncValue[list[Screen]]
+
+    def __init__(self, settings: Settings):
+        # TODO: pick a subclass of Hardware based on some config knob
+        self.settings = settings
+        self.db = make_db(settings.db_path)
+        self.document = DocumentModel()
+        self.screen_stack = trio_util.AsyncValue([])
+
+    def invoke_screen(self, screen: typing.Type[Screen], **additional_kwargs):
+        return invoke(
+            screen,
+            settings=self.settings,
+            renderer=self.renderer,
+            hardware=self.hardware,
+            db=self.db,
+            document=self.document,
+            **additional_kwargs
         )
-        # TODO: pass dispatch channel
-        self.document = DocumentModel(None)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        event_send_channel, event_receive_channel = trio.open_memory_channel(0)
+        self.hardware = RpcHardware(event_send_channel.clone(), self.settings)
+
+        async with trio.open_nursery() as nursery:
+            nursery.start_soon(
+                self.dispatch_events, event_receive_channel, nursery.cancel_scope.cancel
+            )
+            await nursery.start(self.hardware.run)
+            screen_info = await self.hardware.get_screen_info()
+            self.renderer = Renderer(screen_info)
+            self.screen_stack.value = [
+                self.invoke_screen(KeyboardDetect, on_startup=True)
+            ]
+            await self.hardware.clear_screen()
+            nursery.start_soon(self.periodic_save_doc, trio_util.periodic(5))
+
+            task_status.started()
+
+    async def periodic_save_doc(self, trigger):
+        async for _ in trigger:
+            self.document.save_session(self.db)
+
+    async def dispatch_events(
+        self,
+        receive_channel: trio.MemoryReceiveChannel,
+        cancel_callback: collections.abc.Callable[[], None],
+        *,
+        task_status=trio.TASK_STATUS_IGNORED
+    ):
         task_status.started()
         while True:
-            trio.sleep(1)
+            await self.screen_stack.wait_value(lambda v: len(v) > 0)
+            current_screen = self.screen_stack.value[-1]
+            next_action = await current_screen.run(receive_channel)
+            match next_action:
+                case Switch():
+                    new_screen = self.invoke_screen(
+                        next_action.new_screen, **next_action.kwargs
+                    )
+                    self.screen_stack.value[-1] = new_screen
+                case Modal():
+                    print(next_action)
+                    modal_screen = self.invoke_screen(
+                        next_action.modal, **next_action.kwargs
+                    )
+                    self.screen_stack.value.append(modal_screen)
+                case Close():
+                    print(next_action)
+                    self.screen_stack.value.pop()
+                case Shutdown():
+                    # TODO: clean shutdown tasks?
+                    print("Shutting down…")
+                    # This RPC never actually gets sent because of the cancel callback.
+                    # Waiting a few seconds allows it to get sent, but there must be a better way.
+                    await self.hardware.clear_screen()
+                    await trio.sleep(0.5)
+                    cancel_callback()
+
+        # incoming events need to be filtered and processed
+        # KeyEvent -> AnnotatedKeyEvent
+        # TouchReport -> ???
+        # PowerButtonPress -> ???
+        # once processed, events need to be dispatched to the facing screen
+        # maybe screens should be able to choose not to get composes though?
+
+        # continue to handle keymaps and composes in the Hardware object, but each screen can choose to disable or enable composes when becoming front
+        # when enabling composes (because a screen became front), throw away any in-progress compose state and start fresh
+
+        # titlebar/statusbar/etc only needs to be shown on drafting screen, so that does not have to be independent
+
+    @classmethod
+    async def start_app(cls):
+        settings = await load_settings()
+        app = cls(settings)
+        await app.run()
 
 
-def kobo():
-    from .device.kobo_keyboard import EventKeyboard
+def main(argv=sys.argv):
+    """
+    Args:
+        argv (list): List of arguments
 
-    keyboard_cls = EventKeyboard
-    pass
+    Returns:
+        int: A return code
 
-
-def tkinter():
-    from .device.tkinter_screen import TkTouchScreen
-
-    screen = TkTouchScreen()
-    app = Tabula(
-        display=screen,
-        touchable=screen,
-        keyboard=screen,
-    )
-
-
-async def testit():
-    settings = load_settings()
-    from .device.tkinter_screen import TkTouchScreen
-
-    screen = TkTouchScreen()
-    keyboard = ComposeCharacters(
-        MakeCharacter(OnlyPresses(ModifierTracking(screen)), settings), settings
-    )
-    async with trio.open_nursery() as nursery:
-
-        async def log_keys():
-            async for event in keyboard.keystream():
-                print(event)
-                # if event.character is not None:
-                #     print(event.character)
-                # else:
-                #     print(event)
-
-        async def log_touches():
-            async for event in screen.touchstream():
-                print(event)
-
-        # nursery.start_soon(log_keys)
-        nursery.start_soon(log_touches)
-        await screen.run()
-
-
-def stuff():
-    trio.run(testit)
+    Does stuff.
+    """
+    trio.run(Tabula.start_app)
+    return 0

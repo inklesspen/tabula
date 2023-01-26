@@ -10,8 +10,8 @@ import pygtrie
 import trio
 
 from .hwtypes import KeyEvent, Key, KeyPress, ModifierAnnotation, AnnotatedKeyEvent
-from .settings import Settings
-from .util import evolve
+from ..settings import Settings
+from ..util import evolve
 
 # stage 1: track modifier keydown/up and annotate keystream with current modifiers
 class ModifierTracking(TrioSection):

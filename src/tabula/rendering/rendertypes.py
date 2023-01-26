@@ -9,7 +9,7 @@ import typing
 import msgspec
 
 from ._cairopango import ffi, lib as clib
-from tabula.rebuild.commontypes import Point, Size, Rect, ScreenInfo
+from ..commontypes import Point, Size, Rect, ScreenInfo
 
 
 def _c_enum(enum_t: str, python_name: str, **extras: int) -> typing.Type[enum.IntEnum]:
@@ -67,28 +67,3 @@ class Margins(msgspec.Struct, frozen=True):
     bottom: int
     left: int
     right: int
-
-
-class Opts(msgspec.Struct):
-    dpi: float = 96.0
-    hinting: HintMode = HintMode.DEFAULT
-    hint_metrics: HintMetrics = HintMetrics.DEFAULT
-    subpixel_order: SubpixelOrder = SubpixelOrder.DEFAULT
-    antialias: Antialias = Antialias.DEFAULT
-    screen_size: Size = Size(width=0, height=0)
-
-
-class RenderOpts(msgspec.Struct):
-    font: str = ""
-    text: str = ""
-    markup: bool = False
-    draw_border: bool = False
-    justify: bool = False
-    alignment: Alignment = Alignment.LEFT
-    single_par: bool = False
-    wrap: WrapMode = WrapMode.WORD_CHAR
-    margin_t: int = 10
-    margin_r: int = 10
-    margin_b: int = 10
-    margin_l: int = 10
-    clear_before_render: bool = True

@@ -19,7 +19,7 @@ from .hwtypes import (
     TouchCoordinateTransform,
     KeyboardDisconnect,
 )
-from .commontypes import Rect, Size, ScreenInfo
+from ..commontypes import Rect, Size, ScreenInfo
 from .rpctypes import (
     KoboRequests,
     HostRequests,
@@ -36,8 +36,8 @@ from .rpctypes import (
 )
 from .keystreams import make_keystream
 from .gestures import make_tapstream
-from .settings import Settings
-from .util import checkpoint
+from ..settings import Settings
+from ..util import checkpoint
 
 
 class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):

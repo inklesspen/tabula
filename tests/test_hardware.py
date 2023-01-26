@@ -22,10 +22,10 @@ from tabula.rebuild.hwtypes import (
     AnnotatedKeyEvent,
     ModifierAnnotation,
 )
-from tabula.rebuild.settings import Settings
-from tabula.rebuild.util import checkpoint
+from tabula.settings import Settings
+from tabula.util import checkpoint
 from tabula.rebuild.hardware import EventTestHardware
-from tabula.rebuild.settings import COMPOSE_SEQUENCES, KEYMAPS
+from tabula.settings import COMPOSE_SEQUENCES, KEYMAPS
 
 
 async def receive_events(

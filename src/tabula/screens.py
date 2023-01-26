@@ -8,24 +8,23 @@ import msgspec
 import timeflake
 import trio
 
-from .hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
+from .rebuild.hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
 from .commontypes import Point, Size, Rect
-from ..rendering.rendertypes import (
+from .rendering.rendertypes import (
     Rendered,
     Margins,
     Alignment,
     WrapMode,
 )
-from ..rendering._cairopango import ffi, lib as clib
-from .document import DocumentModel
-from .doctypes import Session
+from .editor.document import DocumentModel
+from .editor.doctypes import Session
 from .util import checkpoint, now, humanized_delta, TickCaller
-from .layout import LayoutManager, StatusLayout
+from .rebuild.layout import LayoutManager, StatusLayout
 
 if typing.TYPE_CHECKING:
-    from .hardware import Hardware
+    from .rebuild.hardware import Hardware
     from .settings import Settings
-    from ..rendering.renderer2 import Renderer
+    from .rendering.renderer import Renderer
     from .db import TabulaDb
     import pathlib
 
