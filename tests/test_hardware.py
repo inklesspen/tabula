@@ -8,14 +8,14 @@ import pygtrie
 import slurry
 import trio
 
-from tabula.rebuild.keystreams import (
+from tabula.device.keystreams import (
     ModifierTracking,
     OnlyPresses,
     MakeCharacter,
     ComposeCharacters,
     make_keystream,
 )
-from tabula.rebuild.hwtypes import (
+from tabula.device.hwtypes import (
     Key,
     KeyPress,
     KeyEvent,
@@ -24,7 +24,7 @@ from tabula.rebuild.hwtypes import (
 )
 from tabula.settings import Settings
 from tabula.util import checkpoint
-from tabula.rebuild.hardware import EventTestHardware
+from tabula.device.hardware import EventTestHardware
 from tabula.settings import COMPOSE_SEQUENCES, KEYMAPS
 
 

@@ -10,7 +10,7 @@ from ..util import now
 
 if typing.TYPE_CHECKING:
     from ..rendering.renderer import Renderer
-    from ..editor.document import DocumentModel
+    from .document import DocumentModel
 
 
 # https://en.wikipedia.org/wiki/Macron_below

@@ -8,7 +8,7 @@ import msgspec
 import timeflake
 import trio
 
-from .rebuild.hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
+from .device.hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
 from .commontypes import Point, Size, Rect
 from .rendering.rendertypes import (
     Rendered,
@@ -19,10 +19,10 @@ from .rendering.rendertypes import (
 from .editor.document import DocumentModel
 from .editor.doctypes import Session
 from .util import checkpoint, now, humanized_delta, TickCaller
-from .rebuild.layout import LayoutManager, StatusLayout
+from .editor.layout import LayoutManager, StatusLayout
 
 if typing.TYPE_CHECKING:
-    from .rebuild.hardware import Hardware
+    from .device.hardware import Hardware
     from .settings import Settings
     from .rendering.renderer import Renderer
     from .db import TabulaDb

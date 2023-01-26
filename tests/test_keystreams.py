@@ -9,14 +9,14 @@ import pygtrie
 import slurry
 import trio
 
-from tabula.rebuild.keystreams import (
+from tabula.device.keystreams import (
     ModifierTracking,
     OnlyPresses,
     MakeCharacter,
     ComposeCharacters,
     make_keystream,
 )
-from tabula.rebuild.hwtypes import (
+from tabula.device.hwtypes import (
     Key,
     KeyPress,
     KeyEvent,

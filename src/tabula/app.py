@@ -5,10 +5,10 @@ import typing
 import trio
 import trio_util
 
-from .rebuild.hardware import Hardware, RpcHardware
+from .device.hardware import Hardware, RpcHardware
 from .settings import load_settings, Settings
 from .rendering.renderer import Renderer
-from .rebuild.screens import Screen, KeyboardDetect, Switch, Modal, Close, Shutdown
+from .screens import Screen, KeyboardDetect, Switch, Modal, Close, Shutdown
 from .util import invoke
 from .db import make_db
 from .editor.document import DocumentModel

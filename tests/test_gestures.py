@@ -5,13 +5,13 @@ import typing
 import slurry
 
 from tabula.commontypes import Point
-from tabula.rebuild.hwtypes import (
+from tabula.device.hwtypes import (
     TouchEvent,
     TouchReport,
     PersistentTouchReport,
     TapEvent,
 )
-from tabula.rebuild.gestures import (
+from tabula.device.gestures import (
     RecognitionState,
     MakePersistent,
     TapRecognizer,
