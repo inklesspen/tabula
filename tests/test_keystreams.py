@@ -223,6 +223,18 @@ async def test_make_characters():
         Key.KEY_W: ["w", "W"],
         Key.KEY_R: ["r", "R"],
         Key.KEY_D: ["d", "D"],
+        Key.KEY_1: ["1", "!"],
+        Key.KEY_2: ["2", "@"],
+        Key.KEY_3: ["3", "#"],
+        Key.KEY_4: ["4", "$"],
+        Key.KEY_5: ["5", "%"],
+        Key.KEY_6: ["6", "^"],
+        Key.KEY_7: ["7", "&"],
+        Key.KEY_8: ["8", "*"],
+        Key.KEY_9: ["9", "("],
+        Key.KEY_0: ["0", ")"],
+        Key.KEY_MINUS: ["-", "_"],
+        Key.KEY_EQUAL: ["=", "+"],
     }
     async with aclosing(
         make_async_source(
@@ -253,8 +265,22 @@ async def test_make_characters():
                 KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
                 KeyEvent(key=Key.KEY_D, press=KeyPress.PRESSED),
                 KeyEvent(key=Key.KEY_D, press=KeyPress.RELEASED),
+                # Numbers and punctuation should not be affected by capslock
+                KeyEvent(key=Key.KEY_1, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_1, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.RELEASED),
                 KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
                 KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                # But they should be affected by shift
+                KeyEvent(key=Key.KEY_RIGHTSHIFT, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_1, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_1, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTSHIFT, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
             ]
         )
     ) as keysource, slurry.Pipeline.create(
@@ -341,11 +367,47 @@ async def test_make_characters():
                 character="D",
             ),
             AnnotatedKeyEvent(
+                key=Key.KEY_1,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(capslock=True),
+                character="1",
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_EQUAL,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(capslock=True),
+                character="=",
+            ),
+            AnnotatedKeyEvent(
                 key=Key.KEY_CAPSLOCK,
                 press=KeyPress.PRESSED,
                 annotation=ModifierAnnotation(),
                 is_modifier=True,
                 is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_RIGHTSHIFT,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(shift=True),
+                is_modifier=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_1,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(shift=True),
+                character="!",
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_LEFTSHIFT,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(shift=True),
+                is_modifier=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_EQUAL,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(shift=True),
+                character="+",
             ),
         ]
         assert results == expected
@@ -566,6 +628,8 @@ async def test_keystream_factory():
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
         ),
         keymaps={Key[k]: v for k, v in KEYMAPS.items()},
+        export_path="",
+        max_editable_age=None,
     )
     key_events = [
         KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 from contextlib import asynccontextmanager, aclosing
+import unicodedata
 
 from slurry import Pipeline
 from slurry.environments import TrioSection
@@ -88,12 +89,14 @@ class MakeCharacter(TrioSection):
         event: AnnotatedKeyEvent
         async with aclosing(input) as source:
             async for event in source:
-                is_shifted = event.annotation.shift ^ event.annotation.capslock
-                level = 1 if is_shifted else 0
                 if event.key in self.keymaps:
-                    await output(
-                        evolve(event, character=self.keymaps[event.key][level])
-                    )
+                    keymap = self.keymaps[event.key]
+                    is_shifted = event.annotation.shift
+                    is_letter = unicodedata.category(keymap[0]).startswith("L")
+                    if is_letter:
+                        is_shifted ^= event.annotation.capslock
+                    level = 1 if is_shifted else 0
+                    await output(evolve(event, character=keymap[level]))
                 else:
                     await output(event)
 
@@ -132,7 +135,7 @@ class ComposeCharacters(TrioSection):
                             AnnotatedKeyEvent(
                                 key=Key.KEY_COMPOSE,
                                 press=KeyPress.PRESSED,
-                                annotation=ModifierAnnotation(),
+                                annotation=evolve(event.annotation, compose=False),
                                 is_modifier=True,
                                 is_led_able=True,
                             )
@@ -171,7 +174,9 @@ class ComposeCharacters(TrioSection):
                             AnnotatedKeyEvent(
                                 key=Key.KEY_COMPOSE,
                                 press=KeyPress.PRESSED,
-                                annotation=ModifierAnnotation(compose=True),
+                                annotation=ModifierAnnotation(
+                                    compose=True, capslock=event.annotation.capslock
+                                ),
                                 is_modifier=True,
                                 is_led_able=True,
                             )

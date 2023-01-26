@@ -1,3 +1,4 @@
+import collections.abc
 import datetime
 import inspect
 import typing
@@ -5,6 +6,8 @@ import typing
 from dateutil.tz import tzlocal
 import msgspec
 import trio
+import trio_util
+import tricycle
 
 
 async def checkpoint():
@@ -95,3 +98,20 @@ def humanized_delta(delta: datetime.timedelta, allow_future: bool = False):
     if days < 9:
         return relative_template.format("several days")
     return relative_template.format("a good long while")
+
+
+class TickCaller(tricycle.BackgroundObject, daemon=True):
+    def __init__(
+        self,
+        period_length: int,
+        callback: collections.abc.Callable[[], collections.abc.Awaitable[None]],
+    ):
+        self.length = period_length
+        self.callback = callback
+
+    async def __open__(self) -> None:
+        self.nursery.start_soon(self.ticker, trio_util.periodic(self.length))
+
+    async def ticker(self, trigger):
+        async for _ in trigger:
+            await self.callback()

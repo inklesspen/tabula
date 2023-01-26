@@ -68,6 +68,8 @@ class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
 class Hardware(metaclass=abc.ABCMeta):
     screen_size: Size
     touch_coordinate_transform: TouchCoordinateTransform
+    capslock_led: bool
+    compose_led: bool
 
     def __init__(
         self,
@@ -76,6 +78,8 @@ class Hardware(metaclass=abc.ABCMeta):
     ):
         self.event_channel = event_channel
         self.settings = settings
+        self.capslock_led = False
+        self.compose_led = False
         self.keystream_cancel_scope = trio.CancelScope()
         self.keystream = None
         self.keystream_send_channel = None
@@ -121,17 +125,22 @@ class Hardware(metaclass=abc.ABCMeta):
                     event: AnnotatedKeyEvent
                     async for event in keystream:
                         if event.is_led_able:
-                            # TODO: only set these if different from previous value
-                            await self.set_led_state(
-                                SetLed(
-                                    led=Led.LED_CAPSL, state=event.annotation.capslock
+                            if event.annotation.capslock != self.capslock_led:
+                                await self.set_led_state(
+                                    SetLed(
+                                        led=Led.LED_CAPSL,
+                                        state=event.annotation.capslock,
+                                    )
                                 )
-                            )
-                            await self.set_led_state(
-                                SetLed(
-                                    led=Led.LED_COMPOSE, state=event.annotation.compose
+                                self.capslock_led = event.annotation.capslock
+                            if event.annotation.compose != self.compose_led:
+                                await self.set_led_state(
+                                    SetLed(
+                                        led=Led.LED_COMPOSE,
+                                        state=event.annotation.compose,
+                                    )
                                 )
-                            )
+                                self.compose_led = event.annotation.compose
                         await self.event_channel.send(event)
 
     async def _handle_touchstream(self, *, task_status=trio.TASK_STATUS_IGNORED):

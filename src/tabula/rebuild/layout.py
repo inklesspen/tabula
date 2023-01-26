@@ -6,6 +6,7 @@ import msgspec
 from .commontypes import Size, Rect, Point
 from ..rendering._cairopango import ffi, lib as clib
 from ..rendering.rendertypes import Alignment, WrapMode, Rendered
+from .util import now
 
 if typing.TYPE_CHECKING:
     from ..rendering.renderer2 import Renderer
@@ -178,3 +179,80 @@ class LayoutManager:
                 spread=Size(width=self.render_width, height=self.render_height),
             ),
         )
+
+
+class StatusLayout:
+    status_font = "Crimson Pro 12"
+
+    def __init__(self, renderer: "Renderer", document: "DocumentModel"):
+        self.renderer = renderer
+        self.document = document
+        self.render_width = renderer.screen_info.size.width
+        screen_size = self.renderer.screen_info.size
+        self.status_y_bottom = screen_size.height - 50
+        self.layout = ffi.gc(
+            clib.pango_layout_new(renderer.context), clib.g_object_unref
+        )
+        self.setup_layout()
+        self.capslock = False
+        self.compose = False
+
+    def set_leds(self, capslock: bool, compose: bool):
+        self.capslock = capslock
+        self.compose = compose
+
+    def setup_layout(self):
+        clib.pango_layout_set_auto_dir(self.layout, False)
+        clib.pango_layout_set_ellipsize(self.layout, clib.PANGO_ELLIPSIZE_NONE)
+        clib.pango_layout_set_justify(self.layout, False)
+        clib.pango_layout_set_single_paragraph_mode(self.layout, False)
+        clib.pango_layout_set_wrap(self.layout, WrapMode.WORD_CHAR)
+        clib.pango_layout_set_width(
+            self.layout,
+            self.render_width * clib.PANGO_SCALE,
+        )
+        clib.pango_layout_set_alignment(self.layout, Alignment.CENTER)
+
+        with self.renderer._make_font_description(self.status_font) as font_description:
+            clib.pango_layout_set_font_description(self.layout, font_description)
+
+    def render(self):
+        # TODO: draw status area
+        # Line 1: Sprint status: timer, wordcount, hotkey reminder
+        # Line 2: Session wordcount, current time, battery status, capslock, compose
+        wordcount = self.document.wordcount
+        wordcount_status = (
+            "1 word" if wordcount == 1 else "{:,} words".format(wordcount)
+        )
+        wordcount_time_line = " — ".join((wordcount_status, now().strftime("%H:%M")))
+        leds = []
+        if self.capslock:
+            leds.append("CAPSLOCK")
+        if self.compose:
+            leds.append("COMPOSE")
+        led_line = "   ".join(leds)
+        status_line = "\n".join((wordcount_time_line, led_line))
+        clib.pango_layout_set_markup(self.layout, status_line.encode("utf-8"), -1)
+        with ffi.new("PangoRectangle *") as logical_rect:
+            clib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, logical_rect)
+            status_y_top = self.status_y_bottom - logical_rect.height
+            markup_size = Size(width=self.render_width, height=logical_rect.height)
+
+        with self.renderer.create_surface(
+            markup_size
+        ) as markup_surface, self.renderer.create_cairo_context(
+            markup_surface
+        ) as markup_context:
+            clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
+            clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
+            clib.cairo_paint(markup_context)
+            clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
+            clib.pango_cairo_show_layout(markup_context, self.layout)
+            clib.cairo_surface_flush(markup_surface)
+            rendered = Rendered(
+                image=self.renderer.surface_to_bytes(
+                    markup_surface, markup_size, skip_inversion=True
+                ),
+                extent=Rect(origin=Point(x=0, y=status_y_top), spread=markup_size),
+            )
+        return rendered

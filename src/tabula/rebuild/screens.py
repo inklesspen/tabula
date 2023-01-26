@@ -19,8 +19,8 @@ from ..rendering.rendertypes import (
 from ..rendering._cairopango import ffi, lib as clib
 from .document import DocumentModel
 from .doctypes import Session
-from .util import checkpoint, now, humanized_delta
-from .layout import LayoutManager
+from .util import checkpoint, now, humanized_delta, TickCaller
+from .layout import LayoutManager, StatusLayout
 
 if typing.TYPE_CHECKING:
     from .hardware import Hardware
@@ -471,105 +471,67 @@ class Drafting(Screen):
         self.db = db
         self.document = document
         self.layout_manager = LayoutManager(self.renderer, self.document)
+        self.status_layout = StatusLayout(self.renderer, self.document)
 
-    # titlebar/statusbar/etc only needs to be shown on drafting screen, so that does not have to be independent
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         self.hardware.reset_keystream(enable_composes=True)
         await self.hardware.clear_screen()
-        await self.handle_dirty_updates(
-            [p.id for p in self.document.contents], force=True
-        )
+        await self.render_document()
+        await self.render_status()
 
-        while True:
-            event = await event_channel.receive()
-            match event:
-                case AnnotatedKeyEvent():
-                    if self.document.graphical_char(event.character):
-                        await self.handle_dirty_updates(
+        async with TickCaller(15, self.tick):
+            while True:
+                event = await event_channel.receive()
+                match event:
+                    case AnnotatedKeyEvent():
+                        if event.is_led_able:
+                            self.status_layout.set_leds(
+                                capslock=event.annotation.capslock,
+                                compose=event.annotation.compose,
+                            )
+                        if self.document.graphical_char(event.character):
                             self.document.keystroke(event.character)
-                        )
-                    elif event.key is Key.KEY_ENTER:
-                        await self.handle_dirty_updates(self.document.new_para())
+                            await self.render_document()
+                        elif event.key is Key.KEY_ENTER:
+                            self.document.new_para()
+                            await self.render_document()
+                            self.document.save_session(self.db)
+                        elif event.key is Key.KEY_BACKSPACE:
+                            self.document.backspace()
+                            await self.render_document()
+                        elif event.key is Key.KEY_F1:
+                            return Modal(Help, kwargs={})
+                        elif event.key is Key.KEY_F12:
+                            if self.document.wordcount == 0:
+                                print("Deleting empty doc")
+                                self.document.delete_session(self.db)
+                                return Switch(SystemMenu, kwargs={})
+                            self.document.save_session(self.db)
+                            return Modal(SystemMenu, kwargs={"modal": True})
+                        await self.render_status()
+                    case KeyboardDisconnect():
                         self.document.save_session(self.db)
-                    elif event.key is Key.KEY_BACKSPACE:
-                        await self.handle_dirty_updates(self.document.backspace())
-                    elif event.key is Key.KEY_F1:
-                        return Modal(Help, kwargs={})
-                    elif event.key is Key.KEY_F12:
-                        if self.document.wordcount == 0:
-                            self.document.delete_session(self.db)
-                            return Switch(SystemMenu, kwargs={})
-                        self.document.save_session(self.db)
-                        return Modal(SystemMenu, kwargs={"modal": True})
-                case KeyboardDisconnect():
-                    self.document.save_session(self.db)
-                    print("Time to detect keyboard again.")
-                    return Modal(KeyboardDetect, kwargs={})
+                        print("Time to detect keyboard again.")
+                        return Modal(KeyboardDetect, kwargs={})
 
-    async def handle_dirty_updates(
-        self,
-        dirty_paragraph_ids: collections.abc.Iterable[timeflake.Timeflake],
-        force=False,
-    ):
-        # TODO: remove unused arguments
-        # TODO: draw status area
-        # Line 1: Sprint status: timer, wordcount, hotkey reminder
-        # Line 2: Session wordcount, current time, battery status, capslock, compose
-        # TODO: Add various symbols (battery, capslock, compose) to Tabula Quattro
-        rendered = self.layout_manager.render_update(self.settings.current_font)
+    async def tick(self):
+        self.document.save_session(self.db)
+        await self.render_status()
+
+    async def render_status(self):
+        rendered = self.status_layout.render()
         await self.hardware.display_pixels(
             imagebytes=rendered.image, rect=rendered.extent
         )
 
-        # TODO: update the status line on a tick, instead of just whenever there's a text change
-        # that way the clock can be kept up to date
-        # TODO: extract into a status line version of LayoutManager
-        screen_size = self.renderer.screen_info.size
-        status_y_bottom = screen_size.height - 50
-        layout = ffi.gc(
-            clib.pango_layout_new(self.renderer.context), clib.g_object_unref
-        )
-        clib.pango_layout_set_auto_dir(layout, False)
-        clib.pango_layout_set_ellipsize(layout, clib.PANGO_ELLIPSIZE_NONE)
-        clib.pango_layout_set_justify(layout, False)
-        clib.pango_layout_set_single_paragraph_mode(layout, False)
-        clib.pango_layout_set_wrap(layout, WrapMode.WORD_CHAR)
-        clib.pango_layout_set_width(
-            layout,
-            screen_size.width * clib.PANGO_SCALE,
-        )
-        clib.pango_layout_set_alignment(layout, Alignment.CENTER)
-
-        with self.renderer._make_font_description(self.status_font) as font_description:
-            clib.pango_layout_set_font_description(layout, font_description)
-
-        status_line = "{0:,} words — {1:%H:%M}".format(self.document.wordcount, now())
-        clib.pango_layout_set_text(layout, status_line.encode("utf-8"), -1)
-        with ffi.new("PangoRectangle *") as logical_rect:
-            clib.pango_layout_get_pixel_extents(layout, ffi.NULL, logical_rect)
-            status_y_top = status_y_bottom - logical_rect.height
-            markup_size = Size(width=screen_size.width, height=logical_rect.height)
-        markup_surface = self.renderer.create_surface(markup_size)
-        with self.renderer.create_cairo_context(markup_surface) as markup_context:
-            clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
-            clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
-            clib.cairo_paint(markup_context)
-            clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
-            clib.pango_cairo_show_layout(markup_context, layout)
-        clib.cairo_surface_flush(markup_surface)
-        rendered = Rendered(
-            image=self.renderer.surface_to_bytes(
-                markup_surface, markup_size, skip_inversion=True
-            ),
-            extent=Rect(origin=Point(x=0, y=status_y_top), spread=markup_size),
-        )
+    async def render_document(self):
+        rendered = self.layout_manager.render_update(self.settings.current_font)
         await self.hardware.display_pixels(
             imagebytes=rendered.image, rect=rendered.extent
         )
 
 
 class SessionList(ButtonMenu):
-    # TODO: reuse this class for picking a session to export also.
     def __init__(
         self,
         *,
@@ -694,6 +656,7 @@ class SessionList(ButtonMenu):
         return
 
     async def delete_session(self):
+        self.db.delete_session(self.selected_session.id)
         await checkpoint()
         self.selected_session = None
         return

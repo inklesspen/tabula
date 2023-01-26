@@ -88,7 +88,7 @@ class DocumentModel:
             new_para = Paragraph(
                 id=timeflake.random(),
                 session_id=session_id,
-                index=len(self.contents),
+                index=len(paras),
                 markdown="",
             )
             paras.append(new_para)
@@ -124,24 +124,19 @@ class DocumentModel:
         self._update_currently()
 
         self.unsaved_changes = True
-        changed = (self.currently.id,)
-        return changed
 
     def backspace(self) -> tuple[timeflake.Timeflake, ...]:
         if len(self.buffer) == 0:
             # no going back
-            return tuple()
+            return
         del self.buffer[-1]
         self._update_currently()
 
         self.unsaved_changes = True
-        changed = (self.currently.id,)
-        return changed
 
     def new_para(self) -> tuple[timeflake.Timeflake, ...]:
         if len(self.buffer) == 0:
-            return tuple()
-        prev = self.currently
+            return
         self.buffer = []
         self.currently = Paragraph(
             id=timeflake.random(),
@@ -153,8 +148,6 @@ class DocumentModel:
         self._update_currently(evolve=False)
 
         self.unsaved_changes = True
-        changed = (prev.id, self.currently.id)
-        return changed
 
     def get_markups(self):
         return [p.markup for p in self.contents]

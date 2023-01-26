@@ -77,6 +77,8 @@ async def test_event_handling_basic():
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
         ),
         keymaps={Key[k]: v for k, v in KEYMAPS.items()},
+        export_path="",
+        max_editable_age=None,
     )
 
     raw_events = [
@@ -121,6 +123,8 @@ async def test_event_handling_resets():
             {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
         ),
         keymaps={Key[k]: v for k, v in KEYMAPS.items()},
+        export_path="",
+        max_editable_age=None,
     )
 
     async with trio.open_nursery() as nursery:
