@@ -1,13 +1,30 @@
+import enum
 import collections.abc
 import datetime
 import inspect
 import typing
+from os.path import commonprefix
 
 from dateutil.tz import tzlocal
 import msgspec
 import trio
 import trio_util
 import tricycle
+
+if typing.TYPE_CHECKING:
+    from _cffi_backend import FFI as FFIType
+
+
+def make_c_enum(
+    ffi: "FFIType", enum_t: str, python_name: str, **extras: int
+) -> typing.Type[enum.IntEnum]:
+    ctype = ffi.typeof(enum_t)
+    prefix = commonprefix(tuple(ctype.relements.keys()))
+    values: dict[str, int] = {
+        k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())
+    }
+    values.update(extras)
+    return enum.IntEnum(python_name, values)
 
 
 async def checkpoint():

@@ -2,39 +2,28 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import enum
-from os.path import commonprefix
-import typing
-
 import msgspec
 
 from ._cairopango import ffi, lib as clib
 from ..commontypes import Point, Size, Rect, ScreenInfo
+from ..util import make_c_enum
 
 
-def _c_enum(enum_t: str, python_name: str, **extras: int) -> typing.Type[enum.IntEnum]:
-    ctype = ffi.typeof(enum_t)
-    prefix = commonprefix(tuple(ctype.relements.keys()))
-    values: dict[str, int] = {
-        k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())
-    }
-    values.update(extras)
-    return enum.IntEnum(python_name, values)
+HintMode = make_c_enum(
+    ffi, "cairo_hint_style_t", "HintMode", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT
+)
 
+SubpixelOrder = make_c_enum(ffi, "cairo_subpixel_order_t", "SubpixelOrder")
 
-HintMode = _c_enum("cairo_hint_style_t", "HintMode", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT)
+Antialias = make_c_enum(ffi, "cairo_antialias_t", "Antialias")
 
-SubpixelOrder = _c_enum("cairo_subpixel_order_t", "SubpixelOrder")
+HintMetrics = make_c_enum(ffi, "cairo_hint_metrics_t", "HintMetrics")
 
-Antialias = _c_enum("cairo_antialias_t", "Antialias")
+WrapMode = make_c_enum(ffi, "PangoWrapMode", "WrapMode")
 
-HintMetrics = _c_enum("cairo_hint_metrics_t", "HintMetrics")
+Alignment = make_c_enum(ffi, "PangoAlignment", "Alignment")
 
-WrapMode = _c_enum("PangoWrapMode", "WrapMode")
-
-Alignment = _c_enum("PangoAlignment", "Alignment")
-
-CairoStatus = _c_enum("cairo_status_t", "CairoStatus")
+CairoStatus = make_c_enum(ffi, "cairo_status_t", "CairoStatus")
 
 
 class AffineTransform(msgspec.Struct, frozen=True):
