@@ -41,7 +41,12 @@ class MakePersistent(TrioSection):
             report: TouchReport
             async for report in source:
                 by_slot = [None, None]
-                report_data = {"began": [], "moved": [], "ended": []}
+                report_data = {
+                    "began": [],
+                    "moved": [],
+                    "ended": [],
+                    "timestamp": report.timestamp,
+                }
                 for t in report.touches:
                     by_slot[t.slot] = t
                 for i in (0, 1):
@@ -53,7 +58,6 @@ class MakePersistent(TrioSection):
                             touch_id=self.id_counter,
                             location=Point(t.x, t.y),
                             max_pressure=t.pressure,
-                            timestamp=t.timestamp,
                             phase=TouchPhase.BEGAN,
                         )
                         report_data["began"].append(pt)
@@ -70,7 +74,6 @@ class MakePersistent(TrioSection):
                         t: TouchEvent = by_slot[i]
                         pt: PersistentTouch = self.slots[i]
                         pt.phase = TouchPhase.STATIONARY
-                        pt.timestamp = t.timestamp
                         pt.max_pressure = max(pt.max_pressure, t.pressure)
                         new_location = Point(t.x, t.y)
                         if abs(new_location - pt.location) > self.move_threshold:
@@ -111,7 +114,7 @@ class TapRecognizer(TrioSection):
                 self.state = RecognitionState.FAILED
                 return
             self.touch = touch
-            self.start_timestamp = touch.timestamp
+            self.start_timestamp = report.timestamp
             self.state = RecognitionState.POSSIBLE
         for touch in report.moved:
             if touch is self.touch and touch.phase is TouchPhase.MOVED:
@@ -122,7 +125,7 @@ class TapRecognizer(TrioSection):
                 if touch.max_pressure < self.required_pressure:
                     self.state = RecognitionState.FAILED
                     return
-                duration = touch.timestamp - self.start_timestamp
+                duration = report.timestamp - self.start_timestamp
                 if duration > self.max_duration:
                     self.state = RecognitionState.FAILED
                     return

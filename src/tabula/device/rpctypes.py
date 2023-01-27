@@ -67,9 +67,9 @@ class KeyEvent(msgspec.Struct, tag=True):
 
 
 class TouchReport(msgspec.Struct, tag=True):
-    # TODO: make the timestamp part of the report, and not the touch
-    # So that a report with no touches still has a timestamp
     touches: typing.List[TouchEvent]
+    sec: int
+    usec: int
 
 
 class KeyboardDisconnect(msgspec.Struct, tag=True):

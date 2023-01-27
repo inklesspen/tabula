@@ -272,7 +272,9 @@ class RpcHardware(Hardware):
                         TouchReport(
                             touches=[
                                 self._transform_touch_event(evt) for evt in req.touches
-                            ]
+                            ],
+                            sec=req.sec,
+                            usec=req.usec,
                         )
                     )
                 case RpcKeyboardDisconnect():

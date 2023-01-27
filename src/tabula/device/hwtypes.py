@@ -65,21 +65,21 @@ class TouchEvent(msgspec.Struct, frozen=True):
     x: int
     y: int
     pressure: int
-    sec: int
-    usec: int
     slot: int
 
     @property
     def point(self):
         return Point(x=self.x, y=self.y)
 
-    @property
-    def timestamp(self):
-        return datetime.timedelta(seconds=self.sec, microseconds=self.usec)
-
 
 class TouchReport(msgspec.Struct, frozen=True):
     touches: typing.List[TouchEvent]
+    sec: int
+    usec: int
+
+    @property
+    def timestamp(self):
+        return datetime.timedelta(seconds=self.sec, microseconds=self.usec)
 
 
 class EventType(enum.Enum):
@@ -118,8 +118,6 @@ class TouchCoordinateTransform(enum.IntEnum):
                     x=event.y,
                     y=screen_size.height - event.x,
                     pressure=event.pressure,
-                    sec=event.sec,
-                    usec=event.usec,
                     slot=event.slot,
                 )
             case TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y:
@@ -127,8 +125,6 @@ class TouchCoordinateTransform(enum.IntEnum):
                     x=screen_size.width - event.x,
                     y=screen_size.height - event.y,
                     pressure=event.pressure,
-                    sec=event.sec,
-                    usec=event.usec,
                     slot=event.slot,
                 )
             case TouchCoordinateTransform.SWAP_AND_MIRROR_X:
@@ -136,8 +132,6 @@ class TouchCoordinateTransform(enum.IntEnum):
                     x=screen_size.width - event.y,
                     y=event.x,
                     pressure=event.pressure,
-                    sec=event.sec,
-                    usec=event.usec,
                     slot=event.slot,
                 )
 
@@ -154,7 +148,6 @@ class PersistentTouch(msgspec.Struct):
     touch_id: int
     location: Point
     max_pressure: int
-    timestamp: datetime.timedelta
     phase: TouchPhase
 
 
@@ -162,6 +155,7 @@ class PersistentTouchReport(msgspec.Struct, frozen=True):
     began: collections.abc.Sequence[PersistentTouch]
     moved: collections.abc.Sequence[PersistentTouch]
     ended: collections.abc.Sequence[PersistentTouch]
+    timestamp: datetime.timedelta
 
 
 class TapEvent(msgspec.Struct, frozen=True):
