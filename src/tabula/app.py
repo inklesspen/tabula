@@ -8,7 +8,7 @@ import trio_util
 from .device.hardware import Hardware, RpcHardware
 from .settings import load_settings, Settings
 from .rendering.renderer import Renderer
-from .screens import Screen, KeyboardDetect, Switch, Modal, Close, Shutdown
+from .screens import Screen, KeyboardDetect, SystemMenu, Switch, Modal, Close, Shutdown
 from .util import invoke
 from .db import make_db
 from .editor.document import DocumentModel
@@ -49,7 +49,8 @@ class Tabula:
             screen_info = await self.hardware.get_screen_info()
             self.renderer = Renderer(screen_info)
             self.screen_stack.value = [
-                self.invoke_screen(KeyboardDetect, on_startup=True)
+                self.invoke_screen(SystemMenu, modal=False),
+                self.invoke_screen(KeyboardDetect),
             ]
             await self.hardware.clear_screen()
             nursery.start_soon(self.periodic_save_doc, trio_util.periodic(5))

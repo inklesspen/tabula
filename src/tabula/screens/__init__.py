@@ -5,98 +5,105 @@ import math
 import typing
 
 import msgspec
-import timeflake
 import trio
 
-from .device.hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
-from .commontypes import Point, Size, Rect
-from .rendering.rendertypes import (
-    Rendered,
-    Margins,
-    Alignment,
-    WrapMode,
-)
-from .editor.document import DocumentModel
-from .editor.doctypes import Session
-from .util import checkpoint, now, humanized_delta, TickCaller
-from .editor.layout import LayoutManager, StatusLayout
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
+from ..commontypes import Point, Size, Rect
+from ..rendering.rendertypes import Rendered, Alignment
+from ..editor.document import DocumentModel
+from ..editor.doctypes import Session
+from ..util import checkpoint, now, humanized_delta, TickCaller
+from ..editor.layout import LayoutManager, StatusLayout
+
+from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
+from .base import Switch, Modal, Close, Shutdown, RetVal, Screen
+from .keyboard_detect import KeyboardDetect
 
 if typing.TYPE_CHECKING:
-    from .device.hardware import Hardware
-    from .settings import Settings
-    from .rendering.renderer import Renderer
-    from .db import TabulaDb
+    from ..device.hardware import Hardware
+    from ..settings import Settings
+    from ..rendering.renderer import Renderer
+    from ..db import TabulaDb
     import pathlib
 
 
-# https://en.wikipedia.org/wiki/Enclosed_Alphanumerics
-# U+24EA is zero; it's out of order from the rest
-# U+2460 is 1, U+2468 is 9
-# U+24CE is Y; U+24C3 is N
-# these are all in Noto Sans Symbols.
-# B612 has similar glyphs but in a different block:
-# https://en.wikipedia.org/wiki/Dingbats_(Unicode_block)
-CIRCLED_ALPHANUMERICS = {
-    "0": "\u24ea",
-    "1": "\u2460",
-    "2": "\u2461",
-    "3": "\u2462",
-    "4": "\u2463",
-    "5": "\u2464",
-    "6": "\u2465",
-    "7": "\u2466",
-    "8": "\u2467",
-    "9": "\u2468",
-    "Y": "\u24ce",
-    "N": "\u24c3",
-}
+class Drafting(Screen):
+    status_font = "Crimson Pro 12"
 
-B612_CIRCLED_DIGITS = {
-    1: "\u2780",
-    2: "\u2781",
-    3: "\u2782",
-    4: "\u2783",
-    5: "\u2784",
-    6: "\u2785",
-    7: "\u2786",
-    8: "\u2787",
-    9: "\u2788",
-    0: "\u2789",
-}
+    def __init__(
+        self,
+        *,
+        settings: "Settings",
+        renderer: "Renderer",
+        hardware: "Hardware",
+        db: "TabulaDb",
+        document: "DocumentModel",
+    ):
+        super().__init__(
+            settings=settings,
+            renderer=renderer,
+            hardware=hardware,
+        )
+        self.db = db
+        self.document = document
+        self.layout_manager = LayoutManager(self.renderer, self.document)
+        self.status_layout = StatusLayout(self.renderer, self.document)
 
-NUMBER_KEYS = {
-    1: Key.KEY_1,
-    2: Key.KEY_2,
-    3: Key.KEY_3,
-    4: Key.KEY_4,
-    5: Key.KEY_5,
-    6: Key.KEY_6,
-    7: Key.KEY_7,
-    8: Key.KEY_8,
-    9: Key.KEY_9,
-    0: Key.KEY_0,
-}
+    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+        self.hardware.reset_keystream(enable_composes=True)
+        await self.hardware.clear_screen()
+        await self.render_document()
+        await self.render_status()
 
+        async with TickCaller(15, self.tick):
+            while True:
+                event = await event_channel.receive()
+                match event:
+                    case AnnotatedKeyEvent():
+                        if event.is_led_able:
+                            self.status_layout.set_leds(
+                                capslock=event.annotation.capslock,
+                                compose=event.annotation.compose,
+                            )
+                        if self.document.graphical_char(event.character):
+                            self.document.keystroke(event.character)
+                            await self.render_document()
+                        elif event.key is Key.KEY_ENTER:
+                            self.document.new_para()
+                            await self.render_document()
+                            self.document.save_session(self.db)
+                        elif event.key is Key.KEY_BACKSPACE:
+                            self.document.backspace()
+                            await self.render_document()
+                        elif event.key is Key.KEY_F1:
+                            return Modal(Help)
+                        elif event.key is Key.KEY_F12:
+                            if self.document.wordcount == 0:
+                                self.document.delete_session(self.db)
+                            else:
+                                self.document.save_session(self.db)
+                            return Switch(SystemMenu)
+                        await self.render_status()
+                    case KeyboardDisconnect():
+                        self.document.save_session(self.db)
+                        print("Time to detect keyboard again.")
+                        return Modal(KeyboardDetect)
 
-class Switch(msgspec.Struct, frozen=True):
-    new_screen: typing.Type["Screen"]
-    kwargs: dict
+    async def tick(self):
+        self.document.save_session(self.db)
+        await self.render_status()
 
+    async def render_status(self):
+        rendered = self.status_layout.render()
+        await self.hardware.display_pixels(
+            imagebytes=rendered.image, rect=rendered.extent
+        )
 
-class Modal(msgspec.Struct, frozen=True):
-    modal: typing.Type["Screen"]
-    kwargs: dict
-
-
-class Close(msgspec.Struct, frozen=True):
-    pass
-
-
-class Shutdown(msgspec.Struct, frozen=True):
-    pass
-
-
-RetVal = Switch | Shutdown | Modal | Close
+    async def render_document(self):
+        rendered = self.layout_manager.render_update(self.settings.current_font)
+        await self.hardware.display_pixels(
+            imagebytes=rendered.image, rect=rendered.extent
+        )
 
 
 def export_session(
@@ -111,115 +118,6 @@ def export_session(
     with export_file.open(mode="w", encoding="utf-8") as out:
         out.write(session_document.export_markdown())
     db.set_exported_time(session_id, timestamp)
-
-
-class Screen(abc.ABC):
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        renderer: "Renderer",
-        hardware: "Hardware",
-    ):
-        self.settings = settings
-        self.renderer = renderer
-        self.hardware = hardware
-
-    @abc.abstractmethod
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        ...
-
-
-class KeyboardDetect(Screen):
-    """Displays on startup or if the keyboards vanish. User must press a key to continue, or tap a screen button to quit."""
-
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        renderer: "Renderer",
-        hardware: "Hardware",
-        on_startup: bool = False,
-    ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
-        self.on_startup = on_startup
-
-    async def run(self, event_channel: trio.abc.ReceiveChannel):
-        self.hardware.reset_keystream(enable_composes=False)
-        screen, button = self.make_screen()
-        await self.hardware.display_pixels(screen.image, screen.extent)
-        while True:
-            event = await event_channel.receive()
-            match event:
-                case AnnotatedKeyEvent():
-                    if self.on_startup:
-                        return Switch(new_screen=SystemMenu, kwargs={"modal": False})
-                    return Close()
-                case TapEvent():
-                    if event.location in button:
-                        return Shutdown()
-
-    def make_screen(self):
-        screen_size = self.renderer.screen_info.size
-        with self.renderer.create_surface(
-            screen_size
-        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
-            self.renderer.prepare_background(cairo_context)
-            self.renderer.setup_drawing(cairo_context)
-
-            self.renderer.move_to(cairo_context, Point(x=0, y=160))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 48",
-                "Tabula",
-                alignment=Alignment.CENTER,
-                width=screen_size.width,
-            )
-
-            self.renderer.move_to(cairo_context, Point(x=50, y=640))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 12",
-                "Connect a keyboard and press a key to continue, or tap the button to exit.",
-                alignment=Alignment.LEFT,
-                wrap=WrapMode.WORD,
-                width=screen_size.width - 100,
-            )
-
-            # Rect(origin=Point(x=336, y=960), spread=Size(width=400, height=100))
-            spread = Size(width=400, height=100)
-            origin = Point(x=(screen_size.width - spread.width) / 2, y=960)
-            button = Rect(origin=origin, spread=spread)
-            # need to save the button rect for touch detection
-            self.renderer.button(
-                cairo_context, text="Exit", font="B612 10", rect=button
-            )
-
-            self.renderer.move_to(cairo_context, Point(x=0, y=1280))
-            last_text = (
-                "Presented by Straylight Labs"
-                if self.on_startup
-                else "Keyboard was disconnected"
-            )
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 8",
-                last_text,
-                alignment=Alignment.CENTER,
-                width=screen_size.width,
-            )
-
-            buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return (
-            Rendered(
-                image=buf, extent=Rect(origin=Point(x=0, y=0), spread=screen_size)
-            ),
-            button,
-        )
 
 
 class Button(msgspec.Struct):
@@ -247,7 +145,7 @@ MenuItem = Button | MenuText
 class ButtonMenu(Screen):
     # Buttons are 400 px wide, 100 px high
     # Spread them as equally as possible along the screen height.
-    button_size = Size(width=400, height=100)
+    button_size = Size(width=600, height=100)
 
     def __init__(
         self,
@@ -273,13 +171,16 @@ class ButtonMenu(Screen):
                     for button in self.buttons:
                         if event.key == button.key:
                             handler = button.handler
+                # TODO: have a TapInitiated event, and use it to render
+                # the tapped button inverse.
                 case TapEvent():
+                    print(event)
                     for button in self.buttons:
                         if event.location in button.rect:
                             handler = button.handler
                 case KeyboardDisconnect():
                     print("Time to detect keyboard again.")
-                    return Modal(KeyboardDetect, kwargs={})
+                    return Modal(KeyboardDetect)
             if handler is not None:
                 result = await handler()
                 if result is not None:
@@ -341,12 +242,10 @@ class SystemMenu(ButtonMenu):
         hardware: "Hardware",
         db: "TabulaDb",
         document: "DocumentModel",
-        modal: bool = False,
     ):
         super().__init__(settings=settings, renderer=renderer, hardware=hardware)
         self.db = db
         self.document = document
-        self.modal = modal
 
     def define_menu(self):
 
@@ -424,11 +323,11 @@ class SystemMenu(ButtonMenu):
         session_id = self.db.new_session()
         self.document.load_session(session_id, self.db)
         await checkpoint()
-        return Switch(Drafting, kwargs={})
+        return Switch(Drafting)
 
     async def previous_session(self):
         await checkpoint()
-        return Switch(SessionList, kwargs={})
+        return Switch(SessionList)
 
     async def export_current_session(self):
         export_session(self.document, self.db, self.settings.export_path)
@@ -437,100 +336,21 @@ class SystemMenu(ButtonMenu):
 
     async def set_font(self):
         await checkpoint()
-        return Switch(Fonts, kwargs={})
+        return Switch(Fonts)
 
     async def resume_drafting(self):
         await checkpoint()
-        if self.modal:
-            return Close()
-        return Switch(Drafting, kwargs={})
+        return Switch(Drafting)
 
     async def shutdown(self):
         await checkpoint()
         return Shutdown()
 
 
-class Drafting(Screen):
-    status_font = "Crimson Pro 12"
-
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        renderer: "Renderer",
-        hardware: "Hardware",
-        db: "TabulaDb",
-        document: "DocumentModel",
-    ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
-        self.db = db
-        self.document = document
-        self.layout_manager = LayoutManager(self.renderer, self.document)
-        self.status_layout = StatusLayout(self.renderer, self.document)
-
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        self.hardware.reset_keystream(enable_composes=True)
-        await self.hardware.clear_screen()
-        await self.render_document()
-        await self.render_status()
-
-        async with TickCaller(15, self.tick):
-            while True:
-                event = await event_channel.receive()
-                match event:
-                    case AnnotatedKeyEvent():
-                        if event.is_led_able:
-                            self.status_layout.set_leds(
-                                capslock=event.annotation.capslock,
-                                compose=event.annotation.compose,
-                            )
-                        if self.document.graphical_char(event.character):
-                            self.document.keystroke(event.character)
-                            await self.render_document()
-                        elif event.key is Key.KEY_ENTER:
-                            self.document.new_para()
-                            await self.render_document()
-                            self.document.save_session(self.db)
-                        elif event.key is Key.KEY_BACKSPACE:
-                            self.document.backspace()
-                            await self.render_document()
-                        elif event.key is Key.KEY_F1:
-                            return Modal(Help, kwargs={})
-                        elif event.key is Key.KEY_F12:
-                            if self.document.wordcount == 0:
-                                print("Deleting empty doc")
-                                self.document.delete_session(self.db)
-                                return Switch(SystemMenu, kwargs={})
-                            self.document.save_session(self.db)
-                            return Modal(SystemMenu, kwargs={"modal": True})
-                        await self.render_status()
-                    case KeyboardDisconnect():
-                        self.document.save_session(self.db)
-                        print("Time to detect keyboard again.")
-                        return Modal(KeyboardDetect, kwargs={})
-
-    async def tick(self):
-        self.document.save_session(self.db)
-        await self.render_status()
-
-    async def render_status(self):
-        rendered = self.status_layout.render()
-        await self.hardware.display_pixels(
-            imagebytes=rendered.image, rect=rendered.extent
-        )
-
-    async def render_document(self):
-        rendered = self.layout_manager.render_update(self.settings.current_font)
-        await self.hardware.display_pixels(
-            imagebytes=rendered.image, rect=rendered.extent
-        )
-
-
 class SessionList(ButtonMenu):
+    session_button_size = Size(width=800, height=100)
+    page_button_size = Size(width=200, height=100)
+
     def __init__(
         self,
         *,
@@ -561,24 +381,33 @@ class SessionList(ButtonMenu):
         edit_cutoff = timestamp - self.settings.max_editable_age
         screen_size = self.renderer.screen_info.size
         button_x = math.floor((screen_size.width - self.button_size.width) / 2)
-        menuitems = [
-            MenuText(
-                text="Hello world\nGoodbye cruel world", y_top=10, font="Crimson Pro 12"
-            ),
-            Button(
-                handler=self.load_session,
-                rect=Rect(origin=Point(x=button_x, y=150), spread=self.button_size),
-                text="Load Session",
-            ),
-        ]
-        # if self.selected_session.needs_export:
-        menuitems.append(
-            Button(
-                handler=self.export_session,
-                rect=Rect(origin=Point(x=button_x, y=450), spread=self.button_size),
-                text="Export Session",
+        session_delta = self.selected_session.updated_at - timestamp
+        header_text = f"Last edited {humanized_delta(session_delta)}\nWordcount: {self.selected_session.wordcount}"
+        menuitems = [MenuText(text=header_text, y_top=10, font="Crimson Pro 12")]
+        if self.selected_session.updated_at >= edit_cutoff:
+            menuitems.append(
+                Button(
+                    handler=self.load_session,
+                    rect=Rect(origin=Point(x=button_x, y=150), spread=self.button_size),
+                    text="Load Session",
+                )
             )
-        )
+        else:
+            menuitems.append(
+                MenuText(
+                    text="This session is now locked for editing",
+                    y_top=150,
+                    font="B612 8",
+                )
+            )
+        if self.selected_session.needs_export:
+            menuitems.append(
+                Button(
+                    handler=self.export_session,
+                    rect=Rect(origin=Point(x=button_x, y=450), spread=self.button_size),
+                    text="Export Session",
+                )
+            )
         menuitems.append(
             Button(
                 handler=self.delete_session,
@@ -605,16 +434,16 @@ class SessionList(ButtonMenu):
         )
         session_page = self.sessions[self.offset : self.offset + num_session_buttons]
 
-        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
+        button_x = math.floor((screen_size.width - self.session_button_size.width) / 2)
         button_total_height = self.button_size.height * num_session_buttons
         whitespace_height = usable_height - button_total_height
         skip_height = math.floor(whitespace_height / (num_session_buttons + 1))
         button_y = skip_height
 
-        buttons = []
+        menuitems = []
         for session in session_page:
             button_rect = Rect(
-                origin=Point(x=button_x, y=button_y), spread=self.button_size
+                origin=Point(x=button_x, y=button_y), spread=self.session_button_size
             )
             session_delta = session.updated_at - timestamp
             button_text = f"{humanized_delta(session_delta)} - {session.wordcount}"
@@ -622,7 +451,7 @@ class SessionList(ButtonMenu):
                 button_text += " \ue0a7"
             else:
                 button_text += " \ue0a2"
-            buttons.append(
+            menuitems.append(
                 Button(
                     handler=functools.partial(self.select_session, session),
                     rect=button_rect,
@@ -631,9 +460,54 @@ class SessionList(ButtonMenu):
             )
             button_y += self.button_size.height + skip_height
 
-        # TODO: add page buttons, export all, back to menu, etc
+        if self.offset > 0:
+            # back button
+            prev_page_offset = max(0, self.offset - num_session_buttons)
+            menuitems.append(
+                Button(
+                    handler=functools.partial(self.change_page, prev_page_offset),
+                    text="\ue0a9 Prev",
+                    rect=Rect(
+                        origin=Point(x=50, y=1300),
+                        spread=self.page_button_size,
+                    ),
+                )
+            )
 
-        return tuple(buttons)
+        next_page_offset = self.offset + num_session_buttons
+        if len(self.sessions[next_page_offset:]) > 0:
+            # next button
+            menuitems.append(
+                Button(
+                    handler=functools.partial(self.change_page, next_page_offset),
+                    text="Next \ue0a8",
+                    rect=Rect(
+                        origin=Point(
+                            x=screen_size.width - (50 + self.page_button_size.width),
+                            y=1300,
+                        ),
+                        spread=self.page_button_size,
+                    ),
+                )
+            )
+
+        # return button
+        menuitems.append(
+            Button(
+                handler=self.close_menu,
+                text="Back",
+                rect=Rect(
+                    origin=Point(
+                        x=math.floor(
+                            (screen_size.width - self.page_button_size.width) / 2
+                        ),
+                        y=1300,
+                    ),
+                    spread=self.page_button_size,
+                ),
+            )
+        )
+        return tuple(menuitems)
 
     async def select_session(self, selected_session: Session):
         self.selected_session = selected_session
@@ -643,7 +517,7 @@ class SessionList(ButtonMenu):
     async def load_session(self):
         self.document.load_session(self.selected_session.id, self.db)
         await checkpoint()
-        return Switch(Drafting, kwargs={})
+        return Switch(Drafting)
 
     async def export_session(self):
         session_document = DocumentModel()
@@ -664,6 +538,15 @@ class SessionList(ButtonMenu):
         self.selected_session = None
         await checkpoint()
         return
+
+    async def change_page(self, new_offset: int):
+        self.offset = new_offset
+        await checkpoint()
+        return
+
+    async def close_menu(self):
+        await checkpoint()
+        return Switch(SystemMenu)
 
 
 class Fonts(Screen):
