@@ -70,7 +70,7 @@ class DocumentModel:
     @property
     def wordcount(self):
         return wordcount.count_plain_text(
-            wordcount.make_plain_text("\n".join([p.markdown for p in self.contents]))
+            wordcount.make_plain_text("\n\n".join([p.markdown for p in self.contents]))
         )
 
     def __len__(self):

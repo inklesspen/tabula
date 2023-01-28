@@ -64,8 +64,10 @@ class PlainRenderer(markdown_it.renderer.RendererProtocol):
 
 
 def make_plain_text(markdown: Text) -> Text:
-    return markdown_it.MarkdownIt("commonmark", renderer_cls=PlainRenderer).render(
-        markdown
+    return (
+        markdown_it.MarkdownIt("commonmark", renderer_cls=PlainRenderer)
+        .render(markdown)
+        .rstrip("\n")
     )
 
 
