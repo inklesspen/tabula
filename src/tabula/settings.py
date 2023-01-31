@@ -1,12 +1,17 @@
 import datetime
+import functools
 import pathlib
+import typing
 
 import attrs
+import msgspec
 import pygtrie
 import trio
 import xdg
 
 from .device.keyboard_consts import Key
+from .durations import format_duration, parse_duration
+from .util import evolve as msgspec_evolve
 
 # Eventually these will be stored in a config file, hence the async load_settings()
 COMPOSE_SEQUENCES = {
@@ -81,8 +86,6 @@ COMPOSE_SEQUENCES = {
     "' y": "ý",
 }
 
-DRAFTING_FONTS = ["Tabula Quattro 8", "Comic Neue 8", "Special Elite 8"]
-
 KEYMAPS = {
     "KEY_GRAVE": ["`", "~"],
     "KEY_1": ["1", "!"],
@@ -136,10 +139,45 @@ KEYMAPS = {
 
 COMPOSE_KEY = "KEY_RIGHTMETA"
 
+DRAFTING_FONTS = ["Tabula Quattro", "Comic Neue", "Special Elite"]
+
+FONT_SIZES = {"Tabula Quattro": 8, "Comic Neue": 8, "Special Elite": 8}
+
+
+class SettingsData(msgspec.Struct):
+    drafting_fonts: list[str]
+    font_sizes: dict[str, int]
+    current_font: str
+    compose_key: str
+    compose_sequences: dict[str, str]
+    keymaps: dict[str, list[str]]
+    db_path: str
+    export_path: str
+    max_editable_age: datetime.timedelta
+
+
+def _enc_hook(obj: typing.Any) -> typing.Any:
+    if isinstance(obj, datetime.timedelta):
+        return format_duration(obj)
+    else:
+        raise TypeError(f"Objects of type {type(obj)} are not supported")
+
+
+def _dec_hook(type: typing.Type, obj: typing.Any) -> typing.Any:
+    if type is datetime.timedelta:
+        return parse_duration(obj)
+    else:
+        raise TypeError(f"Objects of type {type} are not supported")
+
+
+settings_encoder = msgspec.json.Encoder(enc_hook=_enc_hook)
+settings_decoder = msgspec.json.Decoder(SettingsData, dec_hook=_dec_hook)
+
 
 @attrs.define(kw_only=True, frozen=True)
-class Settings:
+class OldSettings:
     drafting_fonts: list[str]
+    font_sizes: dict[str, int]
     current_font: str
     compose_key: Key
     compose_sequences: pygtrie.Trie
@@ -149,19 +187,78 @@ class Settings:
     max_editable_age: datetime.timedelta
 
 
+@attrs.define(kw_only=True, frozen=True, init=False)
+class Settings:
+    _data: SettingsData = attrs.field(repr=False)
+    _path: pathlib.Path = attrs.field(repr=False, eq=False, order=False)
+    drafting_fonts: list[str] = attrs.field(eq=False, order=False)
+    font_sizes: dict[str, int] = attrs.field(eq=False, order=False)
+    current_font: str = attrs.field(eq=False, order=False)
+    compose_key: Key = attrs.field(eq=False, order=False)
+    compose_sequences: pygtrie.Trie = attrs.field(eq=False, order=False)
+    keymaps: dict[Key, list[str]] = attrs.field(eq=False, order=False)
+    db_path: pathlib.Path = attrs.field(eq=False, order=False)
+    export_path: pathlib.Path = attrs.field(eq=False, order=False)
+    max_editable_age: datetime.timedelta = attrs.field(eq=False, order=False)
+
+    def __init__(self, data: SettingsData, path: pathlib.Path):
+        self.__attrs_init__(
+            data=data,
+            path=path,
+            drafting_fonts=list(data.drafting_fonts),
+            font_sizes=dict(data.font_sizes),
+            current_font=data.current_font,
+            compose_key=Key[data.compose_key],
+            compose_sequences=pygtrie.Trie(
+                {tuple(k.split()): v for k, v in data.compose_sequences.items()}
+            ),
+            keymaps={Key[k]: v for k, v in data.keymaps.items()},
+            db_path=pathlib.Path(data.db_path),
+            export_path=pathlib.Path(data.export_path),
+            max_editable_age=data.max_editable_age,
+        )
+
+    def with_new_current_font(self, new_current_font: str):
+        new_data = msgspec_evolve(self._data, current_font=new_current_font)
+        return type(self)(new_data, self._path)
+
+    def with_new_font_size(self, font: str, size: int):
+        if font not in self.drafting_fonts:
+            raise ValueError(f"Unknown font: {font}")
+        new_font_sizes = dict(self._data.font_sizes)
+        new_font_sizes[font] = size
+        new_data = msgspec_evolve(self._data, font_sizes=new_font_sizes)
+        return type(self)(new_data, self._path)
+
+    def save(self, dest: pathlib.Path = None):
+        if dest is None:
+            dest = self._path
+        dest.write_bytes(msgspec.json.format(settings_encoder.encode(self._data)))
+
+    @classmethod
+    def load(cls, src: pathlib.Path):
+        return cls(settings_decoder.decode(src.read_bytes()), src)
+
+    @classmethod
+    def for_test(cls):
+        return cls(
+            SettingsData(
+                drafting_fonts=DRAFTING_FONTS,
+                font_sizes=FONT_SIZES,
+                current_font="Tabula Quattro 8",
+                compose_key=COMPOSE_KEY,
+                compose_sequences=COMPOSE_SEQUENCES,
+                keymaps=KEYMAPS,
+                db_path="test.db",
+                export_path="test_export",
+                max_editable_age=datetime.timedelta(hours=1),
+            ),
+            pathlib.Path("test.settings.json"),
+        )
+
+
 def _load_settings():
-    return Settings(
-        drafting_fonts=DRAFTING_FONTS,
-        current_font=DRAFTING_FONTS[0],
-        compose_key=Key[COMPOSE_KEY],
-        compose_sequences=pygtrie.Trie(
-            {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
-        ),
-        keymaps={Key[k]: v for k, v in KEYMAPS.items()},
-        db_path=xdg.xdg_state_home() / "tabula" / "tabula.db",
-        export_path=xdg.xdg_data_home() / "tabula",
-        max_editable_age=datetime.timedelta(hours=3),
-    )
+    return Settings.load(xdg.xdg_state_home() / "tabula" / "settings.json")
 
 
 async def load_settings():

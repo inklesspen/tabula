@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+import enum
 
 import msgspec
 
@@ -56,3 +57,8 @@ class Margins(msgspec.Struct, frozen=True):
     bottom: int
     left: int
     right: int
+
+
+class CairoOp(enum.Enum):
+    STROKE = enum.auto()
+    FILL = enum.auto()

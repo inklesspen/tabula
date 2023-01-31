@@ -7,17 +7,24 @@ import typing
 import msgspec
 import trio
 
-from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, Key, KeyboardDisconnect
+from ..device.hwtypes import (
+    AnnotatedKeyEvent,
+    TapEvent,
+    TapPhase,
+    Key,
+    KeyboardDisconnect,
+)
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, Alignment
 from ..editor.document import DocumentModel
 from ..editor.doctypes import Session
 from ..util import checkpoint, now, humanized_delta, TickCaller
-from ..editor.layout import LayoutManager, StatusLayout
+from ..rendering.layout import LayoutManager, StatusLayout
 
 from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
-from .base import Switch, Modal, Close, Shutdown, RetVal, Screen
+from .base import Switch, Modal, Close, Shutdown, DialogResult, RetVal, Screen
 from .keyboard_detect import KeyboardDetect
+from .dialogs import OkDialog, YesNoDialog
 
 if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
@@ -175,14 +182,15 @@ class ButtonMenu(Screen):
                 # the tapped button inverse.
                 case TapEvent():
                     print(event)
-                    for button in self.buttons:
-                        if event.location in button.rect:
-                            handler = button.handler
+                    if event.phase is TapPhase.COMPLETED:
+                        for button in self.buttons:
+                            if event.location in button.rect:
+                                handler = button.handler
                 case KeyboardDisconnect():
                     print("Time to detect keyboard again.")
                     return Modal(KeyboardDetect)
             if handler is not None:
-                result = await handler()
+                result = await handler(event_channel)
                 if result is not None:
                     return result
                 await self.render()
@@ -319,30 +327,34 @@ class SystemMenu(ButtonMenu):
             for b in buttons
         )
 
-    async def new_session(self):
+    async def new_session(self, event_channel: trio.abc.ReceiveChannel):
         session_id = self.db.new_session()
         self.document.load_session(session_id, self.db)
         await checkpoint()
         return Switch(Drafting)
 
-    async def previous_session(self):
+    async def previous_session(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
         return Switch(SessionList)
 
-    async def export_current_session(self):
+    async def export_current_session(self, event_channel: trio.abc.ReceiveChannel):
         export_session(self.document, self.db, self.settings.export_path)
-        # TODO: add some sort of Confirmation dialog
-        await checkpoint()
+        dialog = OkDialog(
+            renderer=self.renderer, hardware=self.hardware, message="Export complete!"
+        )
+        result = await dialog.run(event_channel)
+        if not isinstance(result, DialogResult):
+            return result
 
-    async def set_font(self):
+    async def set_font(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
         return Switch(Fonts)
 
-    async def resume_drafting(self):
+    async def resume_drafting(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
         return Switch(Drafting)
 
-    async def shutdown(self):
+    async def shutdown(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
         return Shutdown()
 
@@ -509,44 +521,62 @@ class SessionList(ButtonMenu):
         )
         return tuple(menuitems)
 
-    async def select_session(self, selected_session: Session):
+    async def select_session(
+        self, selected_session: Session, event_channel: trio.abc.ReceiveChannel
+    ):
         self.selected_session = selected_session
         await checkpoint()
         return
 
-    async def load_session(self):
+    async def load_session(self, event_channel: trio.abc.ReceiveChannel):
         self.document.load_session(self.selected_session.id, self.db)
         await checkpoint()
         return Switch(Drafting)
 
-    async def export_session(self):
+    async def export_session(self, event_channel: trio.abc.ReceiveChannel):
         session_document = DocumentModel()
         session_document.load_session(self.selected_session.id, self.db)
 
         export_session(session_document, self.db, self.settings.export_path)
-        await checkpoint()
         self.selected_session = None
+        dialog = OkDialog(
+            renderer=self.renderer, hardware=self.hardware, message="Export complete!"
+        )
+        result = await dialog.run(event_channel)
+        if not isinstance(result, DialogResult):
+            return result
         return
 
-    async def delete_session(self):
-        self.db.delete_session(self.selected_session.id)
-        await checkpoint()
-        self.selected_session = None
+    async def delete_session(self, event_channel: trio.abc.ReceiveChannel):
+        dialog = YesNoDialog(
+            renderer=self.renderer, hardware=self.hardware, message="Really delete?"
+        )
+        result = await dialog.run(event_channel)
+        if not isinstance(result, DialogResult):
+            return result
+        if result.value:
+            self.db.delete_session(self.selected_session.id)
+            self.selected_session = None
         return
 
-    async def back_to_session_list(self):
+    async def back_to_session_list(self, event_channel: trio.abc.ReceiveChannel):
         self.selected_session = None
         await checkpoint()
         return
 
-    async def change_page(self, new_offset: int):
+    async def change_page(
+        self, new_offset: int, event_channel: trio.abc.ReceiveChannel
+    ):
         self.offset = new_offset
         await checkpoint()
         return
 
-    async def close_menu(self):
+    async def close_menu(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
         return Switch(SystemMenu)
+
+
+PANGRAM = "Sphinx of black quartz, judge my vow.\nSPHINX OF BLACK QUARTZ, JUDGE MY VOW.\nsphinx of black quartz, judge my vow."
 
 
 class Fonts(Screen):

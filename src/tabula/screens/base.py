@@ -28,7 +28,11 @@ class Shutdown(msgspec.Struct, frozen=True):
     pass
 
 
-RetVal = Switch | Shutdown | Modal | Close
+class DialogResult(msgspec.Struct, frozen=True):
+    value: typing.Optional[typing.Any]
+
+
+RetVal = Switch | Shutdown | Modal | Close | DialogResult
 
 
 class Screen(abc.ABC):

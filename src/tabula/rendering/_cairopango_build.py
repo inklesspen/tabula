@@ -312,6 +312,7 @@ void cairo_path_extents(cairo_t *cr,
 void cairo_set_line_width(cairo_t *cr, double width);
 
 void cairo_stroke(cairo_t *cr);
+void cairo_fill(cairo_t *cr);
 
 void cairo_surface_flush(cairo_surface_t *surface);
 

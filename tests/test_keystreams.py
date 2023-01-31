@@ -616,21 +616,8 @@ async def test_composes_sequence_failure():
 
 
 async def test_keystream_factory():
-    from tabula.settings import COMPOSE_SEQUENCES, KEYMAPS
-
     send_channel, receive_channel = trio.open_memory_channel(60)
-    settings = Settings(
-        drafting_fonts=[],
-        current_font="",
-        db_path="",
-        compose_key=Key.KEY_RIGHTMETA,
-        compose_sequences=pygtrie.Trie(
-            {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
-        ),
-        keymaps={Key[k]: v for k, v in KEYMAPS.items()},
-        export_path="",
-        max_editable_age=None,
-    )
+    settings = Settings.for_test()
     key_events = [
         KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
         KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),

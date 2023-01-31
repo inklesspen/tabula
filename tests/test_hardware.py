@@ -3,18 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import collections.abc
 
-from async_generator import aclosing
-import pygtrie
-import slurry
 import trio
 
-from tabula.device.keystreams import (
-    ModifierTracking,
-    OnlyPresses,
-    MakeCharacter,
-    ComposeCharacters,
-    make_keystream,
-)
 from tabula.device.hwtypes import (
     Key,
     KeyPress,
@@ -23,9 +13,7 @@ from tabula.device.hwtypes import (
     ModifierAnnotation,
 )
 from tabula.settings import Settings
-from tabula.util import checkpoint
 from tabula.device.hardware import EventTestHardware
-from tabula.settings import COMPOSE_SEQUENCES, KEYMAPS
 
 
 async def receive_events(
@@ -68,18 +56,7 @@ async def send_events(
 async def test_event_handling_basic():
     raw_send_channel, raw_receive_channel = trio.open_memory_channel(60)
     processed_send_channel, processed_receive_channel = trio.open_memory_channel(60)
-    settings = Settings(
-        drafting_fonts=[],
-        current_font="",
-        db_path="",
-        compose_key=Key.KEY_RIGHTMETA,
-        compose_sequences=pygtrie.Trie(
-            {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
-        ),
-        keymaps={Key[k]: v for k, v in KEYMAPS.items()},
-        export_path="",
-        max_editable_age=None,
-    )
+    settings = Settings.for_test()
 
     raw_events = [
         KeyEvent.pressed(Key.KEY_RIGHTSHIFT),
@@ -114,18 +91,7 @@ async def test_event_handling_basic():
 async def test_event_handling_resets():
     raw_send_channel, raw_receive_channel = trio.open_memory_channel(60)
     processed_send_channel, processed_receive_channel = trio.open_memory_channel(60)
-    settings = Settings(
-        drafting_fonts=[],
-        current_font="",
-        db_path="",
-        compose_key=Key.KEY_RIGHTMETA,
-        compose_sequences=pygtrie.Trie(
-            {tuple(k.split()): v for k, v in COMPOSE_SEQUENCES.items()}
-        ),
-        keymaps={Key[k]: v for k, v in KEYMAPS.items()},
-        export_path="",
-        max_editable_age=None,
-    )
+    settings = Settings.for_test()
 
     async with trio.open_nursery() as nursery:
         hardware = EventTestHardware(

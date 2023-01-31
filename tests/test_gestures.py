@@ -10,6 +10,7 @@ from tabula.device.hwtypes import (
     TouchReport,
     PersistentTouchReport,
     TapEvent,
+    TapPhase,
 )
 from tabula.device.gestures import (
     MakePersistent,
@@ -71,7 +72,10 @@ async def test_tap_recognition_pipeline():
         touchsource, MakePersistent(), TapRecognizer()
     ) as pipeline, pipeline.tap() as resultsource:
         actual = [event async for event in resultsource]
-        expected = [TapEvent(location=Point(x=409, y=1021))]
+        expected = [
+            TapEvent(location=Point(x=408, y=1021), phase=TapPhase.INITIATED),
+            TapEvent(location=Point(x=409, y=1021), phase=TapPhase.COMPLETED),
+        ]
         assert actual == expected
 
 
@@ -80,7 +84,10 @@ async def test_tap_recognition_tapstream():
         touchsource
     ) as tapstream:
         actual = [event async for event in tapstream]
-        expected = [TapEvent(location=Point(x=409, y=1021))]
+        expected = [
+            TapEvent(location=Point(x=408, y=1021), phase=TapPhase.INITIATED),
+            TapEvent(location=Point(x=409, y=1021), phase=TapPhase.COMPLETED),
+        ]
         assert actual == expected
 
 
@@ -241,7 +248,11 @@ async def test_tap_recognition_pipeline_moves_too_much():
         touchsource, MakePersistent(), TapRecognizer()
     ) as pipeline, pipeline.tap() as resultsource:
         actual = [event async for event in resultsource]
-        assert len(actual) == 0
+        expected = [
+            TapEvent(location=Point(x=764, y=753), phase=TapPhase.INITIATED),
+            TapEvent(location=Point(x=749, y=784), phase=TapPhase.CANCELED),
+        ]
+        assert actual == expected
 
 
 MULTI_TOUCH_REPORTS = (

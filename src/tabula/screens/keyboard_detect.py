@@ -1,6 +1,8 @@
+import typing
+
 import trio
 
-from ..device.hwtypes import AnnotatedKeyEvent, TapEvent
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import (
     Rendered,
@@ -10,22 +12,56 @@ from ..rendering.rendertypes import (
 
 from .base import Close, Shutdown, Screen
 
+if typing.TYPE_CHECKING:
+    from ..device.hardware import Hardware
+    from ..settings import Settings
+    from ..rendering.renderer import Renderer
+
 
 class KeyboardDetect(Screen):
     """Displays on startup or if the keyboards vanish. User must press a key to continue, or tap a screen button to quit."""
 
+    def __init__(
+        self,
+        *,
+        settings: "Settings",
+        renderer: "Renderer",
+        hardware: "Hardware",
+    ):
+        super().__init__(settings=settings, renderer=renderer, hardware=hardware)
+        screen_size = self.renderer.screen_info.size
+        spread = Size(width=400, height=100)
+        origin = Point(x=(screen_size.width - spread.width) / 2, y=960)
+        self.button_rect = Rect(origin=origin, spread=spread)
+        self.button_inverted = False
+
     async def run(self, event_channel: trio.abc.ReceiveChannel):
         self.hardware.reset_keystream(enable_composes=False)
-        screen, button = self.make_screen()
-        await self.hardware.display_pixels(screen.image, screen.extent)
+        screen = None
         while True:
+            if screen is None:
+                screen = self.make_screen()
+                await self.hardware.display_pixels(screen.image, screen.extent)
             event = await event_channel.receive()
             match event:
                 case AnnotatedKeyEvent():
                     return Close()
                 case TapEvent():
-                    if event.location in button:
-                        return Shutdown()
+                    match event.phase:
+                        case TapPhase.INITIATED:
+                            if event.location in self.button_rect:
+                                self.button_inverted = True
+                                screen = None
+                        case TapPhase.CANCELED:
+                            if self.button_inverted:
+                                self.button_inverted = False
+                                screen = None
+                        case TapPhase.COMPLETED:
+                            if event.location in self.button_rect:
+                                return Shutdown()
+                            if self.button_inverted:
+                                self.button_inverted = False
+                                screen = None
 
     def make_screen(self):
         screen_size = self.renderer.screen_info.size
@@ -54,13 +90,12 @@ class KeyboardDetect(Screen):
                 width=screen_size.width - 100,
             )
 
-            # Rect(origin=Point(x=336, y=960), spread=Size(width=400, height=100))
-            spread = Size(width=400, height=100)
-            origin = Point(x=(screen_size.width - spread.width) / 2, y=960)
-            button = Rect(origin=origin, spread=spread)
-            # need to save the button rect for touch detection
             self.renderer.button(
-                cairo_context, text="Exit", font="B612 10", rect=button
+                cairo_context,
+                text="Exit",
+                font="B612 10",
+                rect=self.button_rect,
+                inverted=self.button_inverted,
             )
 
             self.renderer.move_to(cairo_context, Point(x=0, y=1280))
@@ -74,9 +109,6 @@ class KeyboardDetect(Screen):
             )
 
             buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return (
-            Rendered(
-                image=buf, extent=Rect(origin=Point(x=0, y=0), spread=screen_size)
-            ),
-            button,
+        return Rendered(
+            image=buf, extent=Rect(origin=Point(x=0, y=0), spread=screen_size)
         )

@@ -16,6 +16,7 @@ from .hwtypes import (
     PersistentTouch,
     TouchPhase,
     PersistentTouchReport,
+    TapPhase,
     TapEvent,
 )
 
@@ -24,7 +25,7 @@ class RecognitionState(enum.Enum):
     POSSIBLE = enum.auto()
     FAILED = enum.auto()
     RECOGNIZED = enum.auto()
-    BEGAN = enum.auto()
+    INITIATED = enum.auto()
     CANCELED = enum.auto()
     CHANGED = enum.auto()
 
@@ -111,15 +112,33 @@ class TapRecognizer(TrioSection):
         self.current_touch_ids.update([touch.touch_id for touch in report.began])
         for touch in report.began:
             if self.touch is not None:
+                if self.state is RecognitionState.INITIATED:
+                    await output(
+                        TapEvent(location=self.touch.location, phase=TapPhase.CANCELED)
+                    )
                 self.state = RecognitionState.FAILED
                 return
             self.touch = touch
             self.start_timestamp = report.timestamp
             self.state = RecognitionState.POSSIBLE
+            if touch.max_pressure >= self.required_pressure:
+                self.state = RecognitionState.INITIATED
+                await output(
+                    TapEvent(location=touch.location, phase=TapPhase.INITIATED)
+                )
         for touch in report.moved:
             if touch is self.touch and touch.phase is TouchPhase.MOVED:
+                if self.state is RecognitionState.INITIATED:
+                    await output(
+                        TapEvent(location=touch.location, phase=TapPhase.CANCELED)
+                    )
                 self.state = RecognitionState.FAILED
                 return
+            if touch.max_pressure >= self.required_pressure:
+                self.state = RecognitionState.INITIATED
+                await output(
+                    TapEvent(location=touch.location, phase=TapPhase.INITIATED)
+                )
         for touch in report.ended:
             if touch is self.touch and touch.phase is TouchPhase.ENDED:
                 if touch.max_pressure < self.required_pressure:
@@ -128,10 +147,19 @@ class TapRecognizer(TrioSection):
                 duration = report.timestamp - self.start_timestamp
                 if duration > self.max_duration:
                     self.state = RecognitionState.FAILED
+                    if self.state is RecognitionState.INITIATED:
+                        await output(
+                            TapEvent(location=touch.location, phase=TapPhase.CANCELED)
+                        )
                     return
-                if self.state is RecognitionState.POSSIBLE:
+                if self.state in (
+                    RecognitionState.POSSIBLE,
+                    RecognitionState.INITIATED,
+                ):
                     self.state = RecognitionState.RECOGNIZED
-                    await output(TapEvent(location=touch.location))
+                    await output(
+                        TapEvent(location=touch.location, phase=TapPhase.COMPLETED)
+                    )
 
 
 @asynccontextmanager

@@ -4,13 +4,13 @@ import typing
 import msgspec
 
 from ..commontypes import Size, Rect, Point
-from ..rendering._cairopango import ffi, lib as clib
-from ..rendering.rendertypes import Alignment, WrapMode, Rendered
+from ._cairopango import ffi, lib as clib
+from .rendertypes import Alignment, WrapMode, Rendered
 from ..util import now
 
 if typing.TYPE_CHECKING:
-    from ..rendering.renderer import Renderer
-    from .document import DocumentModel
+    from .renderer import Renderer
+    from ..editor.document import DocumentModel
 
 
 # https://en.wikipedia.org/wiki/Macron_below
@@ -159,6 +159,7 @@ class LayoutManager:
                     laidout.rendered.size.width,
                     laidout.rendered.size.height,
                 )
+                # See if using cairo_fill can avoid having to clip.
                 clib.cairo_clip(target_context)
                 clib.cairo_paint(target_context)
                 clib.cairo_reset_clip(target_context)

@@ -158,5 +158,12 @@ class PersistentTouchReport(msgspec.Struct, frozen=True):
     timestamp: datetime.timedelta
 
 
+class TapPhase(enum.Enum):
+    INITIATED = enum.auto()
+    COMPLETED = enum.auto()
+    CANCELED = enum.auto()
+
+
 class TapEvent(msgspec.Struct, frozen=True):
     location: Point
+    phase: TapPhase

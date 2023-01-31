@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
+import contextlib
 import math
 
 from ._cairopango import ffi, lib as clib
@@ -16,6 +17,7 @@ from .rendertypes import (
     Margins,
     AffineTransform,
     ScreenInfo,
+    CairoOp,
 )
 
 
@@ -97,6 +99,15 @@ class Renderer:
     @staticmethod
     def create_cairo_context(surface):
         return ffi.gc(clib.cairo_create(surface), clib.cairo_destroy)
+
+    @staticmethod
+    @contextlib.contextmanager
+    def cairo_save_restore(cairo_context):
+        clib.cairo_save(cairo_context)
+        try:
+            yield cairo_context
+        finally:
+            clib.cairo_restore(cairo_context)
 
     @staticmethod
     def _surface_to_buffer(surface, size):
@@ -201,6 +212,7 @@ class Renderer:
         rect: Rect,
         radius: float,
         line_width: float = 2.0,
+        op: CairoOp = CairoOp.STROKE,
     ):
         clib.cairo_new_sub_path(cairo_context)
         # This basically just draws the corners, and relies on cairo_arc to draw line segments connecting them.
@@ -243,7 +255,11 @@ class Renderer:
         )
         clib.cairo_close_path(cairo_context)
         clib.cairo_set_line_width(cairo_context, line_width)
-        clib.cairo_stroke(cairo_context)
+        match op:
+            case CairoOp.STROKE:
+                clib.cairo_stroke(cairo_context)
+            case CairoOp.FILL:
+                clib.cairo_fill(cairo_context)
 
     def button(
         self,
@@ -254,6 +270,7 @@ class Renderer:
         rect: Rect,
         markup: bool = False,
         dpi: float = None,
+        inverted: bool = False,
     ):
         if dpi is None:
             dpi = self.screen_info.dpi
@@ -272,6 +289,7 @@ class Renderer:
             rect=rect,
             radius=50,
             line_width=2.5,
+            op=CairoOp.FILL if inverted else CairoOp.STROKE,
         )
         text_x = rect.origin.x
         text_y = math.floor(
@@ -282,6 +300,8 @@ class Renderer:
         )
 
         self.move_to(cairo_context, Point(x=text_x, y=text_y))
+        if inverted:
+            self.set_draw_color_white(cairo_context)
         self.simple_render(
             cairo_context,
             font,
@@ -290,6 +310,8 @@ class Renderer:
             alignment=Alignment.CENTER,
             width=rect.spread.width,
         )
+        if inverted:
+            self.set_draw_color_black(cairo_context)
 
     def _setup_layout(
         self,
@@ -330,6 +352,12 @@ class Renderer:
     def setup_drawing(self, cairo_context):
         clib.cairo_set_operator(cairo_context, clib.CAIRO_OPERATOR_SOURCE)
         clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 1)
+
+    def set_draw_color_black(self, cairo_context):
+        clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 1)
+
+    def set_draw_color_white(self, cairo_context):
+        clib.cairo_set_source_rgba(cairo_context, 0, 0, 0, 0)
 
     def calculate_rendered_rects(
         self,
@@ -389,7 +417,6 @@ class Renderer:
         if dpi is None:
             dpi = self.screen_info.dpi
         self.set_fontmap_resolution(dpi)
-        self.setup_drawing(cairo_context)
 
         with ffi.gc(clib.pango_layout_new(self.context), clib.g_object_unref) as layout:
             self._setup_layout(
@@ -494,7 +521,8 @@ class Renderer:
 
         return size
 
-    def _make_font_description(self, font: str):
+    @staticmethod
+    def _make_font_description(font: str):
         # https://gnome.pages.gitlab.gnome.org/pango/Pango/struct.FontDescription.html
         # perhaps we should use pango_font_description_new instead, and the various set functions
         return ffi.gc(
