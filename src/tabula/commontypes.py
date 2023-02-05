@@ -23,6 +23,14 @@ class Point(msgspec.Struct, frozen=True):
             return Point(x=self.x / other, y=self.y / other)
         return NotImplemented
 
+    @property
+    def tuple(self):
+        return (self.x, self.y)
+
+    @classmethod
+    def zeroes(cls):
+        return cls(x=0, y=0)
+
 
 class Size(msgspec.Struct, frozen=True):
     width: int

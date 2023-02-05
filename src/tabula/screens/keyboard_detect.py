@@ -110,5 +110,5 @@ class KeyboardDetect(Screen):
 
             buf = self.renderer.surface_to_bytes(surface, screen_size)
         return Rendered(
-            image=buf, extent=Rect(origin=Point(x=0, y=0), spread=screen_size)
+            image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size)
         )

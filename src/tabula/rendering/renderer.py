@@ -21,9 +21,6 @@ from .rendertypes import (
 )
 
 
-# TODO: augment ffi.gc calls with size arguments
-
-
 class Renderer:
     screen_info: ScreenInfo
 

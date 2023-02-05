@@ -5,8 +5,9 @@ import msgspec
 
 from ..commontypes import Size, Rect, Point
 from ._cairopango import ffi, lib as clib
-from .rendertypes import Alignment, WrapMode, Rendered
+from .rendertypes import Alignment, WrapMode, Rendered, CairoColor, LayoutRects
 from ..util import now
+from .cairo import Cairo
 
 if typing.TYPE_CHECKING:
     from .renderer import Renderer
@@ -20,8 +21,9 @@ CURSOR = '<span alpha="50%">_</span>'
 
 class RenderedMarkup(msgspec.Struct, frozen=True):
     markup: str
-    size: Size
-    image_surface: ffi.CData
+    cairo: Cairo
+    # size: Size
+    # image_surface: ffi.CData
 
 
 class Chunk(msgspec.Struct, frozen=True):
@@ -61,7 +63,8 @@ class LayoutManager:
         self.rendered_font = None
         self.skip_height = 0
         self.render_size = Size(self.render_width, self.render_height)
-        self.target_surface = self.renderer.create_surface(self.render_size)
+        self.target_cairo = Cairo(self.render_size)
+        self.target_cairo.setup()
 
     def setup_layout(self):
         clib.pango_layout_set_auto_dir(self.layout, False)
@@ -104,17 +107,21 @@ class LayoutManager:
         with ffi.new("PangoRectangle *") as logical_rect:
             clib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, logical_rect)
             markup_size = Size(width=self.render_width, height=logical_rect.height)
-        markup_surface = self.renderer.create_surface(markup_size)
-        with self.renderer.create_cairo_context(markup_surface) as markup_context:
-            clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
-            clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
-            clib.cairo_paint(markup_context)
-            clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
-            clib.pango_cairo_show_layout(markup_context, self.layout)
-        clib.cairo_surface_flush(markup_surface)
-        rendered = RenderedMarkup(
-            markup=markup, size=markup_size, image_surface=markup_surface
-        )
+        markup_cairo = Cairo(markup_size)
+        markup_cairo.setup()
+        markup_cairo.fill_with_color(CairoColor.WHITE)
+        markup_cairo.set_draw_color(CairoColor.BLACK)
+        markup_cairo.move_to(Point.zeroes())
+        clib.pango_cairo_show_layout(markup_cairo.context, self.layout)
+        # markup_surface = self.renderer.create_surface(markup_size)
+        # with self.renderer.create_cairo_context(markup_surface) as markup_context:
+        #     clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
+        #     clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
+        #     clib.cairo_paint(markup_context)
+        #     clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
+        #     clib.pango_cairo_show_layout(markup_context, self.layout)
+        # clib.cairo_surface_flush(markup_surface)
+        rendered = RenderedMarkup(markup=markup, cairo=markup_cairo)
         self.rendered_markups[markup] = rendered
 
     def render_update(self, font: str):
@@ -135,36 +142,35 @@ class LayoutManager:
                 self.render_to_image_surface(markup)
             rendered = self.rendered_markups[markup]
             used_rendereds[markup] = rendered
-            rendered_height = rendered.size.height
+            rendered_height = rendered.cairo.size.height
             top = current_y - rendered_height
             # set_into(laidouts, current_i, LaidOut(rendered=rendered, y_top=top, y_bottom=current_y))
             laidouts.append(LaidOut(rendered=rendered, y_top=top, y_bottom=current_y))
             current_y -= rendered_height + self.skip_height
             current_i -= 1
 
-        with self.renderer.create_cairo_context(self.target_surface) as target_context:
-            clib.cairo_set_operator(target_context, clib.CAIRO_OPERATOR_SOURCE)
-            clib.cairo_set_source_rgba(target_context, 1, 1, 1, 1)
-            clib.cairo_paint(target_context)
+        self.target_cairo.fill_with_color(CairoColor.WHITE)
 
-            for laidout in laidouts:
-                clib.cairo_set_operator(target_context, clib.CAIRO_OPERATOR_SOURCE)
-                clib.cairo_set_source_surface(
-                    target_context, laidout.rendered.image_surface, 0, laidout.y_top
-                )
-                clib.cairo_rectangle(
-                    target_context,
-                    0,
-                    laidout.y_top,
-                    laidout.rendered.size.width,
-                    laidout.rendered.size.height,
-                )
-                # See if using cairo_fill can avoid having to clip.
-                clib.cairo_clip(target_context)
-                clib.cairo_paint(target_context)
-                clib.cairo_reset_clip(target_context)
-
-        clib.cairo_surface_flush(self.target_surface)
+        for laidout in laidouts:
+            # Can't use paste_other just yet because the laidouts don't have Cairo instances
+            # Now we can
+            clib.cairo_set_operator(
+                self.target_cairo.context, clib.CAIRO_OPERATOR_SOURCE
+            )
+            clib.cairo_set_source_surface(
+                self.target_cairo.context,
+                laidout.rendered.cairo.surface,
+                0,
+                laidout.y_top,
+            )
+            clib.cairo_rectangle(
+                self.target_cairo.context,
+                0,
+                laidout.y_top,
+                laidout.rendered.cairo.size.width,
+                laidout.rendered.cairo.size.height,
+            )
+            clib.cairo_fill(self.target_cairo.context)
 
         if CURSOR in self.rendered_markups:
             # Worth keeping around
@@ -172,14 +178,65 @@ class LayoutManager:
         self.rendered_markups = used_rendereds
 
         return Rendered(
-            image=self.renderer.surface_to_bytes(
-                self.target_surface, self.render_size, skip_inversion=True
-            ),
+            image=self.target_cairo.get_image_bytes(),
+            # image=self.renderer.surface_to_bytes(
+            #     self.target_cairo.surface, self.render_size, skip_inversion=True
+            # ),
             extent=Rect(
-                origin=Point(0, 0),
-                spread=Size(width=self.render_width, height=self.render_height),
+                origin=Point.zeroes(),
+                spread=self.target_cairo.size,
             ),
         )
+
+
+def render_compose_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: float):
+    # scale 40 produces width=60, height=40; width is 1.5x scale
+    clib.cairo_new_path(cairo.context)
+    cairo.set_draw_color(CairoColor.BLACK)
+    clib.cairo_set_line_width(cairo.context, linewidth)
+    clib.cairo_rectangle(
+        cairo.context,
+        origin.x + scale * 0.02,
+        origin.y + scale * 0.02,
+        scale * 0.75,
+        scale * 0.96,
+    )
+    clib.cairo_stroke(cairo.context)
+    clib.cairo_arc(
+        cairo.context,
+        origin.x + scale * 0.75,
+        origin.y + scale * 0.5,
+        scale * 0.48,
+        math.radians(0),
+        math.radians(360),
+    )
+    clib.cairo_stroke(cairo.context)
+    return Rect(origin=origin, spread=Size(width=scale * 1.5, height=scale))
+
+
+def render_capslock_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: float):
+    # scale 40 produces width=32, height=40; width is .8x scale
+    clib.cairo_new_path(cairo.context)
+    cairo.set_draw_color(CairoColor.BLACK)
+    clib.cairo_set_line_width(cairo.context, linewidth)
+    cairo.move_to(origin + Point(scale * 0.26, scale * 0.73))
+    cairo.line_to(origin + Point(scale * 0.26, scale * 0.355))
+    cairo.line_to(origin + Point(scale * 0.07, scale * 0.355))
+    cairo.line_to(origin + Point(scale * 0.415, scale * 0.015))
+    cairo.line_to(origin + Point(scale * 0.76, scale * 0.355))
+    cairo.line_to(origin + Point(scale * 0.57, scale * 0.355))
+    cairo.line_to(origin + Point(scale * 0.57, scale * 0.73))
+    clib.cairo_close_path(cairo.context)
+    clib.cairo_stroke(cairo.context)
+    clib.cairo_rectangle(
+        cairo.context,
+        origin.x + scale * 0.26,
+        origin.y + scale * 0.82,
+        scale * 0.31,
+        scale * 0.18,
+    )
+    clib.cairo_stroke(cairo.context)
+    return Rect(origin=origin, spread=Size(width=scale * 0.8, height=scale))
 
 
 class StatusLayout:
@@ -217,43 +274,69 @@ class StatusLayout:
         with self.renderer._make_font_description(self.status_font) as font_description:
             clib.pango_layout_set_font_description(self.layout, font_description)
 
+    def get_layout_rects(self):
+        with ffi.new("PangoRectangle *") as ink, ffi.new("PangoRectangle *") as logical:
+            clib.pango_layout_get_pixel_extents(self.layout, ink, logical)
+            return LayoutRects(
+                ink=Rect.from_pango_rect(ink),
+                logical=Rect.from_pango_rect(logical),
+            )
+
     def render(self):
-        # TODO: draw status area
         # Line 1: Sprint status: timer, wordcount, hotkey reminder
-        # Line 2: Session wordcount, current time, battery status, capslock, compose
+        # Line 2: Session wordcount, current time
+        inner_margin = 25
+        # Line 3: capslock, "Tabula", compose
+        # Line 3 is drawn separately to work with the glyphs
         wordcount = self.document.wordcount
         wordcount_status = (
             "1 word" if wordcount == 1 else "{:,} words".format(wordcount)
         )
         wordcount_time_line = " — ".join((wordcount_status, now().strftime("%H:%M")))
-        leds = []
-        if self.capslock:
-            leds.append("CAPSLOCK")
-        if self.compose:
-            leds.append("COMPOSE")
-        led_line = "   ".join(leds)
-        status_line = "\n".join((wordcount_time_line, led_line))
+        status_lines = [wordcount_time_line]
+        status_line = "\n".join(status_lines)
         clib.pango_layout_set_markup(self.layout, status_line.encode("utf-8"), -1)
-        with ffi.new("PangoRectangle *") as logical_rect:
-            clib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, logical_rect)
-            status_y_top = self.status_y_bottom - logical_rect.height
-            markup_size = Size(width=self.render_width, height=logical_rect.height)
+        status_rects = self.get_layout_rects()
 
-        with self.renderer.create_surface(
-            markup_size
-        ) as markup_surface, self.renderer.create_cairo_context(
-            markup_surface
-        ) as markup_context:
-            clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
-            clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
-            clib.cairo_paint(markup_context)
-            clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
-            clib.pango_cairo_show_layout(markup_context, self.layout)
-            clib.cairo_surface_flush(markup_surface)
+        clib.pango_layout_set_text(self.layout, "Tabula".encode("utf-8"), -1)
+        line_3_rects = self.get_layout_rects()
+
+        line_3_top = status_rects.logical.spread.height + inner_margin
+        full_status_height = line_3_top + line_3_rects.logical.spread.height
+        symbol_y_top = line_3_top + line_3_rects.ink.origin.y
+        symbol_scale = line_3_rects.ink.spread.height
+
+        status_y_top = self.status_y_bottom - full_status_height
+        markup_size = Size(width=self.render_width, height=full_status_height)
+
+        with Cairo(markup_size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+
+            clib.pango_layout_set_markup(self.layout, status_line.encode("utf-8"), -1)
+            clib.pango_cairo_show_layout(cairo.context, self.layout)
+
+            cairo.move_to(Point(x=0, y=line_3_top))
+            clib.pango_layout_set_text(self.layout, "Tabula".encode("utf-8"), -1)
+            clib.pango_cairo_show_layout(cairo.context, self.layout)
+            if self.capslock:
+                render_capslock_symbol(
+                    cairo,
+                    origin=Point(x=200, y=symbol_y_top),
+                    scale=symbol_scale,
+                    linewidth=2,
+                )
+            if self.compose:
+                compose_x = self.render_width - (200 + 1.5 * symbol_scale)
+                render_compose_symbol(
+                    cairo,
+                    origin=Point(x=compose_x, y=symbol_y_top),
+                    scale=symbol_scale,
+                    linewidth=2,
+                )
+
             rendered = Rendered(
-                image=self.renderer.surface_to_bytes(
-                    markup_surface, markup_size, skip_inversion=True
-                ),
-                extent=Rect(origin=Point(x=0, y=status_y_top), spread=markup_size),
+                image=cairo.get_image_bytes(),
+                extent=Rect(origin=Point(x=0, y=status_y_top), spread=cairo.size),
             )
         return rendered

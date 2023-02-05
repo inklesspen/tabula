@@ -1,5 +1,4 @@
 import datetime
-import functools
 import pathlib
 import typing
 
@@ -13,7 +12,6 @@ from .device.keyboard_consts import Key
 from .durations import format_duration, parse_duration
 from .util import evolve as msgspec_evolve
 
-# Eventually these will be stored in a config file, hence the async load_settings()
 COMPOSE_SEQUENCES = {
     "< <": "«",
     "> >": "»",
@@ -172,19 +170,6 @@ def _dec_hook(type: typing.Type, obj: typing.Any) -> typing.Any:
 
 settings_encoder = msgspec.json.Encoder(enc_hook=_enc_hook)
 settings_decoder = msgspec.json.Decoder(SettingsData, dec_hook=_dec_hook)
-
-
-@attrs.define(kw_only=True, frozen=True)
-class OldSettings:
-    drafting_fonts: list[str]
-    font_sizes: dict[str, int]
-    current_font: str
-    compose_key: Key
-    compose_sequences: pygtrie.Trie
-    keymaps: dict[Key, list[str]]
-    db_path: pathlib.Path
-    export_path: pathlib.Path
-    max_editable_age: datetime.timedelta
 
 
 @attrs.define(kw_only=True, frozen=True, init=False)

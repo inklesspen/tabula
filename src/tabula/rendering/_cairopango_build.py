@@ -209,6 +209,10 @@ typedef struct {
     int width, height;
 } cairo_rectangle_int_t;
 
+typedef struct cairo_path {
+    cairo_status_t status;
+    ...;
+} cairo_path_t;
 
 typedef int cairo_bool_t;
 
@@ -296,6 +300,7 @@ void cairo_arc(cairo_t *cr, double xc, double yc, double radius, double angle1, 
 void cairo_curve_to (cairo_t *cr, double x1, double y1, double x2, double y2, double x3, double y3);
 
 void cairo_move_to(cairo_t *cr, double x, double y);
+void cairo_line_to(cairo_t *cr, double x, double y);
 
 void cairo_rectangle(cairo_t *cr,
                      double x,
@@ -313,6 +318,13 @@ void cairo_set_line_width(cairo_t *cr, double width);
 
 void cairo_stroke(cairo_t *cr);
 void cairo_fill(cairo_t *cr);
+void cairo_stroke_preserve(cairo_t *cr);
+void cairo_fill_preserve(cairo_t *cr);
+
+cairo_path_t * cairo_copy_path(cairo_t *cr);
+cairo_path_t * cairo_copy_path_flat(cairo_t *cr);
+void cairo_append_path (cairo_t *cr, const cairo_path_t *path);
+void cairo_path_destroy (cairo_path_t *path);
 
 void cairo_surface_flush(cairo_surface_t *surface);
 
