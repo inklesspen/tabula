@@ -1,5 +1,5 @@
 import collections.abc
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 import math
 
 from ..commontypes import Size, Rect, Point
@@ -34,6 +34,14 @@ class Cairo(AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         self.teardown()
 
+    @contextmanager
+    def cairo_save_restore(self):
+        clib.cairo_save(self.context)
+        try:
+            yield
+        finally:
+            clib.cairo_restore(self.context)
+
     def fill_with_color(self, color: CairoColor):
         self.set_draw_color(color)
         clib.cairo_paint(self.context)
@@ -43,13 +51,12 @@ class Cairo(AbstractContextManager):
             raise TypeError("with_border can only be used with an active surface")
 
         # Draw border
-        clib.cairo_save(self.context)
-        clib.cairo_new_path(self.context)
-        clib.cairo_rectangle(self.context, 0, 0, self.size.width, self.size.height)
-        self.set_draw_color(border_color)
-        clib.cairo_set_line_width(self.context, border_width)
-        clib.cairo_stroke(self.context)
-        clib.cairo_restore(self.context)
+        with self.cairo_save_restore():
+            clib.cairo_new_path(self.context)
+            clib.cairo_rectangle(self.context, 0, 0, self.size.width, self.size.height)
+            self.set_draw_color(border_color)
+            clib.cairo_set_line_width(self.context, border_width)
+            clib.cairo_stroke(self.context)
 
         # Return sub-surface
         sub_size = Size(
@@ -146,19 +153,20 @@ class Cairo(AbstractContextManager):
         return path_data
 
     def paste_other(self, other: "Cairo", location: Point, other_rect: Rect):
-        clib.cairo_save(self.context)
-        clib.cairo_set_operator(self.context, clib.CAIRO_OPERATOR_SOURCE)
-        offset = location - other_rect.origin
-        clib.cairo_set_source_surface(self.context, other.surface, offset.x, offset.y)
-        clib.cairo_rectangle(
-            self.context,
-            location.x,
-            location.y,
-            other_rect.spread.width,
-            other_rect.spread.height,
-        )
-        clib.cairo_fill(self.context)
-        clib.cairo_restore(self.context)
+        with self.cairo_save_restore():
+            clib.cairo_set_operator(self.context, clib.CAIRO_OPERATOR_SOURCE)
+            offset = location - other_rect.origin
+            clib.cairo_set_source_surface(
+                self.context, other.surface, offset.x, offset.y
+            )
+            clib.cairo_rectangle(
+                self.context,
+                location.x,
+                location.y,
+                other_rect.spread.width,
+                other_rect.spread.height,
+            )
+            clib.cairo_fill(self.context)
 
     def get_image_bytes(self) -> bytes:
         dataptr = clib.cairo_image_surface_get_data(self.surface)

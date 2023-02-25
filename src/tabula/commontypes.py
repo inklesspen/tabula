@@ -42,9 +42,6 @@ class Size(msgspec.Struct, frozen=True):
     def as_tuple(self):
         return (self.width, self.height)
 
-    def as_numpy_shape(self):
-        return (self.height, self.width)
-
     @property
     def pillow_size(self):
         return (self.width, self.height)
@@ -53,9 +50,15 @@ class Size(msgspec.Struct, frozen=True):
     def from_tuple(cls, tup):
         return cls(width=tup[0], height=tup[1])
 
-    @classmethod
-    def from_numpy_shape(cls, shape):
-        return cls(height=shape[0], width=shape[1])
+    def __add__(self, other):
+        if not isinstance(other, Size):
+            return NotImplemented
+        return Size(width=self.width + other.width, height=self.height + other.height)
+
+    def __sub__(self, other):
+        if not isinstance(other, Size):
+            return NotImplemented
+        return Size(width=self.width - other.width, height=self.height - other.height)
 
 
 class Rect(msgspec.Struct, frozen=True):

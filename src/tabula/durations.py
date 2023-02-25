@@ -2,6 +2,8 @@
 import datetime
 import decimal
 
+from .util import maybe_int
+
 DISPLAY_UNITS = {
     "seconds": "s",
     "milliseconds": "ms",
@@ -17,10 +19,6 @@ PARSE_UNITS = {
     "m": datetime.timedelta(minutes=1),
     "h": datetime.timedelta(hours=1),
 }
-
-
-def _maybe_int(val: float):
-    return int(val) if val.is_integer() else val
 
 
 def format_duration(val: datetime.timedelta) -> str:
@@ -39,7 +37,7 @@ def format_duration(val: datetime.timedelta) -> str:
         parts.append(DISPLAY_UNITS["microseconds"])
     elif val < datetime.timedelta(seconds=1):
         milliseconds = val / datetime.timedelta(milliseconds=1)
-        parts.append(str(_maybe_int(milliseconds)))
+        parts.append(str(maybe_int(milliseconds)))
         parts.append(DISPLAY_UNITS["milliseconds"])
     else:
         int_hours = val // datetime.timedelta(hours=1)
@@ -53,7 +51,7 @@ def format_duration(val: datetime.timedelta) -> str:
             parts.append(str(int_minutes))
             parts.append(DISPLAY_UNITS["minutes"])
         if val > datetime.timedelta():
-            parts.append(str(_maybe_int(val.total_seconds())))
+            parts.append(str(maybe_int(val.total_seconds())))
             parts.append(DISPLAY_UNITS["seconds"])
 
     return "".join(parts)

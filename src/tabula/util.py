@@ -6,7 +6,6 @@ import typing
 from os.path import commonprefix
 
 from dateutil.tz import tzlocal
-import msgspec
 import trio
 import trio_util
 import tricycle
@@ -31,14 +30,6 @@ async def checkpoint():
     await trio.sleep(0)
 
 
-def evolve(obj: msgspec.Struct, **changes):
-    cls = obj.__class__
-    for field_name in cls.__struct_fields__:
-        if field_name not in changes:
-            changes[field_name] = getattr(obj, field_name)
-    return cls(**changes)
-
-
 def invoke(c: typing.Callable, **provided_kwargs):
     sig = inspect.signature(c)
     used_kwargs = {k: v for k, v in provided_kwargs.items() if k in sig.parameters}
@@ -52,6 +43,10 @@ def set_into(list: list[typing.Optional[V]], index: int, item: V):
     while index >= len(list):
         list.append(None)
     list[index] = item
+
+
+def maybe_int(val: float):
+    return int(val) if val.is_integer() else val
 
 
 def now():

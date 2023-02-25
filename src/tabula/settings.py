@@ -5,12 +5,9 @@ import typing
 import attrs
 import msgspec
 import pygtrie
-import trio
-import xdg
 
 from .device.keyboard_consts import Key
 from .durations import format_duration, parse_duration
-from .util import evolve as msgspec_evolve
 
 COMPOSE_SEQUENCES = {
     "< <": "«",
@@ -137,15 +134,26 @@ KEYMAPS = {
 
 COMPOSE_KEY = "KEY_RIGHTMETA"
 
-DRAFTING_FONTS = ["Tabula Quattro", "Comic Neue", "Special Elite"]
+DRAFTING_FONTS = {
+    "Tabula Quattro": ["6.9", "7.4", "8", "8.5", "9.1", "9.7", "10.2"],
+    "Comic Neue": ["8.9", "9.7", "10.4", "11.1", "11.8", "12.5", "13.2"],
+    "Special Elite": ["8.9", "9.7", "10.4", "11.1", "11.8", "12.5", "13.2"],
+    "Atkinson Hyperlegible": ["7.5", "8.1", "8.7", "9.3", "9.9", "10.5", "11.1"],
+}
 
-FONT_SIZES = {"Tabula Quattro": 8, "Comic Neue": 8, "Special Elite": 8}
+# TODO: redo these values; I wasn't using the proper font sizes yet when I determined these the first time.
+LINE_SPACING = {
+    "Tabula Quattro": 1.0,
+    "Comic Neue": 1.3,
+    "Special Elite": 1.4,
+    "Atkinson Hyperlegible": 1.1,
+}
 
 
 class SettingsData(msgspec.Struct):
-    drafting_fonts: list[str]
-    font_sizes: dict[str, int]
+    drafting_fonts: dict[str, list[str]]
     current_font: str
+    current_font_size: int
     compose_key: str
     compose_sequences: dict[str, str]
     keymaps: dict[str, list[str]]
@@ -172,13 +180,13 @@ settings_encoder = msgspec.json.Encoder(enc_hook=_enc_hook)
 settings_decoder = msgspec.json.Decoder(SettingsData, dec_hook=_dec_hook)
 
 
-@attrs.define(kw_only=True, frozen=True, init=False)
+@attrs.define(kw_only=True, init=False)
 class Settings:
     _data: SettingsData = attrs.field(repr=False)
     _path: pathlib.Path = attrs.field(repr=False, eq=False, order=False)
-    drafting_fonts: list[str] = attrs.field(eq=False, order=False)
-    font_sizes: dict[str, int] = attrs.field(eq=False, order=False)
+    drafting_fonts: dict[str, list[str]] = attrs.field(eq=False, order=False)
     current_font: str = attrs.field(eq=False, order=False)
+    current_font_size: int = attrs.field(eq=False, order=False)
     compose_key: Key = attrs.field(eq=False, order=False)
     compose_sequences: pygtrie.Trie = attrs.field(eq=False, order=False)
     keymaps: dict[Key, list[str]] = attrs.field(eq=False, order=False)
@@ -190,9 +198,9 @@ class Settings:
         self.__attrs_init__(
             data=data,
             path=path,
-            drafting_fonts=list(data.drafting_fonts),
-            font_sizes=dict(data.font_sizes),
+            drafting_fonts=data.drafting_fonts,
             current_font=data.current_font,
+            current_font_size=data.current_font_size,
             compose_key=Key[data.compose_key],
             compose_sequences=pygtrie.Trie(
                 {tuple(k.split()): v for k, v in data.compose_sequences.items()}
@@ -203,17 +211,13 @@ class Settings:
             max_editable_age=data.max_editable_age,
         )
 
-    def with_new_current_font(self, new_current_font: str):
-        new_data = msgspec_evolve(self._data, current_font=new_current_font)
-        return type(self)(new_data, self._path)
-
-    def with_new_font_size(self, font: str, size: int):
-        if font not in self.drafting_fonts:
-            raise ValueError(f"Unknown font: {font}")
-        new_font_sizes = dict(self._data.font_sizes)
-        new_font_sizes[font] = size
-        new_data = msgspec_evolve(self._data, font_sizes=new_font_sizes)
-        return type(self)(new_data, self._path)
+    def set_current_font(self, new_current_font: str, new_size: int):
+        new_data = msgspec.structs.replace(
+            self._data, current_font=new_current_font, current_font_size=new_size
+        )
+        self._data = new_data
+        self.current_font = new_current_font
+        self.current_font_size = new_size
 
     def save(self, dest: pathlib.Path = None):
         if dest is None:
@@ -229,8 +233,8 @@ class Settings:
         return cls(
             SettingsData(
                 drafting_fonts=DRAFTING_FONTS,
-                font_sizes=FONT_SIZES,
-                current_font="Tabula Quattro 8",
+                current_font="Tabula Quattro",
+                current_font_size=2,
                 compose_key=COMPOSE_KEY,
                 compose_sequences=COMPOSE_SEQUENCES,
                 keymaps=KEYMAPS,
@@ -240,12 +244,3 @@ class Settings:
             ),
             pathlib.Path("test.settings.json"),
         )
-
-
-def _load_settings():
-    return Settings.load(xdg.xdg_state_home() / "tabula" / "settings.json")
-
-
-async def load_settings():
-    await trio.sleep(0)
-    return _load_settings()

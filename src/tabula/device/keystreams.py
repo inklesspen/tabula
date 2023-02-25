@@ -4,6 +4,7 @@
 from contextlib import asynccontextmanager, aclosing
 import unicodedata
 
+import msgspec
 from slurry import Pipeline
 from slurry.environments import TrioSection
 import pygtrie
@@ -11,7 +12,6 @@ import trio
 
 from .hwtypes import KeyEvent, Key, KeyPress, ModifierAnnotation, AnnotatedKeyEvent
 from ..settings import Settings
-from ..util import evolve
 
 # stage 1: track modifier keydown/up and annotate keystream with current modifiers
 class ModifierTracking(TrioSection):
@@ -96,7 +96,9 @@ class MakeCharacter(TrioSection):
                     if is_letter:
                         is_shifted ^= event.annotation.capslock
                     level = 1 if is_shifted else 0
-                    await output(evolve(event, character=keymap[level]))
+                    await output(
+                        msgspec.structs.replace(event, character=keymap[level])
+                    )
                 else:
                     await output(event)
 
@@ -135,7 +137,9 @@ class ComposeCharacters(TrioSection):
                             AnnotatedKeyEvent(
                                 key=Key.KEY_COMPOSE,
                                 press=KeyPress.PRESSED,
-                                annotation=evolve(event.annotation, compose=False),
+                                annotation=msgspec.structs.replace(
+                                    event.annotation, compose=False
+                                ),
                                 is_modifier=True,
                                 is_led_able=True,
                             )
@@ -159,8 +163,11 @@ class ComposeCharacters(TrioSection):
                             await output(new_event)
                         if event.is_led_able:
                             # emit the event for visibility, but with compose turned on
-                            visible_event = evolve(
-                                event, annotation=evolve(event.annotation, compose=True)
+                            visible_event = msgspec.structs.replace(
+                                event,
+                                annotation=msgspec.structs.replace(
+                                    event.annotation, compose=True
+                                ),
                             )
                             await output(visible_event)
 

@@ -503,6 +503,13 @@ pango_font_get_metrics(
     PangoFont *font,
     PangoLanguage *language);
 
+PangoFontMetrics*
+pango_context_get_metrics (
+  PangoContext* context,
+  const PangoFontDescription* desc,
+  PangoLanguage* language
+);
+
 void pango_font_metrics_unref(
     PangoFontMetrics *metrics);
 
@@ -565,6 +572,16 @@ void pango_layout_get_pixel_extents(PangoLayout *layout,
                                     PangoRectangle *logical_rect);
 int pango_layout_get_width(PangoLayout *layout);
 int pango_layout_get_height(PangoLayout *layout);
+int pango_layout_get_baseline(PangoLayout* layout);
+
+void pango_layout_set_line_spacing (
+  PangoLayout* layout,
+  float factor
+);
+
+float pango_layout_get_line_spacing (
+  PangoLayout* layout
+);
 
 const PangoLogAttr*
 pango_layout_get_log_attrs_readonly (

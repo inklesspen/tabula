@@ -39,6 +39,9 @@ from .gestures import make_tapstream
 from ..settings import Settings
 from ..util import checkpoint
 
+if typing.TYPE_CHECKING:
+    from ..rendering.rendertypes import Rendered
+
 
 class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
     def __init__(self, socket_stream: trio.SocketStream):
@@ -102,6 +105,9 @@ class Hardware(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def display_pixels(self, imagebytes: bytes, rect: Rect):
         ...
+
+    async def display_rendered(self, rendered: "Rendered"):
+        await self.display_pixels(rendered.image, rendered.extent)
 
     @abc.abstractmethod
     async def clear_screen(self):

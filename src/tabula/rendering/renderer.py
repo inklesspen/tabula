@@ -388,10 +388,7 @@ class Renderer:
             ) as logical_rect:
                 clib.pango_layout_get_pixel_extents(layout, ink_rect, logical_rect)
                 return {
-                    name: Rect(
-                        origin=Point(x=pango_rect.x, y=pango_rect.y),
-                        spread=Size(width=pango_rect.width, height=pango_rect.height),
-                    )
+                    name: Rect.from_pango_rect(pango_rect)
                     for name, pango_rect in {
                         "ink_rect": ink_rect,
                         "logical_rect": logical_rect,

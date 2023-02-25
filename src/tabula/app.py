@@ -1,4 +1,6 @@
+import argparse
 import collections.abc
+import pathlib
 import sys
 import typing
 
@@ -6,7 +8,7 @@ import trio
 import trio_util
 
 from .device.hardware import Hardware, RpcHardware
-from .settings import load_settings, Settings
+from .settings import Settings
 from .rendering.renderer import Renderer
 from .screens import Screen, KeyboardDetect, SystemMenu, Switch, Modal, Close, Shutdown
 from .util import invoke
@@ -89,31 +91,25 @@ class Tabula:
                     print(next_action)
                     self.screen_stack.value.pop()
                 case Shutdown():
+                    self.settings.save()
                     # TODO: clean shutdown tasks?
                     print("Shutting down…")
                     # This RPC never actually gets sent because of the cancel callback.
                     # Waiting a few seconds allows it to get sent, but there must be a better way.
+                    # otoh it won't be an issue when actually running on the kobo, so.
                     await self.hardware.clear_screen()
                     await trio.sleep(0.5)
                     cancel_callback()
 
-        # incoming events need to be filtered and processed
-        # KeyEvent -> AnnotatedKeyEvent
-        # TouchReport -> ???
-        # PowerButtonPress -> ???
-        # once processed, events need to be dispatched to the facing screen
-        # maybe screens should be able to choose not to get composes though?
-
-        # continue to handle keymaps and composes in the Hardware object, but each screen can choose to disable or enable composes when becoming front
-        # when enabling composes (because a screen became front), throw away any in-progress compose state and start fresh
-
-        # titlebar/statusbar/etc only needs to be shown on drafting screen, so that does not have to be independent
-
     @classmethod
-    async def start_app(cls):
-        settings = await load_settings()
+    async def start_app(cls, settings_path):
+        settings = Settings.load(settings_path)
         app = cls(settings)
         await app.run()
+
+
+parser = argparse.ArgumentParser(prog="tabula")
+parser.add_argument("settings", type=pathlib.Path)
 
 
 def main(argv=sys.argv):
@@ -126,5 +122,6 @@ def main(argv=sys.argv):
 
     Does stuff.
     """
-    trio.run(Tabula.start_app)
+    parsed = parser.parse_args(argv[1:])
+    trio.run(Tabula.start_app, parsed.settings)
     return 0
