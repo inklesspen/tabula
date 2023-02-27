@@ -8,8 +8,6 @@ import tricycle
 
 from .hwtypes import (
     ScreenRect,
-    BatteryState,
-    ChargingState,
     KeyEvent,
     AnnotatedKeyEvent,
     TouchReport,
@@ -23,9 +21,7 @@ from ..commontypes import Rect, Size, ScreenInfo
 from .rpctypes import (
     KoboRequests,
     HostRequests,
-    BatteryState as RpcBatteryState,
     ScreenInfo as RpcScreenInfo,
-    GetBatteryState as RpcGetBatteryState,
     GetScreenInfo as RpcGetScreenInfo,
     DisplayPixels as RpcDisplayPixels,
     ClearScreen as RpcClearScreen,
@@ -93,10 +89,6 @@ class Hardware(metaclass=abc.ABCMeta):
         self.touchstream = None
         self.touchstream_send_channel = None
         self.reset_touchstream()
-
-    @abc.abstractmethod
-    async def get_battery_state(self) -> BatteryState:
-        ...
 
     @abc.abstractmethod
     async def get_screen_info(self) -> ScreenInfo:
@@ -193,8 +185,50 @@ class Hardware(metaclass=abc.ABCMeta):
         return self.touch_coordinate_transform.apply(event, self.screen_size)
 
 
+class KoboHardware(Hardware):
+    def __init__(
+        self,
+        event_channel: trio.abc.SendChannel,
+        settings: Settings,
+    ):
+        super().__init__(event_channel, settings)
+        self.fbink = FbInk()
+        self.keyboards = None
+
+    async def get_screen_info(self) -> ScreenInfo:
+        info = self.fbink.get_screen_info()
+        await checkpoint()
+
+    async def display_pixels(self, imagebytes: bytes, rect: Rect):
+        if self.fbink.active:
+            self.fbink.display_pixels(imagebytes, rect)
+        await checkpoint()
+
+    async def clear_screen(self):
+        if self.fbink.active:
+            self.fbink.clear()
+        await checkpoint()
+
+    async def set_led_state(self, state: SetLed):
+        if self.keyboards is not None:
+            self.keyboards.set_led(state.led, state.state)
+        await checkpoint()
+
+    async def set_waveform_mode(self, wfm_mode: str):
+        self.fbink.set_waveform_mode(wfm_mode)
+        await checkpoint()
+
+    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        with self.fbink:
+            async with trio.open_nursery() as nursery:
+                task_status.started()
+                self.keyboards = AllKeyboards(self.send_channel.clone())
+                nursery.start_soon(self.keyboards.run)
+                touchscreen = Touchscreen(self.send_channel.clone())
+                nursery.start_soon(touchscreen.run)
+
+
 class RpcHardware(Hardware):
-    battery_state_response: trio_util.AsyncValue[typing.Optional[BatteryState]]
     screen_info_response: trio_util.AsyncValue[typing.Optional[ScreenInfo]]
 
     def __init__(
@@ -205,16 +239,9 @@ class RpcHardware(Hardware):
         super().__init__(event_channel, settings)
         self.host = "kobo"
         self.port = 1234
-        self.battery_state_response = trio_util.AsyncValue(None)
         self.screen_info_response = trio_util.AsyncValue(None)
 
         self.req_send_channel, self.req_receive_channel = trio.open_memory_channel(0)
-
-    async def get_battery_state(self) -> BatteryState:
-        self.battery_state_response.value = None
-        await self.req_send_channel.send(RpcGetBatteryState())
-        resp = await self.battery_state_response.wait_value(lambda v: v is not None)
-        return resp
 
     async def get_screen_info(self) -> ScreenInfo:
         self.screen_info_response.value = None
@@ -257,10 +284,6 @@ class RpcHardware(Hardware):
         while True:
             req: KoboRequests = await network_channel.receive()
             match req:
-                case RpcBatteryState():
-                    self.battery_state_response.value = BatteryState(
-                        state=req.state, current_charge=req.current_charge
-                    )
                 case RpcScreenInfo():
                     screen_size = Size(width=req.width, height=req.height)
                     self.screen_size = screen_size
@@ -309,10 +332,6 @@ class EventTestHardware(Hardware):
         self.incoming_event_channel = incoming_event_channel
         self.capslock_led = False
         self.compose_led = False
-
-    async def get_battery_state(self) -> BatteryState:
-        await checkpoint()
-        return BatteryState(state=ChargingState.NOT_CHARGING, current_charge=100)
 
     async def get_screen_info(self) -> ScreenInfo:
         await checkpoint()

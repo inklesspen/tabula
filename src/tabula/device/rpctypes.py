@@ -3,16 +3,12 @@ import typing
 import msgspec
 
 from tabula.device.keyboard_consts import Key, KeyPress, Led
-from .hwtypes import ScreenRect, TouchEvent, ChargingState, TouchCoordinateTransform
+from .hwtypes import ScreenRect, TouchEvent, TouchCoordinateTransform
 
 
 ### Request Types
 
 ### Laptop to Kobo
-
-
-class GetBatteryState(msgspec.Struct, tag=True):
-    pass
 
 
 class GetScreenInfo(msgspec.Struct, tag=True):
@@ -37,21 +33,9 @@ class SetWaveformMode(msgspec.Struct, tag=True):
     wfm_mode: str
 
 
-HostRequests = (
-    GetBatteryState
-    | GetScreenInfo
-    | DisplayPixels
-    | ClearScreen
-    | SetLed
-    | SetWaveformMode
-)
+HostRequests = GetScreenInfo | DisplayPixels | ClearScreen | SetLed | SetWaveformMode
 
 ### Kobo to Laptop
-
-
-class BatteryState(msgspec.Struct, tag=True):
-    state: ChargingState
-    current_charge: int
 
 
 class ScreenInfo(msgspec.Struct, tag=True):
@@ -76,4 +60,4 @@ class KeyboardDisconnect(msgspec.Struct, tag=True):
     pass
 
 
-KoboRequests = BatteryState | ScreenInfo | KeyEvent | TouchReport | KeyboardDisconnect
+KoboRequests = ScreenInfo | KeyEvent | TouchReport | KeyboardDisconnect

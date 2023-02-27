@@ -6,7 +6,7 @@ import typing
 import msgspec
 
 from tabula.device.keyboard_consts import Key, KeyPress, Led
-from ..commontypes import Point, Size, Rect
+from ..commontypes import Point, Size, Rect, ScreenInfo
 
 
 class ScreenRect(msgspec.Struct, frozen=True):
@@ -87,17 +87,6 @@ class EventType(enum.Enum):
     AnnotatedKeyEvent = enum.auto()
 
 
-class ChargingState(enum.IntEnum):
-    DISCHARGING = enum.auto()
-    CHARGING = enum.auto()
-    NOT_CHARGING = enum.auto()
-
-
-class BatteryState(msgspec.Struct, frozen=True):
-    state: ChargingState
-    current_charge: int
-
-
 class SetLed(msgspec.Struct, frozen=True):
     led: Led
     state: bool
@@ -167,3 +156,8 @@ class TapPhase(enum.Enum):
 class TapEvent(msgspec.Struct, frozen=True):
     location: Point
     phase: TapPhase
+
+
+class TouchScreenInfo(msgspec.Struct, frozen=True):
+    screen_info: ScreenInfo
+    touch_coordinate_transform: TouchCoordinateTransform

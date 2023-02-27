@@ -3,8 +3,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import contextlib
 
-from ._fbink import ffi, lib
-from .types import ScreenInfo, ScreenRect
+from ._fbink import ffi, lib as clib
+from .hwtypes import ScreenRect, TouchCoordinateTransform, TouchScreenInfo
+from ..commontypes import Size, ScreenInfo
+from ..util import make_c_enum
+
+
+WaveformMode = make_c_enum(ffi, "WFM_MODE_INDEX_E", "WaveformMode")
 
 
 class FbInk(contextlib.AbstractContextManager):
@@ -14,28 +19,36 @@ class FbInk(contextlib.AbstractContextManager):
         self.screendump = None
 
     def __enter__(self):
-        self.fbfd = lib.fbink_open()
-        lib.fbink_init(self.fbfd, self.fbink_cfg)
+        self.fbfd = clib.fbink_open()
+        clib.fbink_init(self.fbfd, self.fbink_cfg)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        lib.fbink_close(self.fbfd)
+        clib.fbink_close(self.fbfd)
         self.fbfb = None
 
-    def get_screen_info(self) -> ScreenInfo:
+    @property
+    def active(self):
+        return self.fbfd is not None
+
+    def get_screen_info(self) -> TouchScreenInfo:
         with ffi.new("FBInkState *") as state:
-            lib.fbink_get_state(self.fbink_cfg, state)
-            return ScreenInfo(
-                width=state.view_width,
-                height=state.view_height,
+            clib.fbink_get_state(self.fbink_cfg, state)
+            touch_coordinate_transform = TouchCoordinateTransform(state.current_rota)
+            screen_info = ScreenInfo(
+                size=Size(width=state.view_width, height=state.view_height),
                 dpi=state.screen_dpi,
             )
+        return TouchScreenInfo(
+            screen_info=screen_info,
+            touch_coordinate_transform=touch_coordinate_transform,
+        )
 
     def clear(self):
-        lib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL)
+        clib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL, False)
 
     def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
-        lib.fbink_print_raw_data(
+        clib.fbink_print_raw_data(
             self.fbfd,
             imagebytes,
             rect.width,
@@ -48,12 +61,15 @@ class FbInk(contextlib.AbstractContextManager):
 
     def save_screen(self) -> None:
         self.screendump = ffi.new("FBInkDump *")
-        lib.fbink_dump(self.fbfd, self.screendump)
+        clib.fbink_dump(self.fbfd, self.screendump)
 
     def restore_screen(self) -> None:
         if self.screendump is None:
             raise ValueError("Cannot restore screen; nothing saved.")
         with self.screendump:
-            lib.fbink_restore(self.fbfd, self.fbink_cfg, self.screendump)
-            lib.fbink_free_dump_data(self.screendump)
+            clib.fbink_restore(self.fbfd, self.fbink_cfg, self.screendump)
+            clib.fbink_free_dump_data(self.screendump)
         self.screendump = None
+
+    def set_waveform_mode(self, wfm_mode: str):
+        self.fbink_cfg.wfm_mode = WaveformMode[wfm_mode]

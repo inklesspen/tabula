@@ -1,28 +1,13 @@
-# SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
-#
-# SPDX-License-Identifier: GPL-3.0-or-later
-import collections
-import collections.abc
-from contextlib import contextmanager
-import fcntl
-import os
 import pathlib
 import typing
 
-import attr
+import msgspec
 import libevdev
 import trio
-import trio_util
 
-from .keyboard_consts import Key, KeyPress
-from .types import (
-    InputDevice,
-    InputDeviceNotFound,
-    ScreenInfo,
-    ScreenRect,
-    KeyEvent,
-    TouchEvent,
-)
+from .keyboard_consts import Key, KeyPress, Led
+from .rpctypes import KeyEvent, KeyboardDisconnect
+from .deviceutil import open_device
 
 # Evdev keyboard class should represent the concept of an evdev keyboard, not a specific
 # input path. Same class can handle enumerating keyboards and delivering input from chosen
@@ -61,6 +46,25 @@ from .types import (
 MIN_USB_INPUT = 2
 
 
+class InputDevice(msgspec.Struct, frozen=True, eq=False):
+    vendor_id: str
+    product_id: str
+    manufacturer: typing.Optional[str]
+    product: typing.Optional[str]
+    interface_id: str
+    inputpath: typing.Optional[pathlib.Path]
+
+    @classmethod
+    def from_dict(self, v):
+        if v is not None:
+            return InputDevice(**v)
+
+
+class InputDeviceNotFound(Exception):
+    def __init__(self, devicespec: InputDevice):
+        self.devicespec = devicespec
+
+
 def parse_eventnum(name):
     if not name.startswith("event"):
         return -1
@@ -71,24 +75,15 @@ def parse_eventnum(name):
         return -1
 
 
-@contextmanager
-def open_device(devpath):
-    f = open(devpath, "r+b", buffering=0)
-    fcntl.fcntl(f, fcntl.F_SETFL, os.O_NONBLOCK)
-    d = libevdev.Device(f)
-    d.grab()
-    try:
-        yield d
-    finally:
-        f.close()
-
-
-def identify_inputs():
+def identify_inputs() -> list[InputDevice]:
     found = []
     for input_symlink in pathlib.Path("/sys/class/input").iterdir():
         if parse_eventnum(inputname := input_symlink.name) < MIN_USB_INPUT:
             continue
         inputpath = pathlib.Path("/dev/input") / inputname
+        # the inputpath may not exist immediately…
+        if not inputpath.is_char_device():
+            continue
         # check if inputpath can actually produce keyboard events
         with open_device(inputpath) as d:
             if not d.has(libevdev.EV_KEY.KEY_Q):
@@ -115,114 +110,100 @@ def identify_inputs():
     return found
 
 
-def _contains_input_device_predicate(devicespec):
-    def predicate(current_inputs):
-        for device in current_inputs:
-            if device == devicespec:
-                return True
-        return False
-
-    return predicate
-
-
-class EventKeyboard:
-    def __init__(self):
-        self.keyqueue = collections.deque(maxlen=50)
-        self.present_devices = trio_util.AsyncValue(value=[])
-        self.devicespec = trio_util.AsyncValue(value=None)
-        self.connected = trio_util.AsyncBool(value=False)
-
-    def _update_available_inputs(self):
-        old_inputs = self.present_devices.value
-        current_inputs = identify_inputs()
-        devicespec = self.devicespec.value
-        if devicespec is not None:
-            for device in current_inputs:
-                if device == devicespec:
-                    # ensures we have the inputpath populated
-                    self.devicespec.value = device
-
-            self.connected.value = self.devicespec.value in current_inputs
-        if old_inputs != current_inputs:
-            self.present_devices.value = current_inputs
-
-    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        self._update_available_inputs()
+async def listen_for_keys(
+    device: InputDevice,
+    channel: trio.MemorySendChannel,
+    *,
+    task_status=trio.TASK_STATUS_IGNORED,
+):
+    with open_device(device.inputpath) as d:
         task_status.started()
-        while True:
-            devicespec = self.devicespec.value
-            if self.connected.value:
-                await self._read_events(devicespec.inputpath)
-            elif devicespec is not None:
-                # if devicespec has a value, but connected is false: keep checking available inputs
-                # and waiting for the device to appear in present_devices
-                self._update_available_inputs()
-                wait_predicate = _contains_input_device_predicate(devicespec)
-                with trio.move_on_after(0.2):
-                    await self.present_devices.wait_value(wait_predicate)
-            else:
-                # if devicespec has no value: keep checking available inputs
-                # and waiting for devicespec to have a value
-                self._update_available_inputs()
-                with trio.move_on_after(0.2):
-                    await self.devicespec.await_transition()
-
-    async def _read_events(self, eventpath):
-        with open_device(eventpath) as d:
-            while True:
-                try:
-                    for e in d.events():
-                        await trio.sleep(0)
-                        if e.matches(libevdev.EV_KEY):
-                            ke = KeyEvent(
-                                key=Key(e.code.value), press=KeyPress(e.value)
-                            )
-                            self.keyqueue.append(ke)
-                    await trio.sleep(1 / 60)
-                except OSError as e:
-                    if e.errno == 19:
-                        # device has gone away
-                        self.connected.value = False
-                        return
-                    # some other kind of error, let it rise
-                    raise
-
-    async def keystream(self, devicespec):
-        if devicespec != self.devicespec.value:
-            self.keyqueue.clear()
-            self.devicespec.value = devicespec
         while True:
             try:
-                yield self.keyqueue.popleft()
-                await trio.sleep(0)
-            except IndexError:
-                # No key events, sleep a bit longer.
+                for e in d.events():
+                    await trio.sleep(0)
+                    if e.matches(libevdev.EV_KEY):
+                        ke = KeyEvent(key=Key(e.code.value), press=KeyPress(e.value))
+                        await channel.send(ke)
                 await trio.sleep(1 / 60)
+            except OSError as e:
+                if e.errno == 19:
+                    # device has gone away
+                    channel.close()
+                    return
+                # some other kind of error, let it rise
+                raise
 
 
-def _print_event(e):
-    print("Event: time {}.{:06d}, ".format(e.sec, e.usec), end="")
-    if e.matches(libevdev.EV_SYN):
-        if e.matches(libevdev.EV_SYN.SYN_MT_REPORT):
-            print("++++++++++++++ {} ++++++++++++".format(e.code.name))
-        elif e.matches(libevdev.EV_SYN.SYN_DROPPED):
-            print(">>>>>>>>>>>>>> {} >>>>>>>>>>>>".format(e.code.name))
-        else:
-            print("-------------- {} ------------".format(e.code.name))
-    else:
-        print(
-            "type {:02x} {} code {:03x} {:20s} value {:4d}".format(
-                e.type.value, e.type.name, e.code.value, e.code.name, e.value
-            )
-        )
+class AllKeyboards:
+    def __init__(self, hardware_send_channel: trio.MemorySendChannel):
+        self.channel = hardware_send_channel
+        self.present_devices = []
 
+    def _update_available_inputs(self):
+        old_inputs = self.present_devices
+        current_inputs = identify_inputs()
+        if old_inputs != current_inputs:
+            self.present_devices = current_inputs
 
-async def _devicewatch(eventpath, *, task_status=trio.TASK_STATUS_IGNORED):
-    with open_device(eventpath) as d:
+    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
-        print("It's time")
+        # this is a stupid way to do this. find a better way next time.
+        notified_no_keyboard = False
+        ever_had_keyboard = False
         while True:
-            await trio.sleep(0)
-            for e in d.events():
-                await trio.sleep(0)
-                _print_event(e)
+            self._update_available_inputs()
+            if len(self.present_devices) > 0:
+                notified_no_keyboard = False
+                ever_had_keyboard = True
+                async with trio.open_nursery() as nursery:
+                    for device in self.present_devices:
+                        device_send_channel = self.channel.clone()
+                        nursery.start_soon(
+                            listen_for_keys,
+                            device,
+                            device_send_channel,
+                            name=repr(device),
+                        )
+            else:
+                if ever_had_keyboard and not notified_no_keyboard:
+                    await self.channel.send(KeyboardDisconnect())
+                    notified_no_keyboard = True
+
+                await trio.sleep(0.2)
+
+    def set_led(self, led: Led, state: bool):
+        # https://python-libevdev.readthedocs.io/en/latest/libevdev.html#libevdev.device.Device.set_leds
+        # We'll have to use the actual enums from libevdev, not our own.
+        # libevdev.evbit('EV_LED', led)
+        # libevdev.evbit('EV_LED', Led.LED_CAPSL)
+        # also it needs to access the device, which is currently nested inside a listen_for_keys task
+        print(f"Setting {libevdev.evbit('EV_LED', led)} to {state}")
+
+
+# def _print_event(e):
+#     print("Event: time {}.{:06d}, ".format(e.sec, e.usec), end="")
+#     if e.matches(libevdev.EV_SYN):
+#         if e.matches(libevdev.EV_SYN.SYN_MT_REPORT):
+#             print("++++++++++++++ {} ++++++++++++".format(e.code.name))
+#         elif e.matches(libevdev.EV_SYN.SYN_DROPPED):
+#             print(">>>>>>>>>>>>>> {} >>>>>>>>>>>>".format(e.code.name))
+#         else:
+#             print("-------------- {} ------------".format(e.code.name))
+#     else:
+#         print(
+#             "type {:02x} {} code {:03x} {:20s} value {:4d}".format(
+#                 e.type.value, e.type.name, e.code.value, e.code.name, e.value
+#             )
+#         )
+
+
+# async def _devicewatch(eventpath, *, task_status=trio.TASK_STATUS_IGNORED):
+#     with open_device(eventpath) as d:
+#         task_status.started()
+#         print("It's time")
+#         while True:
+#             await trio.sleep(0)
+#             for e in d.events():
+#                 await trio.sleep(0)
+#                 _print_event(e)
