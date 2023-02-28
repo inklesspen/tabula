@@ -133,6 +133,7 @@ KEYMAPS = {
 }
 
 COMPOSE_KEY = "KEY_RIGHTMETA"
+COMPOSE_KEY_DESCRIPTION = "the right-hand Meta key"
 
 DRAFTING_FONTS = {
     "Tabula Quattro": ["6.9", "7.4", "8", "8.5", "9.1", "9.7", "10.2"],
@@ -155,6 +156,7 @@ class SettingsData(msgspec.Struct):
     current_font: str
     current_font_size: int
     compose_key: str
+    compose_key_description: str
     compose_sequences: dict[str, str]
     keymaps: dict[str, list[str]]
     db_path: str
@@ -188,6 +190,7 @@ class Settings:
     current_font: str = attrs.field(eq=False, order=False)
     current_font_size: int = attrs.field(eq=False, order=False)
     compose_key: Key = attrs.field(eq=False, order=False)
+    compose_key_description: str = attrs.field(eq=False, order=False)
     compose_sequences: pygtrie.Trie = attrs.field(eq=False, order=False)
     keymaps: dict[Key, list[str]] = attrs.field(eq=False, order=False)
     db_path: pathlib.Path = attrs.field(eq=False, order=False)
@@ -202,6 +205,7 @@ class Settings:
             current_font=data.current_font,
             current_font_size=data.current_font_size,
             compose_key=Key[data.compose_key],
+            compose_key_description=data.compose_key_description,
             compose_sequences=pygtrie.Trie(
                 {tuple(k.split()): v for k, v in data.compose_sequences.items()}
             ),
@@ -236,6 +240,7 @@ class Settings:
                 current_font="Tabula Quattro",
                 current_font_size=2,
                 compose_key=COMPOSE_KEY,
+                compose_key_description=COMPOSE_KEY_DESCRIPTION,
                 compose_sequences=COMPOSE_SEQUENCES,
                 keymaps=KEYMAPS,
                 db_path="test.db",

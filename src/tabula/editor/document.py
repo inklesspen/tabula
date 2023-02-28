@@ -9,9 +9,11 @@ import timeflake
 
 from .doctypes import Paragraph
 from . import wordcount
+from ..util import now
 
 if typing.TYPE_CHECKING:
     from ..db import TabulaDb
+    import pathlib
 
 
 # https://gankra.github.io/blah/text-hates-you/
@@ -157,6 +159,16 @@ class DocumentModel:
 
     def export_markdown(self):
         return "\n\n".join(p.markdown for p in self.contents)
+
+    def export_session(self, db: "TabulaDb", export_path: "pathlib.Path"):
+        export_path.mkdir(parents=True, exist_ok=True)
+        timestamp = now()
+        session_id = self.session_id
+        export_filename = f"{session_id} - {timestamp} - {self.wordcount} words.md"
+        export_file = export_path / export_filename
+        with export_file.open(mode="w", encoding="utf-8") as out:
+            out.write(self.export_markdown())
+        db.set_exported_time(session_id, timestamp)
 
     @staticmethod
     def graphical_char(c: typing.Optional[str]):

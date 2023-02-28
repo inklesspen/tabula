@@ -30,8 +30,8 @@ class Button:
     outlined: Cairo
     bounds: Rect
     button_value: Any
-    static_state: ButtonState
-    pressed: bool
+    state: ButtonState
+    last_rendered_state: Optional[ButtonState]
 
     def __init__(
         self,
@@ -41,6 +41,7 @@ class Button:
         corner_radius: int,
         font: str,
         screen_location: Point,
+        state=ButtonState.NORMAL,
         button_value: Optional[Any] = None,
         align_baseline: bool = False,
     ):
@@ -109,25 +110,24 @@ class Button:
             outlined=outlined,
             bounds=Rect(origin=origin, spread=button_size),
             button_value=button_value,
-            static_state=ButtonState.NORMAL,
-            pressed=False,
+            state=state,
+            last_rendered_state=None,
         )
 
-    @property
-    def state(self):
-        if self.pressed:
-            return ButtonState.PRESSED
-        return self.static_state
+    def needs_render(self, override_state: Optional[ButtonState] = None):
+        state = self._render_state(override_state)
+        return state is not self.last_rendered_state
 
-    def update_static_state(self, new_static_state):
-        current = self.static_state
-        self.static_state = new_static_state
-        render_needed = current is not new_static_state and not self.pressed
-        return render_needed
+    def update_state(self, new_state):
+        self.state = new_state
+        return self.needs_render()
 
-    def _surface_for_state(self, state: Optional[ButtonState] = None):
-        if state is None:
-            state = self.state
+    def _render_state(self, override_state: Optional[ButtonState] = None):
+        if override_state is not None:
+            return override_state
+        return self.state
+
+    def _surface_for_state(self, state: ButtonState):
         match state:
             case ButtonState.NORMAL:
                 return self.normal
@@ -136,17 +136,24 @@ class Button:
             case ButtonState.PRESSED:
                 return self.inverted
 
-    def paste_onto_cairo(self, cairo: Cairo, state: Optional[ButtonState] = None):
+    def paste_onto_cairo(
+        self, cairo: Cairo, override_state: Optional[ButtonState] = None
+    ):
+        state = self._render_state(override_state)
         cairo.paste_other(
             self._surface_for_state(state),
             self.bounds.origin,
             Rect(origin=Point.zeroes(), spread=self.bounds.spread),
         )
+        self.last_rendered_state = state
 
-    def render(self, state: Optional[ButtonState] = None):
-        return Rendered(
+    def render(self, override_state: Optional[ButtonState] = None):
+        state = self._render_state(override_state)
+        rendered = Rendered(
             image=self._surface_for_state(state).get_image_bytes(), extent=self.bounds
         )
+        self.last_rendered_state = state
+        return rendered
 
     def __contains__(self, item):
         if not isinstance(item, Point):

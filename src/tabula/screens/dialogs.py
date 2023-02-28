@@ -7,8 +7,7 @@ from ..device.hwtypes import TapEvent, TapPhase, KeyboardDisconnect
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, Alignment, WrapMode
 
-from .base import Modal, RetVal, DialogResult
-from .keyboard_detect import KeyboardDetect
+from .base import Modal, RetVal, DialogResult, TargetScreen
 
 if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
@@ -65,7 +64,7 @@ class OkDialog(Dialog):
                 case KeyboardDisconnect():
                     # wait until we get a tap in the right place, then
                     # close this dialog and switch to keyboard detect
-                    result = Modal(KeyboardDetect)
+                    result = Modal(TargetScreen.KeyboardDetect)
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
@@ -141,7 +140,7 @@ class YesNoDialog(Dialog):
                 case KeyboardDisconnect():
                     # return the keyboarddetect right away, instead of
                     # waiting for a result.
-                    return Modal(KeyboardDetect)
+                    return Modal(TargetScreen.KeyboardDetect)
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?

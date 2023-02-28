@@ -1,4 +1,5 @@
 import abc
+import enum
 import typing
 
 import msgspec
@@ -10,13 +11,25 @@ if typing.TYPE_CHECKING:
     from ..rendering.renderer import Renderer
 
 
+class TargetScreen(enum.Enum):
+    KeyboardDetect = enum.auto()
+    SystemMenu = enum.auto()
+    SessionList = enum.auto()
+    Drafting = enum.auto()
+    Fonts = enum.auto()
+    Help = enum.auto()
+    ComposeHelp = enum.auto()
+
+
 class Switch(msgspec.Struct, frozen=True):
-    new_screen: typing.Type["Screen"]
+    new_screen: TargetScreen
     kwargs: dict = {}
 
 
 class Modal(msgspec.Struct, frozen=True):
-    modal: typing.Type["Screen"]
+    # Modal is used only for KeyboardDetect, so see if we can just handle that specially
+    # Except I'm also using it for Help and ComposeHelp.
+    modal: TargetScreen
     kwargs: dict = {}
 
 

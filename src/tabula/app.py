@@ -10,7 +10,8 @@ import trio_util
 from .device.hardware import Hardware, RpcHardware
 from .settings import Settings
 from .rendering.renderer import Renderer
-from .screens import Screen, KeyboardDetect, SystemMenu, Switch, Modal, Close, Shutdown
+from .screens.base import Screen, Switch, Modal, Close, Shutdown, TargetScreen
+from .screens import SCREENS
 from .util import invoke
 from .db import make_db
 from .editor.document import DocumentModel
@@ -28,9 +29,10 @@ class Tabula:
         self.document = DocumentModel()
         self.screen_stack = trio_util.AsyncValue([])
 
-    def invoke_screen(self, screen: typing.Type[Screen], **additional_kwargs):
+    def invoke_screen(self, screen: TargetScreen, **additional_kwargs):
+        screen_type = SCREENS[screen]
         return invoke(
-            screen,
+            screen_type,
             settings=self.settings,
             renderer=self.renderer,
             hardware=self.hardware,
@@ -51,8 +53,8 @@ class Tabula:
             screen_info = await self.hardware.get_screen_info()
             self.renderer = Renderer(screen_info)
             self.screen_stack.value = [
-                self.invoke_screen(SystemMenu, modal=False),
-                self.invoke_screen(KeyboardDetect),
+                self.invoke_screen(TargetScreen.SystemMenu),
+                self.invoke_screen(TargetScreen.KeyboardDetect),
             ]
             await self.hardware.clear_screen()
             nursery.start_soon(self.periodic_save_doc, trio_util.periodic(5))
@@ -82,13 +84,11 @@ class Tabula:
                     )
                     self.screen_stack.value[-1] = new_screen
                 case Modal():
-                    print(next_action)
                     modal_screen = self.invoke_screen(
                         next_action.modal, **next_action.kwargs
                     )
                     self.screen_stack.value.append(modal_screen)
                 case Close():
-                    print(next_action)
                     self.screen_stack.value.pop()
                 case Shutdown():
                     self.settings.save()
