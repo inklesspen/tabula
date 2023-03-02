@@ -119,7 +119,39 @@ class ComposeCharacters(TrioSection):
         event: AnnotatedKeyEvent
         async with aclosing(input) as source:
             async for event in source:
+                # This is an abysmally undocumented state machine, and I apologize.
                 if self.devouring:
+                    if (
+                        event.key == self.compose_key
+                        and len(self.devoured) == 1
+                        and self.devoured[0].key == self.compose_key
+                    ):
+                        # doubletap compose key
+                        self.devouring = False
+                        # synthesize a KEY_COMPOSE event for visibility
+                        await output(
+                            AnnotatedKeyEvent(
+                                key=Key.KEY_COMPOSE,
+                                press=KeyPress.PRESSED,
+                                annotation=ModifierAnnotation(
+                                    capslock=event.annotation.capslock
+                                ),
+                                is_modifier=True,
+                                is_led_able=True,
+                            )
+                        )
+                        # emit the SYNTHETIC_COMPOSE_DOUBLETAP
+                        await output(
+                            AnnotatedKeyEvent(
+                                key=Key.SYNTHETIC_COMPOSE_DOUBLETAP,
+                                press=KeyPress.PRESSED,
+                                annotation=ModifierAnnotation(
+                                    capslock=event.annotation.capslock
+                                ),
+                            )
+                        )
+                        continue
+
                     self.devoured.append(event)
                     if event.is_modifier and not event.is_led_able:
                         continue

@@ -78,7 +78,7 @@ class Drafting(Screen):
                         elif event.key is Key.KEY_F1:
                             self.document.save_session(self.db)
                             return Modal(TargetScreen.Help)
-                        elif event.key is Key.KEY_F2:
+                        elif event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
                             self.document.save_session(self.db)
                             return Modal(TargetScreen.ComposeHelp)
                         elif event.key is Key.KEY_F12:

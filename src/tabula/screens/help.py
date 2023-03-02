@@ -33,12 +33,12 @@ TT_FACE = "B612 Mono"
 # One such font is Noto Sans Symbols; alpine package 'font-noto'
 SYMBOL_FACE = "Noto Sans Symbols"
 
-HELP = """\
+HELP_TEMPLATE = f"""\
 Tabula is a portable prose-oriented distraction-free drafting tool.
 
 The cursor is locked at the end of the document. You can delete characters with Backspace, but only within the current paragraph; once you hit Enter, you canʼt go back.
 
-You can enter special characters through the use of <b>compose sequences</b>. Press <span face="{TT_FACE}">TBD</span> for examples of common compose sequences.
+You can enter special characters through the use of the Compose key and <b>compose sequences</b>. On this machine, the Compose key is {{composekey}}. Double-tap the Compose key for examples of common compose sequences.
 
 Press <span face="{TT_FACE}">TBD</span> to start or end a writing sprint.
 
@@ -87,7 +87,8 @@ class Help(Screen):
         self.screen_size = self.renderer.screen_info.size
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        self.hardware.reset_keystream(enable_composes=False)
+        # We need composes enabled to get the SYNTHETIC_COMPOSE_DOUBLETAP.
+        self.hardware.reset_keystream(enable_composes=True)
         screen = self.render()
         await self.hardware.display_rendered(screen)
         while True:
@@ -97,20 +98,20 @@ class Help(Screen):
                 case AnnotatedKeyEvent():
                     if event.key is Key.KEY_ESC:
                         return Close()
-                    if event.key is Key.KEY_F2:
-                        # or whatever key we use for composehelp
+                    if event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
                         return Switch(TargetScreen.ComposeHelp)
                 case KeyboardDisconnect():
                     return Modal(TargetScreen.KeyboardDetect)
 
     def render(self) -> Rendered:
         # TODO: render an X in the corner or something
+        text = HELP_TEMPLATE.format(composekey=self.settings.compose_key_description)
         with Cairo(self.screen_size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
             text_width = self.screen_size.width - 20
             with PangoLayout(pango=self.pango, width=text_width) as layout:
                 layout.set_font(ROMAN_FACE)
-                layout.set_content(HELP, is_markup=True)
+                layout.set_content(text, is_markup=True)
                 cairo.move_to(Point(x=10, y=10))
                 cairo.set_draw_color(CairoColor.BLACK)
                 layout.render(cairo)
@@ -138,7 +139,8 @@ class ComposeHelp(Screen):
         self.screen_size = self.renderer.screen_info.size
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        self.hardware.reset_keystream(enable_composes=False)
+        # We need composes enabled to get the SYNTHETIC_COMPOSE_DOUBLETAP.
+        self.hardware.reset_keystream(enable_composes=True)
         screen = self.render()
         await self.hardware.display_rendered(screen)
         while True:

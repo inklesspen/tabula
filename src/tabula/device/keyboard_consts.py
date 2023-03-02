@@ -218,6 +218,9 @@ class Key(IntEnum):
     KEY_F24 = 194
     KEY_UNKNOWN = 240
 
+    # Synthetic keycodes emitted by the keystream logic
+    SYNTHETIC_COMPOSE_DOUBLETAP = 300
+
 
 class KeyPress(IntEnum):
     RELEASED = 0
