@@ -87,8 +87,7 @@ class Help(Screen):
         self.screen_size = self.renderer.screen_info.size
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        # We need composes enabled to get the SYNTHETIC_COMPOSE_DOUBLETAP.
-        self.hardware.reset_keystream(enable_composes=True)
+        self.hardware.reset_keystream(enable_composes=False)
         screen = self.render()
         await self.hardware.display_rendered(screen)
         while True:
@@ -139,8 +138,7 @@ class ComposeHelp(Screen):
         self.screen_size = self.renderer.screen_info.size
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        # We need composes enabled to get the SYNTHETIC_COMPOSE_DOUBLETAP.
-        self.hardware.reset_keystream(enable_composes=True)
+        self.hardware.reset_keystream(enable_composes=False)
         screen = self.render()
         await self.hardware.display_rendered(screen)
         while True:

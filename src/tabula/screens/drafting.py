@@ -51,6 +51,10 @@ class Drafting(Screen):
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         self.hardware.reset_keystream(enable_composes=True)
+        self.status_layout.set_leds(
+            capslock=False,
+            compose=False,
+        )
         await self.hardware.clear_screen()
         await self.render_document()
         await self.render_status()

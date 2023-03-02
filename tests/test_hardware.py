@@ -114,10 +114,11 @@ async def test_event_handling_resets():
             processed_receive_channel,
             [
                 AnnotatedKeyEvent(
-                    key=Key.KEY_RIGHTMETA,
+                    key=Key.KEY_COMPOSE,
                     press=KeyPress.PRESSED,
-                    annotation=ModifierAnnotation(meta=True),
+                    annotation=ModifierAnnotation(compose=True),
                     is_modifier=True,
+                    is_led_able=True,
                 ),
                 AnnotatedKeyEvent(
                     key=Key.KEY_DOT,

@@ -13,6 +13,8 @@ from tabula.device.keystreams import (
     ModifierTracking,
     OnlyPresses,
     MakeCharacter,
+    ComposeKey,
+    SynthesizeKeys,
     ComposeCharacters,
     make_keystream,
 )
@@ -413,6 +415,287 @@ async def test_make_characters():
         assert results == expected
 
 
+async def test_compose_key():
+    async with aclosing(
+        make_async_source(
+            [
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_LEFTALT, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_LEFTALT, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTCTRL, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTCTRL, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+            ]
+        )
+    ) as keysource, slurry.Pipeline.create(
+        keysource, ModifierTracking(), OnlyPresses(), ComposeKey(Key.KEY_RIGHTMETA)
+    ) as pipeline, pipeline.tap() as resultsource:
+        results = [event async for event in resultsource]
+        expected = [
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_LEFTSHIFT,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(shift=True),
+                is_modifier=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_A,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(shift=True),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_LEFTALT,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(alt=True),
+                is_modifier=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_A,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(alt=True),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_RIGHTCTRL,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(ctrl=True),
+                is_modifier=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_A,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(ctrl=True),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_CAPSLOCK,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(capslock=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_A,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(capslock=True),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True, capslock=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_CAPSLOCK,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+        ]
+        assert results == expected
+
+
+async def test_synthesize_keys():
+    async with aclosing(
+        make_async_source(
+            [
+                # synthesizes
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                # interrupted
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                # three produces a synthesized and then a lone compose
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                # capslock is conserved
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+            ]
+        )
+    ) as keysource, slurry.Pipeline.create(
+        keysource,
+        ModifierTracking(),
+        OnlyPresses(),
+        ComposeKey(Key.KEY_RIGHTMETA),
+        SynthesizeKeys(),
+    ) as pipeline, pipeline.tap() as resultsource:
+        results = [event async for event in resultsource]
+        expected = [
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.SYNTHETIC_COMPOSE_DOUBLETAP,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_A,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_A,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.SYNTHETIC_COMPOSE_DOUBLETAP,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_CAPSLOCK,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(capslock=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True, capslock=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_COMPOSE,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(compose=True, capslock=True),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+            AnnotatedKeyEvent(
+                key=Key.SYNTHETIC_COMPOSE_DOUBLETAP,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(capslock=True),
+            ),
+            AnnotatedKeyEvent(
+                key=Key.KEY_CAPSLOCK,
+                press=KeyPress.PRESSED,
+                annotation=ModifierAnnotation(),
+                is_modifier=True,
+                is_led_able=True,
+            ),
+        ]
+        assert results == expected
+
+
 async def test_composes():
     raw_composes = {
         "A E": "Æ",
@@ -463,7 +746,9 @@ async def test_composes():
         ModifierTracking(),
         OnlyPresses(),
         MakeCharacter(keymaps),
-        ComposeCharacters(composes, Key.KEY_RIGHTMETA),
+        ComposeKey(Key.KEY_RIGHTMETA),
+        SynthesizeKeys(),
+        ComposeCharacters(composes),
     ) as pipeline, pipeline.tap() as resultchannel:
         actual = [event async for event in resultchannel]
         expected = [
@@ -575,7 +860,9 @@ async def test_composes_sequence_failure():
         ModifierTracking(),
         OnlyPresses(),
         MakeCharacter(keymaps),
-        ComposeCharacters(composes, Key.KEY_RIGHTMETA),
+        ComposeKey(Key.KEY_RIGHTMETA),
+        SynthesizeKeys(),
+        ComposeCharacters(composes),
     ) as pipeline, pipeline.tap() as resultchannel:
         actual = [event async for event in resultchannel]
         expected = [
@@ -592,12 +879,6 @@ async def test_composes_sequence_failure():
                 annotation=ModifierAnnotation(),
                 is_modifier=True,
                 is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_RIGHTMETA,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(meta=True),
-                is_modifier=True,
             ),
             AnnotatedKeyEvent(
                 key=Key.KEY_A,
@@ -610,159 +891,6 @@ async def test_composes_sequence_failure():
                 press=KeyPress.PRESSED,
                 annotation=ModifierAnnotation(),
                 character="b",
-            ),
-        ]
-        assert actual == expected
-
-
-async def test_compose_key_doubletap():
-    raw_composes = {
-        "A E": "Æ",
-        "a e": "æ",
-    }
-    composes = pygtrie.Trie({tuple(k.split()): v for k, v in raw_composes.items()})
-    keymaps = {
-        Key.KEY_A: ["a", "A"],
-        Key.KEY_E: ["e", "E"],
-    }
-    async with aclosing(
-        make_async_source(
-            [
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource,
-        ModifierTracking(),
-        OnlyPresses(),
-        MakeCharacter(keymaps),
-        ComposeCharacters(composes, Key.KEY_RIGHTMETA),
-    ) as pipeline, pipeline.tap() as resultchannel:
-        actual = [event async for event in resultchannel]
-        expected = [
-            AnnotatedKeyEvent(
-                key=Key.KEY_LEFTSHIFT,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(shift=True),
-                is_modifier=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_A,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(shift=True),
-                character="A",
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_E,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-                character="e",
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_COMPOSE,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(compose=True),
-                is_modifier=True,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_COMPOSE,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-                is_modifier=True,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.SYNTHETIC_COMPOSE_DOUBLETAP,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_A,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-                character="a",
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_E,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-                character="e",
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_COMPOSE,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(compose=True),
-                is_modifier=True,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_COMPOSE,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-                character="Æ",
-                is_modifier=False,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_COMPOSE,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(compose=True),
-                is_modifier=True,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_CAPSLOCK,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(compose=True, capslock=True),
-                is_modifier=True,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_COMPOSE,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(capslock=True),
-                character="Æ",
-                is_modifier=False,
-                is_led_able=True,
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_CAPSLOCK,
-                press=KeyPress.PRESSED,
-                annotation=ModifierAnnotation(),
-                is_modifier=True,
-                is_led_able=True,
             ),
         ]
         assert actual == expected
