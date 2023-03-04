@@ -10,7 +10,14 @@ import trio_util
 from .device.hardware import Hardware, RpcHardware
 from .settings import Settings
 from .rendering.renderer import Renderer
-from .screens.base import Screen, Switch, Modal, Close, Shutdown, TargetScreen
+from .screens.base import (
+    Screen,
+    ChangeScreen,
+    ScreenStackBehavior,
+    Close,
+    Shutdown,
+    TargetScreen,
+)
 from .screens import SCREENS
 from .util import invoke
 from .db import make_db
@@ -38,6 +45,7 @@ class Tabula:
             hardware=self.hardware,
             db=self.db,
             document=self.document,
+            screen_info=self.screen_info,
             **additional_kwargs
         )
 
@@ -50,8 +58,8 @@ class Tabula:
                 self.dispatch_events, event_receive_channel, nursery.cancel_scope.cancel
             )
             await nursery.start(self.hardware.run)
-            screen_info = await self.hardware.get_screen_info()
-            self.renderer = Renderer(screen_info)
+            self.screen_info = await self.hardware.get_screen_info()
+            self.renderer = Renderer(self.screen_info)
             self.screen_stack.value = [
                 self.invoke_screen(TargetScreen.SystemMenu),
                 self.invoke_screen(TargetScreen.KeyboardDetect),
@@ -78,16 +86,17 @@ class Tabula:
             current_screen = self.screen_stack.value[-1]
             next_action = await current_screen.run(receive_channel)
             match next_action:
-                case Switch():
+                case ChangeScreen():
                     new_screen = self.invoke_screen(
                         next_action.new_screen, **next_action.kwargs
                     )
-                    self.screen_stack.value[-1] = new_screen
-                case Modal():
-                    modal_screen = self.invoke_screen(
-                        next_action.modal, **next_action.kwargs
-                    )
-                    self.screen_stack.value.append(modal_screen)
+                    match next_action.screen_stack_behavior:
+                        case ScreenStackBehavior.REPLACE_ALL:
+                            self.screen_stack.value = [new_screen]
+                        case ScreenStackBehavior.REPLACE_LAST:
+                            self.screen_stack.value[-1] = new_screen
+                        case ScreenStackBehavior.APPEND:
+                            self.screen_stack.value.append(new_screen)
                 case Close():
                     self.screen_stack.value.pop()
                 case Shutdown():

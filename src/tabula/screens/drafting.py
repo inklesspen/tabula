@@ -12,8 +12,8 @@ from ..util import TickCaller
 from ..rendering.layout import LayoutManager, StatusLayout
 
 from .base import (
-    Switch,
-    Modal,
+    ChangeScreen,
+    ScreenStackBehavior,
     RetVal,
     Screen,
     TargetScreen,
@@ -39,15 +39,12 @@ class Drafting(Screen):
         db: "TabulaDb",
         document: "DocumentModel",
     ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
+        self.settings = settings
+        self.hardware = hardware
         self.db = db
         self.document = document
-        self.layout_manager = LayoutManager(self.renderer, self.document)
-        self.status_layout = StatusLayout(self.renderer, self.document)
+        self.layout_manager = LayoutManager(renderer, self.document)
+        self.status_layout = StatusLayout(renderer, self.document)
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         self.hardware.reset_keystream(enable_composes=True)
@@ -81,20 +78,29 @@ class Drafting(Screen):
                             await self.render_document()
                         elif event.key is Key.KEY_F1:
                             self.document.save_session(self.db)
-                            return Modal(TargetScreen.Help)
+                            return ChangeScreen(
+                                TargetScreen.Help,
+                                screen_stack_behavior=ScreenStackBehavior.APPEND,
+                            )
                         elif event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
                             self.document.save_session(self.db)
-                            return Modal(TargetScreen.ComposeHelp)
+                            return ChangeScreen(
+                                TargetScreen.ComposeHelp,
+                                screen_stack_behavior=ScreenStackBehavior.APPEND,
+                            )
                         elif event.key is Key.KEY_F12:
                             if self.document.wordcount == 0:
                                 self.document.delete_session(self.db)
                             else:
                                 self.document.save_session(self.db)
-                            return Switch(TargetScreen.SystemMenu)
+                            return ChangeScreen(TargetScreen.SystemMenu)
                         await self.render_status()
                     case KeyboardDisconnect():
                         self.document.save_session(self.db)
-                        return Modal(TargetScreen.KeyboardDetect)
+                        return ChangeScreen(
+                            TargetScreen.KeyboardDetect,
+                            screen_stack_behavior=ScreenStackBehavior.APPEND,
+                        )
 
     async def tick(self):
         self.document.save_session(self.db)

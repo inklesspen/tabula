@@ -17,6 +17,8 @@ from ..device.hwtypes import (
 )
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, Alignment, CairoColor
+from ..rendering.cairo import Cairo
+from ..rendering.pango import Pango, PangoLayout
 from ..editor.document import DocumentModel
 from ..editor.doctypes import Session
 from ..util import checkpoint, now, humanized_delta
@@ -24,8 +26,8 @@ from .widgets import ButtonState, Button
 
 from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
 from .base import (
-    Switch,
-    Modal,
+    ChangeScreen,
+    ScreenStackBehavior,
     Close,
     Shutdown,
     DialogResult,
@@ -40,28 +42,15 @@ if typing.TYPE_CHECKING:
     from ..settings import Settings
     from ..rendering.renderer import Renderer
     from ..db import TabulaDb
+    from ..commontypes import ScreenInfo
 
 
 class MenuButton(msgspec.Struct):
+    button: Button
     handler: collections.abc.Callable[
         [], collections.abc.Awaitable[typing.Optional[RetVal]]
     ]
-    rect: Rect
-    text: str
-    font: str = "B612 8"
-    markup: bool = False
     key: typing.Optional[Key] = None
-    inverted: bool = False
-
-
-class MenuText(msgspec.Struct):
-    text: str
-    y_top: int
-    font: str
-    markup: bool = False
-
-
-MenuItem = MenuButton | MenuText
 
 
 class ButtonMenu(Screen):
@@ -75,82 +64,63 @@ class ButtonMenu(Screen):
         settings: "Settings",
         renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
     ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
+        self.settings = settings
+        self.renderer = renderer
+        self.hardware = hardware
+        self.screen_info = screen_info
+        self.pango = Pango(dpi=screen_info.dpi)
 
     async def run(self, event_channel: trio.abc.ReceiveChannel):
         self.hardware.reset_keystream(enable_composes=False)
-        await self.render()
+        await self.render_screen()
         while True:
             event = await event_channel.receive()
             handler = None
             match event:
                 case AnnotatedKeyEvent():
-                    for button in self.buttons:
-                        if event.key == button.key:
-                            handler = button.handler
-                # TODO: have a TapInitiated event, and use it to render
-                # the tapped button inverse.
+                    for menu_button in self.menu_buttons:
+                        if event.key == menu_button.key:
+                            handler = menu_button.handler
+                            await self.hardware.display_rendered(
+                                menu_button.button.render(
+                                    override_state=ButtonState.PRESSED
+                                )
+                            )
                 case TapEvent():
                     if event.phase is TapPhase.COMPLETED:
-                        for button in self.buttons:
-                            if event.location in button.rect:
-                                handler = button.handler
+                        for menu_button in self.menu_buttons:
+                            if event.location in menu_button.button:
+                                handler = menu_button.handler
+                                await self.hardware.display_rendered(
+                                    menu_button.button.render(
+                                        override_state=ButtonState.PRESSED
+                                    )
+                                )
+
                 case KeyboardDisconnect():
-                    return Modal(TargetScreen.KeyboardDetect)
+                    return ChangeScreen(
+                        TargetScreen.KeyboardDetect,
+                        screen_stack_behavior=ScreenStackBehavior.APPEND,
+                    )
             if handler is not None:
                 result = await handler(event_channel)
                 if result is not None:
                     return result
-                await self.render()
+                await self.render_screen()
 
-    async def render(self):
-        self.menu = tuple(self.define_menu())
-        self.buttons = tuple(b for b in self.menu if isinstance(b, MenuButton))
-        screen = self.make_screen()
+    async def render_screen(self):
+        self.make_buttons()
+        screen = self.render()
         await self.hardware.display_pixels(screen.image, screen.extent)
 
-    def make_screen(self):
-        screen_size = self.renderer.screen_info.size
-        x_center = math.floor(screen_size.width / 2)
-        with self.renderer.create_surface(
-            screen_size
-        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
-            self.renderer.prepare_background(cairo_context)
-            self.renderer.setup_drawing(cairo_context)
-            for menuitem in self.menu:
-                if isinstance(menuitem, MenuButton):
-                    # TODO: support inverted
-                    self.renderer.button(
-                        cairo_context,
-                        text=menuitem.text,
-                        font=menuitem.font,
-                        rect=menuitem.rect,
-                        markup=menuitem.markup,
-                    )
-                if isinstance(menuitem, MenuText):
-                    center_top = Point(x=0, y=menuitem.y_top)
-                    self.renderer.move_to(cairo_context, center_top)
-                    self.renderer.simple_render(
-                        cairo_context,
-                        menuitem.font,
-                        menuitem.text,
-                        markup=menuitem.markup,
-                        alignment=Alignment.CENTER,
-                        width=screen_size.width,
-                        single_par=False,
-                    )
-            buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(
-            image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size)
-        )
+    @abc.abstractmethod
+    def make_buttons(self):
+        ...
 
     @abc.abstractmethod
-    def define_menu(self) -> collections.abc.Iterable[MenuItem]:
+    def render(self) -> Rendered:
         ...
 
 
@@ -161,15 +131,20 @@ class SystemMenu(ButtonMenu):
         settings: "Settings",
         renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
         db: "TabulaDb",
         document: "DocumentModel",
     ):
-        super().__init__(settings=settings, renderer=renderer, hardware=hardware)
+        super().__init__(
+            settings=settings,
+            renderer=renderer,
+            hardware=hardware,
+            screen_info=screen_info,
+        )
         self.db = db
         self.document = document
 
-    def define_menu(self):
-
+    def make_buttons(self):
         buttons = [
             {
                 "handler": self.new_session,
@@ -216,7 +191,7 @@ class SystemMenu(ButtonMenu):
             }
         )
 
-        screen_size = self.renderer.screen_info.size
+        screen_size = self.screen_info.size
         button_x = math.floor((screen_size.width - self.button_size.width) / 2)
         button_total_height = self.button_size.height * len(buttons)
         whitespace_height = screen_size.height - button_total_height
@@ -224,31 +199,46 @@ class SystemMenu(ButtonMenu):
         button_y = skip_height
 
         for button in buttons:
-            button_rect = Rect(
-                origin=Point(x=button_x, y=button_y), spread=self.button_size
-            )
-            button["rect"] = button_rect
+            button["point"] = Point(x=button_x, y=button_y)
             button_y += self.button_size.height + skip_height
 
-        return tuple(
+        self.menu_buttons = [
             MenuButton(
+                button=Button(
+                    pango=self.pango,
+                    button_text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
+                    font="B612 8",
+                    corner_radius=50,
+                    button_size=self.button_size,
+                    screen_location=b["point"],
+                ),
                 handler=b["handler"],
                 key=NUMBER_KEYS[b["number"]],
-                text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
-                rect=b["rect"],
             )
             for b in buttons
-        )
+        ]
+
+    def render(self) -> Rendered:
+        with Cairo(self.screen_info.size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            for menu_button in self.menu_buttons:
+                menu_button.button.paste_onto_cairo(cairo)
+            rendered = Rendered(
+                image=cairo.get_image_bytes(),
+                extent=Rect(origin=Point.zeroes(), spread=cairo.size),
+            )
+        return rendered
 
     async def new_session(self, event_channel: trio.abc.ReceiveChannel):
         session_id = self.db.new_session()
         self.document.load_session(session_id, self.db)
         await checkpoint()
-        return Switch(TargetScreen.Drafting)
+        return ChangeScreen(TargetScreen.Drafting)
 
     async def previous_session(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
-        return Switch(TargetScreen.SessionList)
+        return ChangeScreen(TargetScreen.SessionList)
 
     async def export_current_session(self, event_channel: trio.abc.ReceiveChannel):
         self.document.export_session(self.db, self.settings.export_path)
@@ -261,11 +251,11 @@ class SystemMenu(ButtonMenu):
 
     async def set_font(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
-        return Switch(TargetScreen.Fonts)
+        return ChangeScreen(TargetScreen.Fonts)
 
     async def resume_drafting(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
-        return Switch(TargetScreen.Drafting)
+        return ChangeScreen(TargetScreen.Drafting)
 
     async def shutdown(self, event_channel: trio.abc.ReceiveChannel):
         await checkpoint()
@@ -282,79 +272,21 @@ class SessionList(ButtonMenu):
         settings: "Settings",
         renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
         db: "TabulaDb",
-        document: "DocumentModel",
     ):
         super().__init__(
             settings=settings,
             renderer=renderer,
             hardware=hardware,
+            screen_info=screen_info,
         )
         self.db = db
-        self.document = document
         self.offset = 0
-        self.selected_session = None
 
-    def refresh_sessions(self):
-        self.sessions = self.db.list_sessions()
-
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        self.refresh_sessions()
-        return await super().run(event_channel)
-
-    def define_menu(self):
-        if self.selected_session is None:
-            return self.define_buttons_session_list()
+    def make_buttons(self):
         timestamp = now()
-        edit_cutoff = timestamp - self.settings.max_editable_age
-        screen_size = self.renderer.screen_info.size
-        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
-        session_delta = self.selected_session.updated_at - timestamp
-        header_text = f"Last edited {humanized_delta(session_delta)}\nWordcount: {self.selected_session.wordcount}"
-        menuitems = [MenuText(text=header_text, y_top=10, font="Crimson Pro 12")]
-        if self.selected_session.updated_at >= edit_cutoff:
-            menuitems.append(
-                MenuButton(
-                    handler=self.load_session,
-                    rect=Rect(origin=Point(x=button_x, y=150), spread=self.button_size),
-                    text="Load Session",
-                )
-            )
-        else:
-            menuitems.append(
-                MenuText(
-                    text="This session is now locked for editing",
-                    y_top=150,
-                    font="B612 8",
-                )
-            )
-        if self.selected_session.needs_export:
-            menuitems.append(
-                MenuButton(
-                    handler=self.export_session,
-                    rect=Rect(origin=Point(x=button_x, y=450), spread=self.button_size),
-                    text="Export Session",
-                )
-            )
-        menuitems.append(
-            MenuButton(
-                handler=self.delete_session,
-                rect=Rect(origin=Point(x=button_x, y=650), spread=self.button_size),
-                text="Delete Session",
-            )
-        )
-        menuitems.append(
-            MenuButton(
-                handler=self.back_to_session_list,
-                rect=Rect(origin=Point(x=button_x, y=850), spread=self.button_size),
-                text="Back",
-            )
-        )
-        return tuple(menuitems)
-
-    def define_buttons_session_list(self) -> collections.abc.Iterable[MenuButton]:
-        timestamp = now()
-        screen_size = self.renderer.screen_info.size
+        screen_size = self.screen_info.size
         min_skip_height = math.floor(self.button_size.height * 0.75)
         usable_height = screen_size.height - (min_skip_height + self.button_size.height)
         num_session_buttons = usable_height // (
@@ -368,22 +300,26 @@ class SessionList(ButtonMenu):
         skip_height = math.floor(whitespace_height / (num_session_buttons + 1))
         button_y = skip_height
 
-        menuitems = []
+        menu_buttons = []
         for session in session_page:
-            button_rect = Rect(
-                origin=Point(x=button_x, y=button_y), spread=self.session_button_size
-            )
+            button_origin = Point(x=button_x, y=button_y)
             session_delta = session.updated_at - timestamp
             button_text = f"{humanized_delta(session_delta)} - {session.wordcount}"
             if session.needs_export:
                 button_text += " \ue0a7"
             else:
                 button_text += " \ue0a2"
-            menuitems.append(
+            menu_buttons.append(
                 MenuButton(
+                    button=Button(
+                        pango=self.pango,
+                        button_text=button_text,
+                        button_size=self.session_button_size,
+                        font="B612 8",
+                        corner_radius=50,
+                        screen_location=button_origin,
+                    ),
                     handler=functools.partial(self.select_session, session),
-                    rect=button_rect,
-                    text=button_text,
                 )
             )
             button_y += self.button_size.height + skip_height
@@ -391,63 +327,246 @@ class SessionList(ButtonMenu):
         if self.offset > 0:
             # back button
             prev_page_offset = max(0, self.offset - num_session_buttons)
-            menuitems.append(
+            menu_buttons.append(
                 MenuButton(
-                    handler=functools.partial(self.change_page, prev_page_offset),
-                    text="\ue0a9 Prev",
-                    rect=Rect(
-                        origin=Point(x=50, y=1300),
-                        spread=self.page_button_size,
+                    button=Button(
+                        pango=self.pango,
+                        button_text="\ue0a9 Prev",
+                        button_size=self.page_button_size,
+                        font="B612 8",
+                        corner_radius=50,
+                        screen_location=Point(x=50, y=1300),
                     ),
+                    handler=functools.partial(self.change_page, prev_page_offset),
                 )
             )
 
         next_page_offset = self.offset + num_session_buttons
         if len(self.sessions[next_page_offset:]) > 0:
             # next button
-            menuitems.append(
+            menu_buttons.append(
                 MenuButton(
-                    handler=functools.partial(self.change_page, next_page_offset),
-                    text="Next \ue0a8",
-                    rect=Rect(
-                        origin=Point(
+                    button=Button(
+                        pango=self.pango,
+                        button_text="Next \ue0a8",
+                        button_size=self.page_button_size,
+                        font="B612 8",
+                        corner_radius=50,
+                        screen_location=Point(
                             x=screen_size.width - (50 + self.page_button_size.width),
                             y=1300,
                         ),
-                        spread=self.page_button_size,
                     ),
+                    handler=functools.partial(self.change_page, next_page_offset),
                 )
             )
 
         # return button
-        menuitems.append(
+        menu_buttons.append(
             MenuButton(
-                handler=self.close_menu,
-                text="Back",
-                rect=Rect(
-                    origin=Point(
+                button=Button(
+                    pango=self.pango,
+                    button_text="Back",
+                    button_size=self.page_button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=Point(
                         x=math.floor(
                             (screen_size.width - self.page_button_size.width) / 2
                         ),
                         y=1300,
                     ),
-                    spread=self.page_button_size,
                 ),
+                handler=self.close_menu,
             )
         )
-        return tuple(menuitems)
+        self.menu_buttons = menu_buttons
+
+    def render(self) -> Rendered:
+        with Cairo(self.screen_info.size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            for menu_button in self.menu_buttons:
+                menu_button.button.paste_onto_cairo(cairo)
+
+            rendered = Rendered(
+                image=cairo.get_image_bytes(),
+                extent=Rect(origin=Point.zeroes(), spread=cairo.size),
+            )
+        return rendered
+
+    def refresh_sessions(self):
+        self.sessions = self.db.list_sessions()
+
+    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+        self.refresh_sessions()
+        return await super().run(event_channel)
 
     async def select_session(
         self, selected_session: Session, event_channel: trio.abc.ReceiveChannel
     ):
-        self.selected_session = selected_session
+        await checkpoint()
+        return ChangeScreen(
+            TargetScreen.SessionChoices,
+            kwargs={"session": selected_session},
+            screen_stack_behavior=ScreenStackBehavior.APPEND,
+        )
+
+    async def change_page(
+        self, new_offset: int, event_channel: trio.abc.ReceiveChannel
+    ):
+        self.offset = new_offset
         await checkpoint()
         return
+
+    async def close_menu(self, event_channel: trio.abc.ReceiveChannel):
+        await checkpoint()
+        return ChangeScreen(TargetScreen.SystemMenu)
+
+
+class SessionChoices(ButtonMenu):
+    session_button_size = Size(width=800, height=100)
+    page_button_size = Size(width=200, height=100)
+
+    def __init__(
+        self,
+        *,
+        settings: "Settings",
+        renderer: "Renderer",
+        hardware: "Hardware",
+        screen_info: "ScreenInfo",
+        db: "TabulaDb",
+        document: "DocumentModel",
+        session: Session,
+    ):
+        super().__init__(
+            settings=settings,
+            renderer=renderer,
+            hardware=hardware,
+            screen_info=screen_info,
+        )
+        self.db = db
+        self.document = document
+        self.offset = 0
+        self.selected_session = session
+
+        timestamp = now()
+        edit_cutoff = timestamp - self.settings.max_editable_age
+        self.can_resume_drafting = self.selected_session.updated_at >= edit_cutoff
+        self.session_delta = self.selected_session.updated_at - timestamp
+
+    def make_buttons(self):
+        screen_size = self.screen_info.size
+
+        menu_buttons = []
+
+        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
+        if self.can_resume_drafting:
+            menu_buttons.append(
+                MenuButton(
+                    button=Button(
+                        pango=self.pango,
+                        button_text="Load Session",
+                        button_size=self.button_size,
+                        font="B612 8",
+                        corner_radius=50,
+                        screen_location=Point(x=button_x, y=150),
+                    ),
+                    handler=self.load_session,
+                )
+            )
+        if self.selected_session.needs_export:
+            menu_buttons.append(
+                MenuButton(
+                    button=Button(
+                        pango=self.pango,
+                        button_text="Export Session",
+                        button_size=self.button_size,
+                        font="B612 8",
+                        corner_radius=50,
+                        screen_location=Point(x=button_x, y=450),
+                    ),
+                    handler=self.export_session,
+                )
+            )
+        menu_buttons.append(
+            MenuButton(
+                button=Button(
+                    pango=self.pango,
+                    button_text="Delete Session",
+                    button_size=self.button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=Point(x=button_x, y=650),
+                ),
+                handler=self.delete_session,
+            )
+        )
+
+        menu_buttons.append(
+            MenuButton(
+                button=Button(
+                    pango=self.pango,
+                    button_text="Back",
+                    button_size=self.button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=Point(x=button_x, y=850),
+                ),
+                handler=self.back_to_session_list,
+            )
+        )
+
+        self.menu_buttons = menu_buttons
+
+    def render(self) -> Rendered:
+        with Cairo(self.screen_info.size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            for menu_button in self.menu_buttons:
+                menu_button.button.paste_onto_cairo(cairo)
+
+            header_text = f"Last edited {humanized_delta(self.session_delta)}\nWordcount: {self.selected_session.wordcount}"
+            cairo.move_to(Point(x=0, y=10))
+            with PangoLayout(
+                pango=self.pango,
+                width=cairo.size.width,
+                alignment=Alignment.CENTER,
+            ) as layout:
+                layout.set_font("Crimson Pro 12")
+                layout.set_content(header_text, is_markup=False)
+                layout.render(cairo)
+
+            if not self.can_resume_drafting:
+                cairo.move_to(Point(x=0, y=150))
+                with PangoLayout(
+                    pango=self.pango,
+                    width=cairo.size.width,
+                    alignment=Alignment.CENTER,
+                ) as layout:
+                    layout.set_font("B612 8")
+                    layout.set_content(
+                        "This session is now locked for editing", is_markup=False
+                    )
+                    layout.render(cairo)
+
+            rendered = Rendered(
+                image=cairo.get_image_bytes(),
+                extent=Rect(origin=Point.zeroes(), spread=cairo.size),
+            )
+        return rendered
+
+    def refresh_sessions(self):
+        self.sessions = self.db.list_sessions()
+
+    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+        self.refresh_sessions()
+        return await super().run(event_channel)
 
     async def load_session(self, event_channel: trio.abc.ReceiveChannel):
         self.document.load_session(self.selected_session.id, self.db)
         await checkpoint()
-        return Switch(TargetScreen.Drafting)
+        return ChangeScreen(TargetScreen.Drafting)
 
     async def export_session(self, event_channel: trio.abc.ReceiveChannel):
         session_document = DocumentModel()
@@ -475,22 +594,8 @@ class SessionList(ButtonMenu):
                 self.document.delete_session(self.db)
             else:
                 self.db.delete_session(self.selected_session.id)
-            self.selected_session = None
-            self.refresh_sessions()
-        return
+        return Close()
 
     async def back_to_session_list(self, event_channel: trio.abc.ReceiveChannel):
-        self.selected_session = None
         await checkpoint()
-        return
-
-    async def change_page(
-        self, new_offset: int, event_channel: trio.abc.ReceiveChannel
-    ):
-        self.offset = new_offset
-        await checkpoint()
-        return
-
-    async def close_menu(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return Switch(TargetScreen.SystemMenu)
+        return Close()

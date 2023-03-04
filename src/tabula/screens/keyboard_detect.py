@@ -4,18 +4,17 @@ import trio
 
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..commontypes import Point, Size, Rect
-from ..rendering.rendertypes import (
-    Rendered,
-    Alignment,
-    WrapMode,
-)
+from ..rendering.cairo import Cairo
+from ..rendering.pango import Pango, PangoLayout
+from ..rendering.rendertypes import Rendered, Alignment, CairoColor
 
 from .base import Close, Shutdown, Screen
+from .widgets import ButtonState, Button
 
 if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
     from ..settings import Settings
-    from ..rendering.renderer import Renderer
+    from ..commontypes import ScreenInfo
 
 
 class KeyboardDetect(Screen):
@@ -25,90 +24,73 @@ class KeyboardDetect(Screen):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
     ):
-        super().__init__(settings=settings, renderer=renderer, hardware=hardware)
-        screen_size = self.renderer.screen_info.size
-        spread = Size(width=400, height=100)
-        origin = Point(x=(screen_size.width - spread.width) / 2, y=960)
-        self.button_rect = Rect(origin=origin, spread=spread)
-        self.button_inverted = False
+        self.settings = settings
+        self.hardware = hardware
+        self.pango = Pango(dpi=screen_info.dpi)
+        screen_size = screen_info.size
+
+        button_size = Size(width=400, height=100)
+        self.button = Button(
+            self.pango,
+            button_text="Exit",
+            button_size=button_size,
+            corner_radius=50,
+            font="B612 10",
+            screen_location=Point(
+                x=(screen_size.width - button_size.width) // 2, y=960
+            ),
+        )
+
+        with Cairo(screen_size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            cairo.move_to(Point(x=0, y=160))
+            with PangoLayout(
+                pango=self.pango, width=screen_size.width, alignment=Alignment.CENTER
+            ) as layout:
+                layout.set_font("Crimson Pro 48")
+                layout.set_content("Tabula")
+                layout.render(cairo)
+
+            cairo.move_to(Point(x=50, y=640))
+            with PangoLayout(pango=self.pango, width=screen_size.width - 100) as layout:
+                layout.set_font("Crimson Pro 12")
+                layout.set_content(
+                    "Connect a keyboard and press a key to continue, or tap the button to exit."
+                )
+                layout.render(cairo)
+
+            cairo.move_to(Point(x=0, y=1280))
+            with PangoLayout(
+                pango=self.pango, width=screen_size.width, alignment=Alignment.CENTER
+            ) as layout:
+                layout.set_font("Crimson Pro 8")
+                layout.set_content("Presented by Straylight Labs")
+                layout.render(cairo)
+
+            self.button.paste_onto_cairo(cairo)
+            self.initial_screen = Rendered(
+                image=cairo.get_image_bytes(),
+                extent=Rect(origin=Point.zeroes(), spread=screen_size),
+            )
 
     async def run(self, event_channel: trio.abc.ReceiveChannel):
         self.hardware.reset_keystream(enable_composes=False)
-        screen = None
+        await self.hardware.display_rendered(self.initial_screen)
         while True:
-            if screen is None:
-                screen = self.make_screen()
-                await self.hardware.display_pixels(screen.image, screen.extent)
             event = await event_channel.receive()
             match event:
                 case AnnotatedKeyEvent():
                     return Close()
                 case TapEvent():
-                    match event.phase:
-                        case TapPhase.INITIATED:
-                            if event.location in self.button_rect:
-                                self.button_inverted = True
-                                screen = None
-                        case TapPhase.CANCELED:
-                            if self.button_inverted:
-                                self.button_inverted = False
-                                screen = None
-                        case TapPhase.COMPLETED:
-                            if event.location in self.button_rect:
-                                return Shutdown()
-                            if self.button_inverted:
-                                self.button_inverted = False
-                                screen = None
-
-    def make_screen(self):
-        screen_size = self.renderer.screen_info.size
-        with self.renderer.create_surface(
-            screen_size
-        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
-            self.renderer.prepare_background(cairo_context)
-            self.renderer.setup_drawing(cairo_context)
-
-            self.renderer.move_to(cairo_context, Point(x=0, y=160))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 48",
-                "Tabula",
-                alignment=Alignment.CENTER,
-                width=screen_size.width,
-            )
-
-            self.renderer.move_to(cairo_context, Point(x=50, y=640))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 12",
-                "Connect a keyboard and press a key to continue, or tap the button to exit.",
-                alignment=Alignment.LEFT,
-                wrap=WrapMode.WORD,
-                width=screen_size.width - 100,
-            )
-
-            self.renderer.button(
-                cairo_context,
-                text="Exit",
-                font="B612 10",
-                rect=self.button_rect,
-                inverted=self.button_inverted,
-            )
-
-            self.renderer.move_to(cairo_context, Point(x=0, y=1280))
-            last_text = "Presented by Straylight Labs"
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 8",
-                last_text,
-                alignment=Alignment.CENTER,
-                width=screen_size.width,
-            )
-
-            buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(
-            image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size)
-        )
+                    if (
+                        event.phase is TapPhase.COMPLETED
+                        and event.location in self.button
+                    ):
+                        await self.hardware.display_rendered(
+                            self.button.render(override_state=ButtonState.PRESSED)
+                        )
+                        return Shutdown()

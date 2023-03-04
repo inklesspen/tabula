@@ -15,22 +15,23 @@ class TargetScreen(enum.Enum):
     KeyboardDetect = enum.auto()
     SystemMenu = enum.auto()
     SessionList = enum.auto()
+    SessionChoices = enum.auto()
     Drafting = enum.auto()
     Fonts = enum.auto()
     Help = enum.auto()
     ComposeHelp = enum.auto()
 
 
-class Switch(msgspec.Struct, frozen=True):
+class ScreenStackBehavior(enum.Enum):
+    REPLACE_ALL = enum.auto()
+    REPLACE_LAST = enum.auto()
+    APPEND = enum.auto()
+
+
+class ChangeScreen(msgspec.Struct, frozen=True):
     new_screen: TargetScreen
     kwargs: dict = {}
-
-
-class Modal(msgspec.Struct, frozen=True):
-    # Modal is used only for KeyboardDetect, so see if we can just handle that specially
-    # Except I'm also using it for Help and ComposeHelp.
-    modal: TargetScreen
-    kwargs: dict = {}
+    screen_stack_behavior: ScreenStackBehavior = ScreenStackBehavior.REPLACE_ALL
 
 
 class Close(msgspec.Struct, frozen=True):
@@ -45,21 +46,10 @@ class DialogResult(msgspec.Struct, frozen=True):
     value: typing.Optional[typing.Any]
 
 
-RetVal = Switch | Shutdown | Modal | Close | DialogResult
+RetVal = ChangeScreen | Shutdown | Close | DialogResult
 
 
 class Screen(abc.ABC):
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        renderer: "Renderer",
-        hardware: "Hardware",
-    ):
-        self.settings = settings
-        self.renderer = renderer
-        self.hardware = hardware
-
     @abc.abstractmethod
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         ...

@@ -19,8 +19,8 @@ from .widgets import ButtonState, Button
 
 from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
 from .base import (
-    Switch,
-    Modal,
+    ChangeScreen,
+    ScreenStackBehavior,
     RetVal,
     Screen,
     TargetScreen,
@@ -29,7 +29,7 @@ from .base import (
 if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
     from ..settings import Settings
-    from ..rendering.renderer import Renderer
+    from ..commontypes import ScreenInfo
 
 
 PANGRAM = "Sphinx of black quartz, judge my vow.\nSPHINX OF BLACK QUARTZ, JUDGE MY VOW.\nsphinx of black quartz, judge my vow."
@@ -52,20 +52,17 @@ class Fonts(Screen):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
     ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
+        self.settings = settings
+        self.hardware = hardware
         self.current_face = self.settings.current_font
         self.sizes = self.settings.drafting_fonts[self.current_face]
         self.selected_index = self.settings.current_font_size
         self.font_button_index = 2
-        self.pango = Pango(dpi=renderer.screen_info.dpi)
-        self.screen_size = self.renderer.screen_info.size
+        self.pango = Pango(dpi=screen_info.dpi)
+        self.screen_size = screen_info.size
         # TODO: get line spacing from settings
         self.line_spacing = 1.0
         self.samples = collections.deque([PANGRAM, MOBY, HUCK_FINN, TI, DRACULA])
@@ -82,10 +79,13 @@ class Fonts(Screen):
             event = await event_channel.receive()
             match event:
                 case KeyboardDisconnect():
-                    return Modal(TargetScreen.KeyboardDetect)
+                    return ChangeScreen(
+                        TargetScreen.KeyboardDetect,
+                        screen_stack_behavior=ScreenStackBehavior.APPEND,
+                    )
                 case AnnotatedKeyEvent():
                     if event.key is Key.KEY_ESC:
-                        return Switch(TargetScreen.SystemMenu)
+                        return ChangeScreen(TargetScreen.SystemMenu)
                 case TapEvent():
                     if event.phase is TapPhase.COMPLETED:
                         for button in self.size_buttons:
@@ -109,9 +109,9 @@ class Fonts(Screen):
                                         self.settings.set_current_font(
                                             self.current_face, self.selected_index
                                         )
-                                        return Switch(TargetScreen.SystemMenu)
+                                        return ChangeScreen(TargetScreen.SystemMenu)
                                     case "abort":
-                                        return Switch(TargetScreen.SystemMenu)
+                                        return ChangeScreen(TargetScreen.SystemMenu)
                                     case "next_sample":
                                         self.samples.rotate(-1)
                                         font_changed = True

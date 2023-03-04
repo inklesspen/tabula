@@ -18,12 +18,13 @@ from ..rendering.rendertypes import Rendered, CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 
-from .base import Modal, RetVal, TargetScreen, Screen, Close, Switch
+from .base import RetVal, TargetScreen, Screen, Close, ChangeScreen, ScreenStackBehavior
+
 
 if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
     from ..settings import Settings
-    from ..rendering.renderer import Renderer
+    from ..commontypes import ScreenInfo
 
 ROMAN_FACE = "B612 8"
 # Pango Markup has the attribute <tt>, which has the effect of setting font-family to Monospace.
@@ -75,16 +76,13 @@ class Help(Screen):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
     ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
-        self.pango = Pango(dpi=renderer.screen_info.dpi)
-        self.screen_size = self.renderer.screen_info.size
+        self.settings = settings
+        self.hardware = hardware
+        self.pango = Pango(dpi=screen_info.dpi)
+        self.screen_size = screen_info.size
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         self.hardware.reset_keystream(enable_composes=False)
@@ -98,9 +96,15 @@ class Help(Screen):
                     if event.key is Key.KEY_ESC:
                         return Close()
                     if event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
-                        return Switch(TargetScreen.ComposeHelp)
+                        return ChangeScreen(
+                            TargetScreen.ComposeHelp,
+                            screen_stack_behavior=ScreenStackBehavior.REPLACE_LAST,
+                        )
                 case KeyboardDisconnect():
-                    return Modal(TargetScreen.KeyboardDetect)
+                    return ChangeScreen(
+                        TargetScreen.KeyboardDetect,
+                        screen_stack_behavior=ScreenStackBehavior.APPEND,
+                    )
 
     def render(self) -> Rendered:
         # TODO: render an X in the corner or something
@@ -126,16 +130,13 @@ class ComposeHelp(Screen):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         hardware: "Hardware",
+        screen_info: "ScreenInfo",
     ):
-        super().__init__(
-            settings=settings,
-            renderer=renderer,
-            hardware=hardware,
-        )
-        self.pango = Pango(dpi=renderer.screen_info.dpi)
-        self.screen_size = self.renderer.screen_info.size
+        self.settings = settings
+        self.hardware = hardware
+        self.pango = Pango(dpi=screen_info.dpi)
+        self.screen_size = screen_info.size
 
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         self.hardware.reset_keystream(enable_composes=False)
@@ -149,9 +150,15 @@ class ComposeHelp(Screen):
                     if event.key is Key.KEY_ESC:
                         return Close()
                     if event.key is Key.KEY_F1:
-                        return Modal(TargetScreen.Help)
+                        return ChangeScreen(
+                            TargetScreen.Help,
+                            screen_stack_behavior=ScreenStackBehavior.REPLACE_LAST,
+                        )
                 case KeyboardDisconnect():
-                    return Modal(TargetScreen.KeyboardDetect)
+                    return ChangeScreen(
+                        TargetScreen.KeyboardDetect,
+                        screen_stack_behavior=ScreenStackBehavior.APPEND,
+                    )
 
     def render(self) -> Rendered:
         # TODO: render an X in the corner or something

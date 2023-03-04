@@ -7,7 +7,7 @@ from ..device.hwtypes import TapEvent, TapPhase, KeyboardDisconnect
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, Alignment, WrapMode
 
-from .base import Modal, RetVal, DialogResult, TargetScreen
+from .base import RetVal, DialogResult, TargetScreen, ChangeScreen, ScreenStackBehavior
 
 if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
@@ -15,15 +15,6 @@ if typing.TYPE_CHECKING:
 
 
 class Dialog(abc.ABC):
-    def __init__(
-        self,
-        *,
-        renderer: "Renderer",
-        hardware: "Hardware",
-    ):
-        self.renderer = renderer
-        self.hardware = hardware
-
     @abc.abstractmethod
     async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
         ...
@@ -37,10 +28,8 @@ class OkDialog(Dialog):
         hardware: "Hardware",
         message: str,
     ):
-        super().__init__(
-            renderer=renderer,
-            hardware=hardware,
-        )
+        self.renderer = renderer
+        self.hardware = hardware
         self.message = message
 
         screen_size = self.renderer.screen_info.size
@@ -64,7 +53,10 @@ class OkDialog(Dialog):
                 case KeyboardDisconnect():
                     # wait until we get a tap in the right place, then
                     # close this dialog and switch to keyboard detect
-                    result = Modal(TargetScreen.KeyboardDetect)
+                    result = ChangeScreen(
+                        TargetScreen.KeyboardDetect,
+                        screen_stack_behavior=ScreenStackBehavior.APPEND,
+                    )
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
@@ -112,10 +104,8 @@ class YesNoDialog(Dialog):
         hardware: "Hardware",
         message: str,
     ):
-        super().__init__(
-            renderer=renderer,
-            hardware=hardware,
-        )
+        self.renderer = renderer
+        self.hardware = hardware
         self.message = message
 
         button_size = Size(width=400, height=100)
@@ -140,7 +130,10 @@ class YesNoDialog(Dialog):
                 case KeyboardDisconnect():
                     # return the keyboarddetect right away, instead of
                     # waiting for a result.
-                    return Modal(TargetScreen.KeyboardDetect)
+                    return ChangeScreen(
+                        TargetScreen.KeyboardDetect,
+                        screen_stack_behavior=ScreenStackBehavior.APPEND,
+                    )
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
