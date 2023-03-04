@@ -35,6 +35,9 @@ from .gestures import make_tapstream
 from ..settings import Settings
 from ..util import checkpoint
 
+import PIL.Image
+import PIL.ImageChops
+
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
 
@@ -243,20 +246,58 @@ class RpcHardware(Hardware):
 
         self.req_send_channel, self.req_receive_channel = trio.open_memory_channel(0)
 
+        # used to optimize display RPC
+        self.pil = None
+
     async def get_screen_info(self) -> ScreenInfo:
         self.screen_info_response.value = None
         await self.req_send_channel.send(RpcGetScreenInfo())
         resp = await self.screen_info_response.wait_value(lambda v: v is not None)
+        self.pil = PIL.Image.new("L", resp.size.pillow_size, color=255)
         return resp
 
     async def display_pixels(self, imagebytes: bytes, rect: Rect):
         if not isinstance(imagebytes, bytes):
             raise TypeError("can only display bytes")
-        await self.req_send_channel.send(
-            RpcDisplayPixels(imagebytes, ScreenRect.from_rect(rect))
-        )
+        if self.pil is not None:
+            new_pil = self.pil.copy()
+            pixels = PIL.Image.frombytes(
+                "L", rect.spread.pillow_size, imagebytes, "raw", "L", 0, 1
+            )
+            new_pil.paste(pixels, rect.origin.tuple)
+            image_diff = PIL.ImageChops.difference(self.pil, new_pil)
+            bbox = image_diff.getbbox()
+            if bbox is None:
+                return
+            (
+                changed_left,
+                changed_top,
+                changed_right,
+                changed_bottom,
+            ) = bbox
+            cropped = new_pil.crop(
+                (changed_left, changed_top, changed_right, changed_bottom)
+            )
+            cropped_bytes = cropped.tobytes("raw")
+            cropped_rect = ScreenRect(
+                x=changed_left,
+                y=changed_top,
+                width=(changed_right - changed_left),
+                height=(changed_bottom - changed_top),
+            )
+            await self.req_send_channel.send(
+                RpcDisplayPixels(cropped_bytes, cropped_rect)
+            )
+            self.pil = new_pil
+        else:
+            await self.req_send_channel.send(
+                RpcDisplayPixels(imagebytes, ScreenRect.from_rect(rect))
+            )
 
     async def clear_screen(self):
+        if self.pil is not None:
+            existing_size = self.pil.size
+            self.pil = PIL.Image.new("L", existing_size, color=255)
         await self.req_send_channel.send(RpcClearScreen())
 
     async def set_led_state(self, state: SetLed):
