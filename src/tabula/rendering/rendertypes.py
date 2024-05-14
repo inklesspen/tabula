@@ -10,9 +10,18 @@ from ..commontypes import Point, Size, Rect, ScreenInfo
 from ..util import make_c_enum
 
 
+# Pylance complains "Variable not allowed in type expression" when using this as a type
 HintMode = make_c_enum(
     ffi, "cairo_hint_style_t", "HintMode", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT
 )
+# Possibly this will solve it? courtesy of piccolo orm docs
+# class HintMode(
+#     make_c_enum(
+#         ffi, "cairo_hint_style_t", "HintMode", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT
+#     )
+# ):
+#     pass
+
 
 SubpixelOrder = make_c_enum(ffi, "cairo_subpixel_order_t", "SubpixelOrder")
 

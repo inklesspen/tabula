@@ -20,6 +20,7 @@ class TargetScreen(enum.Enum):
     Fonts = enum.auto()
     Help = enum.auto()
     ComposeHelp = enum.auto()
+    SprintControl = enum.auto()
 
 
 class ScreenStackBehavior(enum.Enum):

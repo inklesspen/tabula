@@ -162,6 +162,7 @@ class SettingsData(msgspec.Struct):
     db_path: str
     export_path: str
     max_editable_age: datetime.timedelta
+    sprint_lengths: list[datetime.timedelta]
 
 
 def _enc_hook(obj: typing.Any) -> typing.Any:
@@ -196,6 +197,7 @@ class Settings:
     db_path: pathlib.Path = attrs.field(eq=False, order=False)
     export_path: pathlib.Path = attrs.field(eq=False, order=False)
     max_editable_age: datetime.timedelta = attrs.field(eq=False, order=False)
+    sprint_lengths: list[datetime.timedelta] = attrs.field(eq=False, order=False)
 
     def __init__(self, data: SettingsData, path: pathlib.Path):
         self.__attrs_init__(
@@ -213,6 +215,7 @@ class Settings:
             db_path=pathlib.Path(data.db_path),
             export_path=pathlib.Path(data.export_path),
             max_editable_age=data.max_editable_age,
+            sprint_lengths=data.sprint_lengths,
         )
 
     def set_current_font(self, new_current_font: str, new_size: int):
@@ -246,6 +249,12 @@ class Settings:
                 db_path="test.db",
                 export_path="test_export",
                 max_editable_age=datetime.timedelta(hours=1),
+                sprint_lengths=[
+                    datetime.timedelta(minutes=5),
+                    datetime.timedelta(minutes=10),
+                    datetime.timedelta(minutes=15),
+                    datetime.timedelta(minutes=30),
+                ],
             ),
             pathlib.Path("test.settings.json"),
         )

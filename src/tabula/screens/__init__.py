@@ -4,6 +4,7 @@ from .menus import SystemMenu, SessionList, SessionChoices
 from .fonts import Fonts
 from .drafting import Drafting
 from .help import Help, ComposeHelp
+from .sprint_control import SprintControl
 
 SCREENS = {
     TargetScreen.KeyboardDetect: KeyboardDetect,
@@ -14,4 +15,5 @@ SCREENS = {
     TargetScreen.Fonts: Fonts,
     TargetScreen.Help: Help,
     TargetScreen.ComposeHelp: ComposeHelp,
+    TargetScreen.SprintControl: SprintControl,
 }

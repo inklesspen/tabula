@@ -41,7 +41,7 @@ The cursor is locked at the end of the document. You can delete characters with 
 
 You can enter special characters through the use of the Compose key and <b>compose sequences</b>. On this machine, the Compose key is {{composekey}}. Double-tap the Compose key for examples of common compose sequences.
 
-Press <span face="{TT_FACE}">TBD</span> to start or end a writing sprint.
+Press <span face="{TT_FACE}">F8</span> to start or end a writing sprint.
 
 Press <span face="{TT_FACE}">F12</span> to open the system menu.
 

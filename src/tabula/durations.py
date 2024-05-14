@@ -31,22 +31,22 @@ def format_duration(val: datetime.timedelta) -> str:
         val = -val
 
     # For durations less than 1 second, return fractions of a single unit
-    if val < datetime.timedelta(milliseconds=1):
+    if val < PARSE_UNITS["ms"]:
         # smallest timedelta resolution is 1us
         parts.append(str(val.microseconds))
         parts.append(DISPLAY_UNITS["microseconds"])
-    elif val < datetime.timedelta(seconds=1):
-        milliseconds = val / datetime.timedelta(milliseconds=1)
+    elif val < PARSE_UNITS["s"]:
+        milliseconds = val / PARSE_UNITS["ms"]
         parts.append(str(maybe_int(milliseconds)))
         parts.append(DISPLAY_UNITS["milliseconds"])
     else:
-        int_hours = val // datetime.timedelta(hours=1)
-        val %= datetime.timedelta(hours=1)
+        int_hours = val // PARSE_UNITS["h"]
+        val %= PARSE_UNITS["h"]
         if int_hours > 0:
             parts.append(str(int_hours))
             parts.append(DISPLAY_UNITS["hours"])
-        int_minutes = val // datetime.timedelta(minutes=1)
-        val %= datetime.timedelta(minutes=1)
+        int_minutes = val // PARSE_UNITS["m"]
+        val %= PARSE_UNITS["m"]
         if int_minutes > 0:
             parts.append(str(int_minutes))
             parts.append(DISPLAY_UNITS["minutes"])
@@ -55,6 +55,25 @@ def format_duration(val: datetime.timedelta) -> str:
             parts.append(DISPLAY_UNITS["seconds"])
 
     return "".join(parts)
+
+
+def timer_display(val: datetime.timedelta) -> str:
+    # clamp to non-negative values and whole seconds
+    val = datetime.timedelta(seconds=int(abs(val.total_seconds())))
+    if val == datetime.timedelta():
+        return "00:00"
+    parts = []
+    int_hours = val // PARSE_UNITS["h"]
+    if int_hours > 9:
+        raise ValueError("timer display requires single-digit hours")
+    val %= PARSE_UNITS["h"]
+    if int_hours > 0:
+        parts.append(str(int_hours))
+    int_minutes = val // PARSE_UNITS["m"]
+    val %= PARSE_UNITS["m"]
+    parts.append("{:02}".format(int_minutes))
+    parts.append("{:02}".format(maybe_int(val.total_seconds())))
+    return ":".join(parts)
 
 
 def parse_duration(val: str) -> datetime.timedelta:

@@ -7,7 +7,6 @@ from ..device.hwtypes import (
     Key,
     KeyboardDisconnect,
 )
-from ..editor.document import DocumentModel
 from ..util import TickCaller
 from ..rendering.layout import LayoutManager, StatusLayout
 
@@ -25,6 +24,7 @@ if typing.TYPE_CHECKING:
     from ..settings import Settings
     from ..rendering.renderer import Renderer
     from ..db import TabulaDb
+    from ..editor.document import DocumentModel
 
 
 class Drafting(Screen):
@@ -67,9 +67,12 @@ class Drafting(Screen):
                                 compose=event.annotation.compose,
                             )
                         if self.document.graphical_char(event.character):
+                            if self.document.whitespace_char(event.character):
+                                pass  # TODO: check if we need to end a sprint
                             self.document.keystroke(event.character)
                             await self.render_document()
                         elif event.key is Key.KEY_ENTER:
+                            # TODO: check if we need to end a sprint
                             self.document.new_para()
                             await self.render_document()
                             self.document.save_session(self.db)
@@ -88,6 +91,13 @@ class Drafting(Screen):
                                 TargetScreen.ComposeHelp,
                                 screen_stack_behavior=ScreenStackBehavior.APPEND,
                             )
+                        elif event.key is Key.KEY_F8:
+                            self.document.save_session(self.db)
+                            return ChangeScreen(
+                                TargetScreen.SprintControl,
+                                screen_stack_behavior=ScreenStackBehavior.APPEND,
+                            )
+
                         elif event.key is Key.KEY_F12:
                             if self.document.wordcount == 0:
                                 self.document.delete_session(self.db)

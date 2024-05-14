@@ -17,7 +17,6 @@ from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 from .widgets import ButtonState, Button
 
-from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
 from .base import (
     ChangeScreen,
     ScreenStackBehavior,

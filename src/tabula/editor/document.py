@@ -16,7 +16,8 @@ if typing.TYPE_CHECKING:
     import pathlib
 
 
-# https://gankra.github.io/blah/text-hates-you/
+# https://faultlore.com/blah/text-hates-you/
+# https://lord.io/text-editing-hates-you-too/
 # Cursor movement is fairly complicated. If we were gonna do everything the proper way, our
 # document model would need to know about Unicode scalars, grapheme clusters, and all that jazz.
 # After all, if I have a grapheme cluster composed of U+0065 (LATIN SMALL LETTER E) and U+0301
@@ -176,3 +177,10 @@ class DocumentModel:
             return False
         category = unicodedata.category(c)
         return category == "Zs" or category[0] in ("L", "M", "N", "P", "S")
+
+    @staticmethod
+    def whitespace_char(c: typing.Optional[str]):
+        if c is None:
+            return False
+        category = unicodedata.category(c)
+        return category.startswith("Z")

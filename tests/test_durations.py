@@ -1,7 +1,7 @@
 from datetime import timedelta
 import pytest
 
-from tabula.durations import format_duration, parse_duration
+from tabula.durations import format_duration, parse_duration, timer_display
 
 
 @pytest.mark.parametrize(
@@ -92,3 +92,24 @@ def test_parse_duration_invalid(duration: str, msg: str):
         parse_duration(duration)
     e = excinfo.value
     assert e.args[0] == msg
+
+
+@pytest.mark.parametrize(
+    "delta,expected",
+    (
+        (timedelta(), "00:00"),
+        (timedelta(microseconds=1), "00:00"),
+        (timedelta(milliseconds=1), "00:00"),
+        (parse_duration("1s"), "00:01"),
+        (parse_duration("1m"), "01:00"),
+        (parse_duration("1h"), "1:00:00"),
+        (parse_duration("1h1m"), "1:01:00"),
+        (parse_duration("1h1s"), "1:00:01"),
+        (parse_duration("1m1s"), "01:01"),
+        (parse_duration("15m0s"), "15:00"),
+        (parse_duration("4m39s"), "04:39"),
+    ),
+)
+def test_timer_display(delta: timedelta, expected: str):
+    actual = timer_display(delta)
+    assert actual == expected

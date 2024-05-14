@@ -6,6 +6,7 @@ import attrs
 import timeflake
 
 from ..rendering.markdown import make_markup
+from ..util import now
 
 
 @define(kw_only=True, frozen=True)
@@ -19,6 +20,24 @@ class Session:
     @property
     def needs_export(self):
         return self.exported_at is None or self.exported_at < self.updated_at
+
+
+@define(kw_only=True, frozen=True)
+class Sprint:
+    id: timeflake.Timeflake
+    session_id: timeflake.Timeflake
+    started_at: datetime.datetime
+    intended_duration: datetime.timedelta
+    ended_at: typing.Optional[datetime.datetime] = field(default=None)
+    wordcount: int = field(default=0)
+
+    @property
+    def elapsed(self):
+        return now() - self.started_at
+
+    @property
+    def remaining(self):
+        return self.intended_duration - self.elapsed
 
 
 @define(kw_only=True, frozen=True)

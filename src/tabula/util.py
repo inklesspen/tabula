@@ -14,6 +14,8 @@ if typing.TYPE_CHECKING:
     from _cffi_backend import FFI as FFIType
 
 
+# TODO: consider defining the enum entries in Python and _verifying_ against ffi.
+# possibly a class decorator?
 def make_c_enum(
     ffi: "FFIType", enum_t: str, python_name: str, **extras: int
 ) -> typing.Type[enum.IntEnum]:

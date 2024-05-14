@@ -16,7 +16,7 @@ from sqlalchemy import (
     or_,
     null,
 )
-from sqlalchemy.types import Integer, UnicodeText, TypeDecorator
+from sqlalchemy.types import Integer, UnicodeText, String, TypeDecorator
 from sqlalchemy.dialects.sqlite import CHAR, DATE, DATETIME, insert
 from sqlalchemy.engine import Engine, Connectable, URL as EngineURL, create_engine
 from sqlalchemy.sql import column, text
@@ -24,6 +24,7 @@ import timeflake
 
 from .editor.doctypes import Paragraph, Session
 from .util import now
+from .durations import format_duration, parse_duration
 
 
 @event.listens_for(Engine, "connect")
@@ -89,6 +90,20 @@ class AwareDateTime(TypeDecorator):
         return "AwareDateTime()"
 
 
+class Duration(TypeDecorator):
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return format_duration(value)
+
+    def process_result_value(self, value, dialect):
+        return parse_duration(value)
+
+    def __repr__(self):
+        return "Duration()"
+
+
 metadata = MetaData()
 
 session_table = Table(
@@ -106,6 +121,7 @@ sprint_table = Table(
     metadata,
     Column("id", Timeflake, primary_key=True),
     Column("session_id", ForeignKey("sessions.id"), nullable=False, index=True),
+    Column("duration", Duration, nullable=False),
     Column("wordcount", Integer, nullable=True),
     Column("started_at", AwareDateTime, nullable=False),
     Column("ended_at", AwareDateTime, nullable=True),
@@ -248,3 +264,21 @@ class TabulaDb:
                 sprint_table.delete().where(sprint_table.c.session_id == session_id)
             )
             conn.execute(session_table.delete().where(session_table.c.id == session_id))
+
+    def new_sprint(self, session_id: timeflake.Timeflake, duration: datetime.timedelta):
+        sprint_id = Timeflake.generate()
+
+        timestamp = now()
+
+        with self.engine.begin() as conn:
+            conn.execute(
+                sprint_table.insert().values(
+                    id=sprint_id,
+                    session_id=session_id,
+                    duration=duration,
+                    wordcount=0,
+                    started_at=timestamp,
+                )
+            )
+
+        return sprint_id
