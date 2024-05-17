@@ -40,6 +40,7 @@ dependencies = [
   'tricycle',
   'sqlalchemy',
   'msgspec',
+  'slurry @ git+https://github.com/andersea/slurry.git@c4fef46332f7702eb3e0d18882809e5764f231df',
 ]
 description = 'cool as hecc'
 dynamic = ['version']
@@ -51,7 +52,7 @@ requires-python = '>=3.12'
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
 # to require these on mac os: platform_system=="Darwin"
 macos = ['Pillow', 'pyobjc-core', 'pyobjc-framework-cocoa']
-test = ['Pillow', 'pytest']
+test = ['Pillow', 'pytest', 'pytest-trio']
 
 # Consider if we care about limited-api.
 # [tool.meson-python]
