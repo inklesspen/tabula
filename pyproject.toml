@@ -3,5 +3,56 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 [build-system]
-requires = ["setuptools >= 40.6.0", "wheel"]
-build-backend = "setuptools.build_meta"
+build-backend = 'mesonpy'
+requires = ['meson-python', 'cffi']
+
+[project]
+authors = [
+  {name = 'Rose Davidson', email = 'rose@metaclassical.com'},
+]
+# complete classifier list: http://pypi.python.org/pypi?%3Aaction=list_classifiers
+# TODO: update to https://peps.python.org/pep-0639/ when appropriate
+# see also https://github.com/mesonbuild/meson-python/issues/270
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)Operating System :: POSIX :: Linux",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Artistic Software",
+  "Topic :: Text Editors :: Word Processors",
+  "Topic :: Text Processing :: Fonts",
+  "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+  'attrs',
+  'cffi',
+  'cardinality',
+  'pygtrie',
+  'markdown-it-py',
+  'python-dateutil',
+  'timeflake',
+  'trio',
+  'trio-util',
+  'tricycle',
+  'sqlalchemy',
+  'msgspec',
+]
+description = 'cool as hecc'
+dynamic = ['version']
+name = 'tabula'
+readme = 'README.md'
+requires-python = '>=3.12'
+
+[project.optional-dependencies]
+# consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
+# to require these on mac os: platform_system=="Darwin"
+macos = ['Pillow', 'pyobjc-core', 'pyobjc-framework-cocoa']
+test = ['Pillow', 'pytest']
+
+# Consider if we care about limited-api.
+# [tool.meson-python]
+# limited-api = true

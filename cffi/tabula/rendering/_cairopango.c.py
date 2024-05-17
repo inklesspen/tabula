@@ -671,9 +671,8 @@ void invert_a8_surface(cairo_surface_t *surface);
 """
 )
 
-ffibuilder.set_source_pkgconfig(
+ffibuilder.set_source(
     "tabula.rendering._cairopango",
-    ["glib-2.0", "gobject-2.0", "cairo", "pango", "pangocairo"],
     """
 #include <glib.h>
 #include <glib-object.h>
@@ -686,16 +685,16 @@ static int pango_pixels(int d) {
 }
 
 static void invert_a8_surface(cairo_surface_t* surface) {
-  unsigned char* surface_data = cairo_image_surface_get_data(surface);
-	unsigned int width = cairo_image_surface_get_width(surface);
-	unsigned int height = cairo_image_surface_get_height(surface);
-	unsigned int i;
+    unsigned char* surface_data = cairo_image_surface_get_data(surface);
+    unsigned int width = cairo_image_surface_get_width(surface);
+    unsigned int height = cairo_image_surface_get_height(surface);
+    unsigned int i;
 
-	if (cairo_image_surface_get_format(surface) != CAIRO_FORMAT_A8) return;
+    if (cairo_image_surface_get_format(surface) != CAIRO_FORMAT_A8) return;
 
-	for (i = 0; i < width * height; i++) {
-    surface_data[i] = 255 - surface_data[i];
-  }
+    for (i = 0; i < width * height; i++) {
+        surface_data[i] = 255 - surface_data[i];
+    }
 }
 """,
 )
