@@ -5,35 +5,109 @@ import enum
 
 import msgspec
 
-from ._cairopango import ffi, lib as clib
+from ._cairopango import ffi, lib as clib  # type: ignore
 from ..commontypes import Point, Size, Rect, ScreenInfo
-from ..util import make_c_enum
+from ..util import check_c_enum
 
 
 # Pylance complains "Variable not allowed in type expression" when using this as a type
-HintMode = make_c_enum(
-    ffi, "cairo_hint_style_t", "HintMode", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT
-)
-# Possibly this will solve it? courtesy of piccolo orm docs
-# class HintMode(
-#     make_c_enum(
-#         ffi, "cairo_hint_style_t", "HintMode", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT
-#     )
-# ):
-#     pass
+@check_c_enum(ffi, "cairo_hint_style_t", AUTO=clib.CAIRO_HINT_STYLE_SLIGHT)
+class HintMode(enum.IntEnum):
+    DEFAULT = 0
+    NONE = 1
+    SLIGHT = 2
+    MEDIUM = 3
+    FULL = 4
+    AUTO = SLIGHT
 
 
-SubpixelOrder = make_c_enum(ffi, "cairo_subpixel_order_t", "SubpixelOrder")
+@check_c_enum(ffi, "cairo_subpixel_order_t")
+class SubpixelOrder(enum.IntEnum):
+    DEFAULT = 0
+    RGB = 1
+    BGR = 2
+    VRGB = 3
+    VBGR = 4
 
-Antialias = make_c_enum(ffi, "cairo_antialias_t", "Antialias")
 
-HintMetrics = make_c_enum(ffi, "cairo_hint_metrics_t", "HintMetrics")
+@check_c_enum(ffi, "cairo_antialias_t")
+class Antialias(enum.IntEnum):
+    DEFAULT = 0
+    NONE = 1
+    GRAY = 2
+    SUBPIXEL = 3
+    FAST = 4
+    GOOD = 5
+    BEST = 6
 
-WrapMode = make_c_enum(ffi, "PangoWrapMode", "WrapMode")
 
-Alignment = make_c_enum(ffi, "PangoAlignment", "Alignment")
+@check_c_enum(ffi, "cairo_hint_metrics_t")
+class HintMetrics(enum.IntEnum):
+    DEFAULT = 0
+    OFF = 1
+    ON = 2
 
-CairoStatus = make_c_enum(ffi, "cairo_status_t", "CairoStatus")
+
+@check_c_enum(ffi, "PangoWrapMode")
+class WrapMode(enum.IntEnum):
+    WORD = 0
+    CHAR = 1
+    WORD_CHAR = 2
+
+
+@check_c_enum(ffi, "PangoAlignment")
+class Alignment(enum.IntEnum):
+    LEFT = 0
+    CENTER = 1
+    RIGHT = 2
+
+
+@check_c_enum(ffi, "cairo_status_t")
+class CairoStatus(enum.IntEnum):
+    SUCCESS = 0
+    NO_MEMORY = 1
+    INVALID_RESTORE = 2
+    INVALID_POP_GROUP = 3
+    NO_CURRENT_POINT = 4
+    INVALID_MATRIX = 5
+    INVALID_STATUS = 6
+    NULL_POINTER = 7
+    INVALID_STRING = 8
+    INVALID_PATH_DATA = 9
+    READ_ERROR = 10
+    WRITE_ERROR = 11
+    SURFACE_FINISHED = 12
+    SURFACE_TYPE_MISMATCH = 13
+    PATTERN_TYPE_MISMATCH = 14
+    INVALID_CONTENT = 15
+    INVALID_FORMAT = 16
+    INVALID_VISUAL = 17
+    FILE_NOT_FOUND = 18
+    INVALID_DASH = 19
+    INVALID_DSC_COMMENT = 20
+    INVALID_INDEX = 21
+    CLIP_NOT_REPRESENTABLE = 22
+    TEMP_FILE_ERROR = 23
+    INVALID_STRIDE = 24
+    FONT_TYPE_MISMATCH = 25
+    USER_FONT_IMMUTABLE = 26
+    USER_FONT_ERROR = 27
+    NEGATIVE_COUNT = 28
+    INVALID_CLUSTERS = 29
+    INVALID_SLANT = 30
+    INVALID_WEIGHT = 31
+    INVALID_SIZE = 32
+    USER_FONT_NOT_IMPLEMENTED = 33
+    DEVICE_TYPE_MISMATCH = 34
+    DEVICE_ERROR = 35
+    INVALID_MESH_CONSTRUCTION = 36
+    DEVICE_FINISHED = 37
+    JBIG2_GLOBAL_MISSING = 38
+    PNG_ERROR = 39
+    FREETYPE_ERROR = 40
+    WIN32_GDI_ERROR = 41
+    TAG_ERROR = 42
+    LAST_STATUS = 45
 
 
 class AffineTransform(msgspec.Struct, frozen=True):

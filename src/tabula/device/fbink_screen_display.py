@@ -2,14 +2,48 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 import contextlib
+import enum
 
-from ._fbink import ffi, lib as clib
+from ._fbink import ffi, lib as clib  # type: ignore
 from .hwtypes import ScreenRect, TouchCoordinateTransform, TouchScreenInfo
 from ..commontypes import Size, ScreenInfo
-from ..util import make_c_enum
+from ..util import check_c_enum
 
 
-WaveformMode = make_c_enum(ffi, "WFM_MODE_INDEX_E", "WaveformMode")
+@check_c_enum(ffi, "WFM_MODE_INDEX_E")
+class WaveformMode(enum.IntEnum):
+    AUTO = 0
+    DU = 1
+    GC16 = 2
+    GC4 = 3
+    A2 = 4
+    GL16 = 5
+    REAGL = 6
+    REAGLD = 7
+    GC16_FAST = 8
+    GL16_FAST = 9
+    DU4 = 10
+    GL4 = 11
+    GL16_INV = 12
+    GCK16 = 13
+    GLKW16 = 14
+    INIT = 15
+    UNKNOWN = 16
+    INIT2 = 17
+    A2IN = 18
+    A2OUT = 19
+    GC16HQ = 20
+    GS16 = 21
+    GU16 = 22
+    GLK16 = 23
+    CLEAR = 24
+    GC4L = 25
+    GCC16 = 26
+    GC16_PARTIAL = 27
+    GCK16_PARTIAL = 28
+    DUNM = 29
+    P2SW = 30
+    MAX = 255
 
 
 class FbInk(contextlib.AbstractContextManager):

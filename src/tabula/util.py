@@ -14,18 +14,29 @@ if typing.TYPE_CHECKING:
     from _cffi_backend import FFI as FFIType
 
 
-# TODO: consider defining the enum entries in Python and _verifying_ against ffi.
-# possibly a class decorator?
-def make_c_enum(
-    ffi: "FFIType", enum_t: str, python_name: str, **extras: int
-) -> typing.Type[enum.IntEnum]:
+def check_c_enum(
+    ffi: "FFIType", enum_t: str, allow_skipped_c_values=False, **extras: int
+):
     ctype = ffi.typeof(enum_t)
     prefix = commonprefix(tuple(ctype.relements.keys()))
     values: dict[str, int] = {
         k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())
     }
     values.update(extras)
-    return enum.IntEnum(python_name, values)
+
+    def checker[E: typing.Type[enum.IntEnum]](cls: E):
+        for name, value in cls.__members__.items():
+            if name not in values:
+                raise KeyError(name)
+            if values[name] != value:
+                raise ValueError(name)
+        if not allow_skipped_c_values:
+            for name in values:
+                if name not in cls.__members__:
+                    raise KeyError(name)
+        return cls
+
+    return checker
 
 
 async def checkpoint():
