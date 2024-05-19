@@ -10,18 +10,38 @@ from ..commontypes import Size, ScreenInfo
 from ..util import check_c_enum
 
 
+# https://www.waveshare.net/w/upload/c/c4/E-paper-mode-declaration.pdf
 @check_c_enum(ffi, "WFM_MODE_INDEX_E")
 class WaveformMode(enum.IntEnum):
     AUTO = 0
+    # direct update; b&w only, very fast
     DU = 1
+    # The grayscale clearing (GC16) mode is used to update the full display and
+    # provide a high image quality
     GC16 = 2
     GC4 = 3
+    # The A2 mode is a fast, non-flash update mode designed for fast paging turning.
     A2 = 4
+    # The GL16 waveform is primarily used to update sparse content on a white
+    # background,  such as a page of anti-aliased text, with reduced flash. The
+    # GL16 waveform has 16 unique gray levels.
     GL16 = 5
+    # aka GLR16
+    # The GLR16 mode is used in conjunction with an image preprocessing algorithm to
+    # update sparse content on a white background with reduced flash and reduced
+    # image artifacts.
     REAGL = 6
+    # aka GLD16
+    # The GLD16 mode is used in conjunction with an image preprocessing algorithm to
+    # update sparse content on a white background with reduced flash and reduced
+    # image artifacts.
     REAGLD = 7
     GC16_FAST = 8
     GL16_FAST = 9
+    # The DU4 is a fast update time (similar to DU), non-flashy waveform. This mode
+    # supports transitions from any gray tone to gray tones 1,6,11,16 represented by
+    # pixel states [0 10 20 30]. The combination of fast update time and four gray tones
+    # make it useful for anti-aliased text in menus.
     DU4 = 10
     GL4 = 11
     GL16_INV = 12
