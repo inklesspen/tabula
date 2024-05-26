@@ -7,7 +7,7 @@ import typing
 import trio
 import trio_util
 
-from .device.hardware import Hardware, RpcHardware
+from .device.hardware import Hardware
 from .settings import Settings
 from .rendering.renderer import Renderer
 from .screens.base import (
@@ -29,8 +29,8 @@ class Tabula:
     renderer: Renderer
     screen_stack: trio_util.AsyncValue[list[Screen]]
 
-    def __init__(self, settings: Settings):
-        # TODO: pick a subclass of Hardware based on some config knob
+    def __init__(self, hardware: Hardware, settings: Settings):
+        self.hardware = hardware
         self.settings = settings
         self.db = make_db(settings.db_path)
         self.document = DocumentModel()
@@ -46,16 +46,15 @@ class Tabula:
             db=self.db,
             document=self.document,
             screen_info=self.screen_info,
-            **additional_kwargs
+            **additional_kwargs,
         )
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        event_send_channel, event_receive_channel = trio.open_memory_channel(0)
-        self.hardware = RpcHardware(event_send_channel.clone(), self.settings)
-
         async with trio.open_nursery() as nursery:
             nursery.start_soon(
-                self.dispatch_events, event_receive_channel, nursery.cancel_scope.cancel
+                self.dispatch_events,
+                self.hardware.event_receive_channel,
+                nursery.cancel_scope.cancel,
             )
             await nursery.start(self.hardware.run)
             self.screen_info = await self.hardware.get_screen_info()
@@ -78,7 +77,7 @@ class Tabula:
         receive_channel: trio.MemoryReceiveChannel,
         cancel_callback: collections.abc.Callable[[], None],
         *,
-        task_status=trio.TASK_STATUS_IGNORED
+        task_status=trio.TASK_STATUS_IGNORED,
     ):
         task_status.started()
         while True:
@@ -87,9 +86,7 @@ class Tabula:
             next_action = await current_screen.run(receive_channel)
             match next_action:
                 case ChangeScreen():
-                    new_screen = self.invoke_screen(
-                        next_action.new_screen, **next_action.kwargs
-                    )
+                    new_screen = self.invoke_screen(next_action.new_screen, **next_action.kwargs)
                     match next_action.screen_stack_behavior:
                         case ScreenStackBehavior.REPLACE_ALL:
                             self.screen_stack.value = [new_screen]
@@ -111,9 +108,9 @@ class Tabula:
                     cancel_callback()
 
     @classmethod
-    async def start_app(cls, settings_path):
+    async def start_app(cls, hardware, settings_path):
         settings = Settings.load(settings_path)
-        app = cls(settings)
+        app = cls(hardware, settings)
         await app.run()
 
 
@@ -132,5 +129,6 @@ def main(argv=sys.argv):
     Does stuff.
     """
     parsed = parser.parse_args(argv[1:])
-    trio.run(Tabula.start_app, parsed.settings)
+    # TODO: use a Hardware subclass
+    trio.run(Tabula.start_app, Hardware(parsed.settings), parsed.settings)
     return 0

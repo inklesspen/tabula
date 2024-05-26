@@ -55,6 +55,9 @@ devel = ['black', 'flake8', 'Flake8-pyproject']
 macos = ['Pillow', 'pyobjc-core', 'pyobjc-framework-cocoa']
 test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
 
+[project.scripts]
+cocoa-tabula = "tabula.cocoa.triococoa:start"
+
 [tool.black]
 line-length = 140
 target-version = ['py312']
