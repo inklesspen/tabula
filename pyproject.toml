@@ -52,7 +52,7 @@ requires-python = '>=3.12'
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
 # to require these on mac os: platform_system=="Darwin"
 macos = ['Pillow', 'pyobjc-core', 'pyobjc-framework-cocoa']
-test = ['Pillow', 'pytest', 'pytest-trio']
+test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
 
 # Consider if we care about limited-api.
 # [tool.meson-python]
