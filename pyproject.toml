@@ -51,8 +51,17 @@ requires-python = '>=3.12'
 [project.optional-dependencies]
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
 # to require these on mac os: platform_system=="Darwin"
+devel = ['black', 'flake8', 'Flake8-pyproject']
 macos = ['Pillow', 'pyobjc-core', 'pyobjc-framework-cocoa']
 test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
+
+[tool.black]
+line-length = 140
+target-version = ['py312']
+
+[tool.flake8]
+exclude = [".tox", ".eggs", "ci/templates", "build", "dist"]
+max-line-length = 140
 
 # Consider if we care about limited-api.
 # [tool.meson-python]
