@@ -1,9 +1,11 @@
+import dataclasses
 import datetime
+import json
+import operator
 import pathlib
 import typing
 
-import attrs
-import msgspec
+import cattrs
 import pygtrie
 
 from .device.keyboard_consts import Key
@@ -151,110 +153,84 @@ LINE_SPACING = {
 }
 
 
-class SettingsData(msgspec.Struct):
+def timedelta_seconds(seconds: datetime.timedelta | int | str):
+    if isinstance(seconds, datetime.timedelta):
+        return seconds
+    if isinstance(seconds, int):
+        return datetime.timedelta(seconds=seconds)
+    return parse_duration(seconds)
+
+
+settings_converter = cattrs.Converter()
+settings_converter.register_unstructure_hook(datetime.timedelta, format_duration)
+settings_converter.register_structure_hook(datetime.timedelta, lambda d, _: parse_duration(d))
+
+
+def unstructure_trie(t: pygtrie.Trie):
+    return {" ".join(k): v for k, v in t.items()}
+
+
+def structure_trie(d: dict, typ: type[pygtrie.Trie]):
+    return pygtrie.Trie({tuple(k.split()): v for k, v in d.items()})
+
+
+settings_converter.register_unstructure_hook(pygtrie.Trie, unstructure_trie)
+settings_converter.register_structure_hook(pygtrie.Trie, structure_trie)
+settings_converter.register_unstructure_hook(Key, operator.attrgetter("name"))
+settings_converter.register_structure_hook(Key, lambda v, _: Key[v])
+
+
+@dataclasses.dataclass(kw_only=True)
+class Settings:
+    _path: pathlib.Path
     drafting_fonts: dict[str, list[str]]
     current_font: str
     current_font_size: int
-    compose_key: str
+    compose_key: Key
     compose_key_description: str
-    compose_sequences: dict[str, str]
-    keymaps: dict[str, list[str]]
-    db_path: str
-    export_path: str
+    compose_sequences: pygtrie.Trie
+    keymaps: dict[Key, list[str]]
+    db_path: pathlib.Path
+    export_path: pathlib.Path
     max_editable_age: datetime.timedelta
     sprint_lengths: list[datetime.timedelta]
 
-
-def _enc_hook(obj: typing.Any) -> typing.Any:
-    if isinstance(obj, datetime.timedelta):
-        return format_duration(obj)
-    else:
-        raise TypeError(f"Objects of type {type(obj)} are not supported")
-
-
-def _dec_hook(type: typing.Type, obj: typing.Any) -> typing.Any:
-    if type is datetime.timedelta:
-        return parse_duration(obj)
-    else:
-        raise TypeError(f"Objects of type {type} are not supported")
-
-
-settings_encoder = msgspec.json.Encoder(enc_hook=_enc_hook)
-settings_decoder = msgspec.json.Decoder(SettingsData, dec_hook=_dec_hook)
-
-
-@attrs.define(kw_only=True, init=False)
-class Settings:
-    _data: SettingsData = attrs.field(repr=False)
-    _path: pathlib.Path = attrs.field(repr=False, eq=False, order=False)
-    drafting_fonts: dict[str, list[str]] = attrs.field(eq=False, order=False)
-    current_font: str = attrs.field(eq=False, order=False)
-    current_font_size: int = attrs.field(eq=False, order=False)
-    compose_key: Key = attrs.field(eq=False, order=False)
-    compose_key_description: str = attrs.field(eq=False, order=False)
-    compose_sequences: pygtrie.Trie = attrs.field(eq=False, order=False)
-    keymaps: dict[Key, list[str]] = attrs.field(eq=False, order=False)
-    db_path: pathlib.Path = attrs.field(eq=False, order=False)
-    export_path: pathlib.Path = attrs.field(eq=False, order=False)
-    max_editable_age: datetime.timedelta = attrs.field(eq=False, order=False)
-    sprint_lengths: list[datetime.timedelta] = attrs.field(eq=False, order=False)
-
-    def __init__(self, data: SettingsData, path: pathlib.Path):
-        self.__attrs_init__(
-            data=data,
-            path=path,
-            drafting_fonts=data.drafting_fonts,
-            current_font=data.current_font,
-            current_font_size=data.current_font_size,
-            compose_key=Key[data.compose_key],
-            compose_key_description=data.compose_key_description,
-            compose_sequences=pygtrie.Trie(
-                {tuple(k.split()): v for k, v in data.compose_sequences.items()}
-            ),
-            keymaps={Key[k]: v for k, v in data.keymaps.items()},
-            db_path=pathlib.Path(data.db_path),
-            export_path=pathlib.Path(data.export_path),
-            max_editable_age=data.max_editable_age,
-            sprint_lengths=data.sprint_lengths,
-        )
-
     def set_current_font(self, new_current_font: str, new_size: int):
-        new_data = msgspec.structs.replace(
-            self._data, current_font=new_current_font, current_font_size=new_size
-        )
-        self._data = new_data
         self.current_font = new_current_font
         self.current_font_size = new_size
 
-    def save(self, dest: pathlib.Path = None):
+    def save(self, dest: typing.Optional[pathlib.Path] = None):
         if dest is None:
             dest = self._path
-        dest.write_bytes(msgspec.json.format(settings_encoder.encode(self._data)))
+        raw = settings_converter.unstructure(self)
+        del raw["_path"]
+        json.dump(raw, dest.open("w"), indent=2)
 
     @classmethod
     def load(cls, src: pathlib.Path):
-        return cls(settings_decoder.decode(src.read_bytes()), src)
+        raw = json.load(src.open())
+        raw["_path"] = src
+        return settings_converter.structure(raw, cls)
 
     @classmethod
     def for_test(cls):
-        return cls(
-            SettingsData(
-                drafting_fonts=DRAFTING_FONTS,
-                current_font="Tabula Quattro",
-                current_font_size=2,
-                compose_key=COMPOSE_KEY,
-                compose_key_description=COMPOSE_KEY_DESCRIPTION,
-                compose_sequences=COMPOSE_SEQUENCES,
-                keymaps=KEYMAPS,
-                db_path="test.db",
-                export_path="test_export",
-                max_editable_age=datetime.timedelta(hours=1),
-                sprint_lengths=[
-                    datetime.timedelta(minutes=5),
-                    datetime.timedelta(minutes=10),
-                    datetime.timedelta(minutes=15),
-                    datetime.timedelta(minutes=30),
-                ],
-            ),
-            pathlib.Path("test.settings.json"),
+        return settings_converter.structure(
+            {
+                "_path": "test.settings.json",
+                "drafting_fonts": DRAFTING_FONTS,
+                "current_font": "Tabula Quattro",
+                "current_font_size": 2,
+                "compose_key": COMPOSE_KEY,
+                "compose_key_description": COMPOSE_KEY_DESCRIPTION,
+                "compose_sequences": COMPOSE_SEQUENCES,
+                "keymaps": KEYMAPS,
+                "db_path": "test.db",
+                "export_path": "test_export",
+                "max_editable_age": "1h",
+                "sprint_lengths": ["5m", "10m", "15m", "30m"],
+            },
+            cls,
         )
+
+
+settings_converter.register_structure_hook(Settings, cattrs.gen.make_dict_structure_fn(Settings, settings_converter))
