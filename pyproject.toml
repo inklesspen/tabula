@@ -65,6 +65,7 @@ target-version = ['py312']
 
 [tool.flake8]
 exclude = [".tox", ".eggs", "ci/templates", "build", "dist"]
+ignore = ["E203", "E704"]
 max-line-length = 140
 
 # Consider if we care about limited-api.
