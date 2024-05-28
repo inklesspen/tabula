@@ -252,6 +252,14 @@ typedef enum _cairo_content {
     CAIRO_CONTENT_COLOR_ALPHA	= 0x3000
 } cairo_content_t;
 
+typedef enum _cairo_font_type {
+    CAIRO_FONT_TYPE_TOY,
+    CAIRO_FONT_TYPE_FT,
+    CAIRO_FONT_TYPE_WIN32,
+    CAIRO_FONT_TYPE_QUARTZ,
+    CAIRO_FONT_TYPE_USER,
+    CAIRO_FONT_TYPE_DWRITE
+} cairo_font_type_t;
 
 typedef struct {
     double x, y, width, height;
@@ -650,8 +658,10 @@ pango_layout_get_text (
 typedef struct _PangoCairoFontMap PangoCairoFontMap;
 
 PangoFontMap *pango_cairo_font_map_new(void);
-
+PangoFontMap *pango_cairo_font_map_new_for_font_type (cairo_font_type_t fonttype);
 PangoFontMap *pango_cairo_font_map_get_default(void);
+void pango_cairo_font_map_set_default (PangoCairoFontMap *fontmap);
+cairo_font_type_t pango_cairo_font_map_get_font_type (PangoCairoFontMap *fontmap);
 
 void pango_cairo_font_map_set_resolution(PangoCairoFontMap *fontmap,
                                          double dpi);
