@@ -2,7 +2,6 @@ import argparse
 import collections.abc
 import pathlib
 import sys
-import typing
 
 import trio
 import trio_util
@@ -100,11 +99,7 @@ class Tabula:
                     self.settings.save()
                     # TODO: clean shutdown tasks?
                     print("Shutting down…")
-                    # This RPC never actually gets sent because of the cancel callback.
-                    # Waiting a few seconds allows it to get sent, but there must be a better way.
-                    # otoh it won't be an issue when actually running on the kobo, so.
                     await self.hardware.clear_screen()
-                    await trio.sleep(0.5)
                     cancel_callback()
 
     @classmethod

@@ -41,6 +41,14 @@ import PIL.ImageChops
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
 
+# this needs some serious cleanup
+# Hardware needs to:
+# 1. dispatch hardware events (keyboard, touchscreen, power button, battery)
+#    to the app
+# 2. Provide hardware info (screen info)
+# 3. Render screen updates, maybe update keyboard LEDs
+# We're starting over from scratch.
+
 
 class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
     def __init__(self, socket_stream: trio.SocketStream):
@@ -72,13 +80,14 @@ class Hardware(metaclass=abc.ABCMeta):
     touch_coordinate_transform: TouchCoordinateTransform
     capslock_led: bool
     compose_led: bool
+    event_channel: trio.abc.SendChannel
+    event_receive_channel: trio.abc.ReceiveChannel
 
     def __init__(
         self,
-        event_channel: trio.abc.SendChannel,
         settings: Settings,
     ):
-        self.event_channel = event_channel
+        self.event_channel, self.event_receive_channel = trio.open_memory_channel(0)
         self.settings = settings
         self.capslock_led = False
         self.compose_led = False
@@ -94,23 +103,19 @@ class Hardware(metaclass=abc.ABCMeta):
         self.reset_touchstream()
 
     @abc.abstractmethod
-    async def get_screen_info(self) -> ScreenInfo:
-        ...
+    async def get_screen_info(self) -> ScreenInfo: ...
 
     @abc.abstractmethod
-    async def display_pixels(self, imagebytes: bytes, rect: Rect):
-        ...
+    async def display_pixels(self, imagebytes: bytes, rect: Rect): ...
 
     async def display_rendered(self, rendered: "Rendered"):
         await self.display_pixels(rendered.image, rendered.extent)
 
     @abc.abstractmethod
-    async def clear_screen(self):
-        ...
+    async def clear_screen(self): ...
 
     @abc.abstractmethod
-    async def set_led_state(self, state: SetLed):
-        ...
+    async def set_led_state(self, state: SetLed): ...
 
     async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
@@ -163,9 +168,7 @@ class Hardware(metaclass=abc.ABCMeta):
             new_keystream_send_channel,
             new_keystream_receive_channel,
         ) = trio.open_memory_channel(0)
-        self.keystream = make_keystream(
-            new_keystream_receive_channel, self.settings, enable_composes
-        )
+        self.keystream = make_keystream(new_keystream_receive_channel, self.settings, enable_composes)
         self.keystream_send_channel = new_keystream_send_channel
         if old_send_channel is not None:
             old_send_channel.close()
@@ -191,10 +194,9 @@ class Hardware(metaclass=abc.ABCMeta):
 class KoboHardware(Hardware):
     def __init__(
         self,
-        event_channel: trio.abc.SendChannel,
         settings: Settings,
     ):
-        super().__init__(event_channel, settings)
+        super().__init__(settings)
         self.fbink = FbInk()
         self.keyboards = None
 
@@ -236,10 +238,9 @@ class RpcHardware(Hardware):
 
     def __init__(
         self,
-        event_channel: trio.abc.SendChannel,
         settings: Settings,
     ):
-        super().__init__(event_channel, settings)
+        super().__init__(settings)
         self.host = "kobo"
         self.port = 1234
         self.screen_info_response = trio_util.AsyncValue(None)
@@ -261,9 +262,7 @@ class RpcHardware(Hardware):
             raise TypeError("can only display bytes")
         if self.pil is not None:
             new_pil = self.pil.copy()
-            pixels = PIL.Image.frombytes(
-                "L", rect.spread.pillow_size, imagebytes, "raw", "L", 0, 1
-            )
+            pixels = PIL.Image.frombytes("L", rect.spread.pillow_size, imagebytes, "raw", "L", 0, 1)
             new_pil.paste(pixels, rect.origin.tuple)
             image_diff = PIL.ImageChops.difference(self.pil, new_pil)
             bbox = image_diff.getbbox()
@@ -275,9 +274,7 @@ class RpcHardware(Hardware):
                 changed_right,
                 changed_bottom,
             ) = bbox
-            cropped = new_pil.crop(
-                (changed_left, changed_top, changed_right, changed_bottom)
-            )
+            cropped = new_pil.crop((changed_left, changed_top, changed_right, changed_bottom))
             cropped_bytes = cropped.tobytes("raw")
             cropped_rect = ScreenRect(
                 x=changed_left,
@@ -285,14 +282,10 @@ class RpcHardware(Hardware):
                 width=(changed_right - changed_left),
                 height=(changed_bottom - changed_top),
             )
-            await self.req_send_channel.send(
-                RpcDisplayPixels(cropped_bytes, cropped_rect)
-            )
+            await self.req_send_channel.send(RpcDisplayPixels(cropped_bytes, cropped_rect))
             self.pil = new_pil
         else:
-            await self.req_send_channel.send(
-                RpcDisplayPixels(imagebytes, ScreenRect.from_rect(rect))
-            )
+            await self.req_send_channel.send(RpcDisplayPixels(imagebytes, ScreenRect.from_rect(rect)))
 
     async def clear_screen(self):
         if self.pil is not None:
@@ -329,20 +322,14 @@ class RpcHardware(Hardware):
                     screen_size = Size(width=req.width, height=req.height)
                     self.screen_size = screen_size
                     self.touch_coordinate_transform = req.touch_coordinate_transform
-                    self.screen_info_response.value = ScreenInfo(
-                        size=screen_size, dpi=req.dpi
-                    )
+                    self.screen_info_response.value = ScreenInfo(size=screen_size, dpi=req.dpi)
                 case RpcKeyEvent():
-                    await self.keystream_send_channel.send(
-                        KeyEvent(key=req.key, press=req.press)
-                    )
+                    await self.keystream_send_channel.send(KeyEvent(key=req.key, press=req.press))
                 case RpcTouchReport():
                     # TODO: incorporate the transform into the touchscreen evdev procesing
                     await self.touchstream_send_channel.send(
                         TouchReport(
-                            touches=[
-                                self._transform_touch_event(evt) for evt in req.touches
-                            ],
+                            touches=[self._transform_touch_event(evt) for evt in req.touches],
                             sec=req.sec,
                             usec=req.usec,
                         )
@@ -404,9 +391,7 @@ class EventTestHardware(Hardware):
                         if self.touchstream_send_channel is not None:
                             await self.touchstream_send_channel.send(event)
                     case _:
-                        raise NotImplementedError(
-                            f"Don't know how to handle {type(event)}."
-                        )
+                        raise NotImplementedError(f"Don't know how to handle {type(event)}.")
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         async with tricycle.open_service_nursery() as nursery:

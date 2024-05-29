@@ -2,7 +2,7 @@ from contextlib import AbstractContextManager
 import typing
 
 from ..commontypes import Rect
-from ._cairopango import ffi, lib as clib
+from ._cairopango import ffi, lib as clib  # type: ignore
 from .rendertypes import (
     HintMode,
     HintMetrics,
@@ -104,7 +104,7 @@ class Pango:
         subpixel_order: SubpixelOrder = SubpixelOrder.DEFAULT,
         antialias: Antialias = Antialias.DEFAULT,
     ):
-        # language must be a valid RFC-3066 code, but there is currently no validation for this
+        # language must be a valid RFC-3066 code, but currently this isn't validated
 
         # This fontmap is owned by Pango, not by us; we must not free it.
         self.fontmap = clib.pango_cairo_font_map_get_default()
@@ -152,10 +152,15 @@ class Pango:
         )
 
     def calculate_line_height(self, font: str) -> float:
-        with self._make_font_description(font) as font_description, ffi.gc(
-            clib.pango_context_get_metrics(self.context, font_description, ffi.NULL),
-            clib.pango_font_metrics_unref,
-        ) as font_metrics:
+        with (
+            self._make_font_description(font) as font_description,
+            ffi.gc(
+                clib.pango_context_get_metrics(
+                    self.context, font_description, ffi.NULL
+                ),
+                clib.pango_font_metrics_unref,
+            ) as font_metrics,
+        ):
             return clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
 
     def list_available_fonts(self) -> list[str]:

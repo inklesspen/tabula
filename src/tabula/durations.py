@@ -1,4 +1,5 @@
 """Functions to convert timedeltas to strings, using a string format based on Go's Duration format."""
+
 import datetime
 import decimal
 
