@@ -356,7 +356,8 @@ class EventTestHardware(Hardware):
         settings: Settings,
         incoming_event_channel: trio.abc.ReceiveChannel,
     ):
-        super().__init__(event_channel, settings)
+        super().__init__(settings)
+        self.event_channel = event_channel
         self.incoming_event_channel = incoming_event_channel
         self.capslock_led = False
         self.compose_led = False
