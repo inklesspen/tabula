@@ -1,5 +1,4 @@
 import enum
-import io
 import logging
 import typing
 
@@ -15,7 +14,6 @@ from AppKit import (
     NSMiniaturizableWindowMask,
     NSApplicationActivationPolicyRegular,
     NSBackingStoreBuffered,
-    NSView,
     NSViewFrameDidChangeNotification,
     NSImage,
     NSImageView,
@@ -30,7 +28,6 @@ from Foundation import (
     NSMakePoint,
     NSMakeRect,
     NSPoint,
-    NSRect,
     NSSize,
 )
 from PyObjCTools import AppHelper
@@ -43,11 +40,8 @@ from ..settings import Settings
 from ..commontypes import Rect, Size, ScreenInfo, Point
 from ..device.hwtypes import (
     KeyEvent,
-    KeyPress,
-    ModifierAnnotation,
     AnnotatedKeyEvent,
     SetLed,
-    Led,
     TapEvent,
     TapPhase,
 )
@@ -176,27 +170,13 @@ class CocoaHardware:
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.keystream_cancel_scope = cancel_scope
-                await self.set_led_state(SetLed(led=Led.LED_CAPSL, state=False))
-                await self.set_led_state(SetLed(led=Led.LED_COMPOSE, state=False))
                 async with self.keystream as keystream:
                     event: AnnotatedKeyEvent
                     async for event in keystream:
                         if event.is_led_able:
                             if event.annotation.capslock != self.capslock_led:
-                                await self.set_led_state(
-                                    SetLed(
-                                        led=Led.LED_CAPSL,
-                                        state=event.annotation.capslock,
-                                    )
-                                )
                                 self.capslock_led = event.annotation.capslock
                             if event.annotation.compose != self.compose_led:
-                                await self.set_led_state(
-                                    SetLed(
-                                        led=Led.LED_COMPOSE,
-                                        state=event.annotation.compose,
-                                    )
-                                )
                                 self.compose_led = event.annotation.compose
                         await self.event_channel.send(event)
 
