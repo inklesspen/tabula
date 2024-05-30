@@ -4,9 +4,8 @@ import collections.abc
 from contextlib import asynccontextmanager, aclosing
 import datetime
 import enum
+from typing import cast
 
-from slurry import Pipeline
-from slurry.environments import TrioSection
 import trio
 
 from ..commontypes import Point
@@ -19,6 +18,7 @@ from .hwtypes import (
     TapPhase,
     TapEvent,
 )
+from .keystreams import Section, pump_all
 
 
 class RecognitionState(enum.Enum):
@@ -30,16 +30,15 @@ class RecognitionState(enum.Enum):
     CHANGED = enum.auto()
 
 
-class MakePersistent(TrioSection):
+class MakePersistent(Section):
     move_threshold = 10  # Could make this DPI-independent, I suppose
 
     def __init__(self):
         self.id_counter = 0
         self.slots = [None, None]
 
-    async def refine(self, input, output):
-        async with aclosing(input) as source:
-            report: TouchReport
+    async def pump(self, source: trio.MemoryReceiveChannel[TouchReport], sink: trio.MemorySendChannel[PersistentTouchReport]):
+        async with aclosing(source), aclosing(sink):
             async for report in source:
                 by_slot = [None, None]
                 report_data = {
@@ -84,10 +83,10 @@ class MakePersistent(TrioSection):
                         continue
                 ptr = PersistentTouchReport(**report_data)
                 if ptr.began or ptr.moved or ptr.ended:
-                    await output(ptr)
+                    await sink.send(ptr)
 
 
-class TapRecognizer(TrioSection):
+class TapRecognizer(Section):
     max_duration = datetime.timedelta(microseconds=300000)
     required_pressure = 26
 
@@ -97,25 +96,21 @@ class TapRecognizer(TrioSection):
         self.start_timestamp = None
         self.state = RecognitionState.POSSIBLE
 
-    async def refine(self, input, output):
+    async def pump(self, source: trio.MemoryReceiveChannel[PersistentTouchReport], sink: trio.MemorySendChannel[TapEvent]):
         self.reset()
-        async with aclosing(input) as source:
+        async with aclosing(source), aclosing(sink):
             async for report in source:
-                await self._handle_report(report, output)
+                await self._handle_report(report, sink.send)
                 if len(self.current_touch_ids) == 0:
                     self.reset()
 
     async def _handle_report(self, report: PersistentTouchReport, output):
-        self.current_touch_ids.difference_update(
-            [touch.touch_id for touch in report.ended]
-        )
+        self.current_touch_ids.difference_update([touch.touch_id for touch in report.ended])
         self.current_touch_ids.update([touch.touch_id for touch in report.began])
         for touch in report.began:
             if self.touch is not None:
                 if self.state is RecognitionState.INITIATED:
-                    await output(
-                        TapEvent(location=self.touch.location, phase=TapPhase.CANCELED)
-                    )
+                    await output(TapEvent(location=self.touch.location, phase=TapPhase.CANCELED))
                 self.state = RecognitionState.FAILED
                 return
             self.touch = touch
@@ -123,22 +118,16 @@ class TapRecognizer(TrioSection):
             self.state = RecognitionState.POSSIBLE
             if touch.max_pressure >= self.required_pressure:
                 self.state = RecognitionState.INITIATED
-                await output(
-                    TapEvent(location=touch.location, phase=TapPhase.INITIATED)
-                )
+                await output(TapEvent(location=touch.location, phase=TapPhase.INITIATED))
         for touch in report.moved:
             if touch is self.touch and touch.phase is TouchPhase.MOVED:
                 if self.state is RecognitionState.INITIATED:
-                    await output(
-                        TapEvent(location=touch.location, phase=TapPhase.CANCELED)
-                    )
+                    await output(TapEvent(location=touch.location, phase=TapPhase.CANCELED))
                 self.state = RecognitionState.FAILED
                 return
             if touch.max_pressure >= self.required_pressure:
                 self.state = RecognitionState.INITIATED
-                await output(
-                    TapEvent(location=touch.location, phase=TapPhase.INITIATED)
-                )
+                await output(TapEvent(location=touch.location, phase=TapPhase.INITIATED))
         for touch in report.ended:
             if touch is self.touch and touch.phase is TouchPhase.ENDED:
                 if touch.max_pressure < self.required_pressure:
@@ -148,26 +137,21 @@ class TapRecognizer(TrioSection):
                 if duration > self.max_duration:
                     self.state = RecognitionState.FAILED
                     if self.state is RecognitionState.INITIATED:
-                        await output(
-                            TapEvent(location=touch.location, phase=TapPhase.CANCELED)
-                        )
+                        await output(TapEvent(location=touch.location, phase=TapPhase.CANCELED))
                     return
                 if self.state in (
                     RecognitionState.POSSIBLE,
                     RecognitionState.INITIATED,
                 ):
                     self.state = RecognitionState.RECOGNIZED
-                    await output(
-                        TapEvent(location=touch.location, phase=TapPhase.COMPLETED)
-                    )
+                    await output(TapEvent(location=touch.location, phase=TapPhase.COMPLETED))
 
 
 @asynccontextmanager
 async def make_tapstream(touch_report_source: collections.abc.AsyncIterable):
-    tapstream: trio.MemoryReceiveChannel[TapEvent]
-    async with Pipeline.create(
+    async with pump_all(
         touch_report_source,
         MakePersistent(),
         TapRecognizer(),
-    ) as pipeline, pipeline.tap() as tapstream:
-        yield tapstream
+    ) as tapstream:
+        yield cast(trio.MemoryReceiveChannel[TapEvent], tapstream)

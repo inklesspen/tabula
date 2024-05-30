@@ -6,7 +6,6 @@ from contextlib import aclosing
 import typing
 
 import pygtrie
-import slurry
 import trio
 
 from tabula.device.keystreams import (
@@ -17,6 +16,7 @@ from tabula.device.keystreams import (
     SynthesizeKeys,
     ComposeCharacters,
     make_keystream,
+    pump_all,
 )
 from tabula.device.hwtypes import (
     Key,
@@ -40,42 +40,43 @@ async def make_async_source(
 
 
 async def test_modifier_tracking_basics():
-    async with aclosing(
-        make_async_source(
-            [
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_H, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_H, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_SPACE, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_SPACE, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_W, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_W, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_R, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_R, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_D, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_D, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource, ModifierTracking()
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(
+            make_async_source(
+                [
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_H, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_H, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_SPACE, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_SPACE, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_W, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_W, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_R, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_R, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_D, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_D, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                ]
+            )
+        ) as keysource,
+        pump_all(keysource, ModifierTracking()) as resultsource,
+    ):
         results = [event async for event in resultsource]
         expected = [
             AnnotatedKeyEvent(
@@ -100,30 +101,14 @@ async def test_modifier_tracking_basics():
                 annotation=ModifierAnnotation(),
                 is_modifier=True,
             ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_E, press=KeyPress.PRESSED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_E, press=KeyPress.RELEASED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_L, press=KeyPress.PRESSED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_L, press=KeyPress.RELEASED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_L, press=KeyPress.PRESSED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_L, press=KeyPress.RELEASED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_O, press=KeyPress.PRESSED, annotation=ModifierAnnotation()
-            ),
-            AnnotatedKeyEvent(
-                key=Key.KEY_O, press=KeyPress.RELEASED, annotation=ModifierAnnotation()
-            ),
+            AnnotatedKeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED, annotation=ModifierAnnotation()),
+            AnnotatedKeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED, annotation=ModifierAnnotation()),
             AnnotatedKeyEvent(
                 key=Key.KEY_SPACE,
                 press=KeyPress.PRESSED,
@@ -238,56 +223,57 @@ async def test_make_characters():
         Key.KEY_MINUS: ["-", "_"],
         Key.KEY_EQUAL: ["=", "+"],
     }
-    async with aclosing(
-        make_async_source(
-            [
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_H, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_H, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_SPACE, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_SPACE, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_W, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_W, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_R, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_R, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_D, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_D, press=KeyPress.RELEASED),
-                # Numbers and punctuation should not be affected by capslock
-                KeyEvent(key=Key.KEY_1, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_1, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                # But they should be affected by shift
-                KeyEvent(key=Key.KEY_RIGHTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_1, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_1, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource, ModifierTracking(), OnlyPresses(), MakeCharacter(keymaps)
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(
+            make_async_source(
+                [
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_H, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_H, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_SPACE, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_SPACE, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_W, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_W, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_O, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_R, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_R, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_L, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_D, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_D, press=KeyPress.RELEASED),
+                    # Numbers and punctuation should not be affected by capslock
+                    KeyEvent(key=Key.KEY_1, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_1, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                    # But they should be affected by shift
+                    KeyEvent(key=Key.KEY_RIGHTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_1, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_1, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTSHIFT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_EQUAL, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                ]
+            )
+        ) as keysource,
+        pump_all(keysource, ModifierTracking(), OnlyPresses(), MakeCharacter(keymaps)) as resultsource,
+    ):
         results = [event async for event in resultsource]
         expected = [
             AnnotatedKeyEvent(
@@ -416,42 +402,43 @@ async def test_make_characters():
 
 
 async def test_compose_key():
-    async with aclosing(
-        make_async_source(
-            [
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTALT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTALT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTCTRL, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTCTRL, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource, ModifierTracking(), OnlyPresses(), ComposeKey(Key.KEY_RIGHTMETA)
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(
+            make_async_source(
+                [
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTALT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTALT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTCTRL, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTCTRL, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                ]
+            )
+        ) as keysource,
+        pump_all(keysource, ModifierTracking(), OnlyPresses(), ComposeKey(Key.KEY_RIGHTMETA)) as resultsource,
+    ):
         results = [event async for event in resultsource]
         expected = [
             AnnotatedKeyEvent(
@@ -546,48 +533,51 @@ async def test_compose_key():
 
 
 async def test_synthesize_keys():
-    async with aclosing(
-        make_async_source(
-            [
-                # synthesizes
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                # interrupted
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                # three produces a synthesized and then a lone compose
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                # capslock is conserved
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource,
-        ModifierTracking(),
-        OnlyPresses(),
-        ComposeKey(Key.KEY_RIGHTMETA),
-        SynthesizeKeys(),
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(
+            make_async_source(
+                [
+                    # synthesizes
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    # interrupted
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    # three produces a synthesized and then a lone compose
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    # capslock is conserved
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                ]
+            )
+        ) as keysource,
+        pump_all(
+            keysource,
+            ModifierTracking(),
+            OnlyPresses(),
+            ComposeKey(Key.KEY_RIGHTMETA),
+            SynthesizeKeys(),
+        ) as resultsource,
+    ):
         results = [event async for event in resultsource]
         expected = [
             AnnotatedKeyEvent(
@@ -706,50 +696,53 @@ async def test_composes():
         Key.KEY_A: ["a", "A"],
         Key.KEY_E: ["e", "E"],
     }
-    async with aclosing(
-        make_async_source(
-            [
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource,
-        ModifierTracking(),
-        OnlyPresses(),
-        MakeCharacter(keymaps),
-        ComposeKey(Key.KEY_RIGHTMETA),
-        SynthesizeKeys(),
-        ComposeCharacters(composes),
-    ) as pipeline, pipeline.tap() as resultchannel:
+    async with (
+        aclosing(
+            make_async_source(
+                [
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_LEFTSHIFT, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_E, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_CAPSLOCK, press=KeyPress.RELEASED),
+                ]
+            )
+        ) as keysource,
+        pump_all(
+            keysource,
+            ModifierTracking(),
+            OnlyPresses(),
+            MakeCharacter(keymaps),
+            ComposeKey(Key.KEY_RIGHTMETA),
+            SynthesizeKeys(),
+            ComposeCharacters(composes),
+        ) as resultchannel,
+    ):
         actual = [event async for event in resultchannel]
         expected = [
             AnnotatedKeyEvent(
@@ -844,26 +837,29 @@ async def test_composes_sequence_failure():
         Key.KEY_E: ["e", "E"],
         Key.KEY_B: ["b", "B"],
     }
-    async with aclosing(
-        make_async_source(
-            [
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
-                KeyEvent(key=Key.KEY_B, press=KeyPress.PRESSED),
-                KeyEvent(key=Key.KEY_B, press=KeyPress.RELEASED),
-            ]
-        )
-    ) as keysource, slurry.Pipeline.create(
-        keysource,
-        ModifierTracking(),
-        OnlyPresses(),
-        MakeCharacter(keymaps),
-        ComposeKey(Key.KEY_RIGHTMETA),
-        SynthesizeKeys(),
-        ComposeCharacters(composes),
-    ) as pipeline, pipeline.tap() as resultchannel:
+    async with (
+        aclosing(
+            make_async_source(
+                [
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_RIGHTMETA, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_A, press=KeyPress.RELEASED),
+                    KeyEvent(key=Key.KEY_B, press=KeyPress.PRESSED),
+                    KeyEvent(key=Key.KEY_B, press=KeyPress.RELEASED),
+                ]
+            )
+        ) as keysource,
+        pump_all(
+            keysource,
+            ModifierTracking(),
+            OnlyPresses(),
+            MakeCharacter(keymaps),
+            ComposeKey(Key.KEY_RIGHTMETA),
+            SynthesizeKeys(),
+            ComposeCharacters(composes),
+        ) as resultchannel,
+    ):
         actual = [event async for event in resultchannel]
         expected = [
             AnnotatedKeyEvent(

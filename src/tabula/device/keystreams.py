@@ -1,21 +1,27 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+import abc
 from contextlib import asynccontextmanager, aclosing
 import enum
 import unicodedata
+from typing import Any, AsyncIterable, cast
 
 import msgspec
-from slurry import Pipeline
-from slurry.environments import TrioSection
 import pygtrie
 import trio
 
 from .hwtypes import KeyEvent, Key, KeyPress, ModifierAnnotation, AnnotatedKeyEvent
 from ..settings import Settings
 
+
+class Section(abc.ABC):
+    @abc.abstractmethod
+    async def pump(self, source: trio.MemoryReceiveChannel[Any], sink: trio.MemorySendChannel[Any]): ...
+
+
 # stage 1: track modifier keydown/up and annotate keystream with current modifiers
-class ModifierTracking(TrioSection):
+class ModifierTracking(Section):
     def __init__(self):
         self.momentary_state = {
             Key.KEY_LEFTALT: False,
@@ -33,34 +39,27 @@ class ModifierTracking(TrioSection):
 
     def _make_annotation(self):
         return ModifierAnnotation(
-            alt=self.momentary_state[Key.KEY_LEFTALT]
-            or self.momentary_state[Key.KEY_RIGHTALT],
-            ctrl=self.momentary_state[Key.KEY_LEFTCTRL]
-            or self.momentary_state[Key.KEY_RIGHTCTRL],
-            meta=self.momentary_state[Key.KEY_LEFTMETA]
-            or self.momentary_state[Key.KEY_RIGHTMETA],
-            shift=self.momentary_state[Key.KEY_LEFTSHIFT]
-            or self.momentary_state[Key.KEY_RIGHTSHIFT],
+            alt=self.momentary_state[Key.KEY_LEFTALT] or self.momentary_state[Key.KEY_RIGHTALT],
+            ctrl=self.momentary_state[Key.KEY_LEFTCTRL] or self.momentary_state[Key.KEY_RIGHTCTRL],
+            meta=self.momentary_state[Key.KEY_LEFTMETA] or self.momentary_state[Key.KEY_RIGHTMETA],
+            shift=self.momentary_state[Key.KEY_LEFTSHIFT] or self.momentary_state[Key.KEY_RIGHTSHIFT],
             capslock=self.lock_state[Key.KEY_CAPSLOCK],
         )
 
-    async def refine(self, input, output):
-        event: KeyEvent
-        async with aclosing(input) as source:
+    async def pump(self, source: trio.MemoryReceiveChannel[KeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
+        async with aclosing(source), aclosing(sink):
             async for event in source:
                 is_modifier = False
                 is_led_able = False
                 if event.key in self.momentary_state:
                     is_modifier = True
-                    self.momentary_state[event.key] = (
-                        event.press is not KeyPress.RELEASED
-                    )
+                    self.momentary_state[event.key] = event.press is not KeyPress.RELEASED
                 if event.key in self.lock_state:
                     is_modifier = True
                     is_led_able = True
                     if event.press is KeyPress.PRESSED:
                         self.lock_state[event.key] = not self.lock_state[event.key]
-                await output(
+                await sink.send(
                     AnnotatedKeyEvent(
                         key=event.key,
                         press=event.press,
@@ -72,23 +71,21 @@ class ModifierTracking(TrioSection):
 
 
 # stage 1.5: drop KeyPress.RELEASED events
-class OnlyPresses(TrioSection):
-    async def refine(self, input, output):
-        event: AnnotatedKeyEvent
-        async with aclosing(input) as source:
+class OnlyPresses(Section):
+    async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
+        async with aclosing(source), aclosing(sink):
             async for event in source:
                 if event.press == KeyPress.PRESSED:
-                    await output(event)
+                    await sink.send(event)
 
 
 # stage 2: convert key event + modifier into character
-class MakeCharacter(TrioSection):
+class MakeCharacter(Section):
     def __init__(self, keymaps: dict[Key, list[str]]):
         self.keymaps = keymaps
 
-    async def refine(self, input, output):
-        event: AnnotatedKeyEvent
-        async with aclosing(input) as source:
+    async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
+        async with aclosing(source), aclosing(sink):
             async for event in source:
                 if event.key in self.keymaps:
                     keymap = self.keymaps[event.key]
@@ -97,41 +94,35 @@ class MakeCharacter(TrioSection):
                     if is_letter:
                         is_shifted ^= event.annotation.capslock
                     level = 1 if is_shifted else 0
-                    await output(
-                        msgspec.structs.replace(event, character=keymap[level])
-                    )
+                    await sink.send(msgspec.structs.replace(event, character=keymap[level]))
                 else:
-                    await output(event)
+                    await sink.send(event)
 
 
 # stage 2.25: convert compose key to KEY_COMPOSE (more convenient to keep separate from synthesis)
-class ComposeKey(TrioSection):
+class ComposeKey(Section):
     def __init__(self, compose_key: Key):
         self.compose_key = compose_key
 
-    async def refine(self, input, output):
-        async with aclosing(input) as source:
+    async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
+        async with aclosing(source), aclosing(sink):
             async for event in source:
                 if event.key == self.compose_key:
-                    await output(
+                    await sink.send(
                         AnnotatedKeyEvent(
                             key=Key.KEY_COMPOSE,
                             press=KeyPress.PRESSED,
-                            annotation=ModifierAnnotation(
-                                compose=True, capslock=event.annotation.capslock
-                            ),
+                            annotation=ModifierAnnotation(compose=True, capslock=event.annotation.capslock),
                             is_modifier=True,
                             is_led_able=True,
                         )
                     )
                 else:
-                    await output(event)
+                    await sink.send(event)
 
 
 # stage 2.5: synthesize based on key sequences
-SYNTHETIC_SEQUENCES = pygtrie.Trie(
-    {(Key.KEY_COMPOSE, Key.KEY_COMPOSE): Key.SYNTHETIC_COMPOSE_DOUBLETAP}
-)
+SYNTHETIC_SEQUENCES = pygtrie.Trie({(Key.KEY_COMPOSE, Key.KEY_COMPOSE): Key.SYNTHETIC_COMPOSE_DOUBLETAP})
 
 
 class KeystreamState(enum.Enum):
@@ -139,16 +130,16 @@ class KeystreamState(enum.Enum):
     COLLECTING = enum.auto()
 
 
-class SynthesizeKeys(TrioSection):
+class SynthesizeKeys(Section):
     def __init__(self):
         self.sequences = SYNTHETIC_SEQUENCES
         self.state = KeystreamState.PASSTHROUGH
         self.collected = []
 
-    async def refine(self, input, output):
-        async with aclosing(input) as source:
+    async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
+        async with aclosing(source), aclosing(sink):
             async for event in source:
-                await output(event)
+                await sink.send(event)
                 match self.state:
                     case KeystreamState.PASSTHROUGH:
                         if bool(self.sequences.has_node([event.key])):
@@ -160,13 +151,11 @@ class SynthesizeKeys(TrioSection):
                         if self.sequences.has_key(collected_keys):
                             # success
                             synthesized_key = self.sequences[collected_keys]
-                            await output(
+                            await sink.send(
                                 AnnotatedKeyEvent(
                                     key=synthesized_key,
                                     press=KeyPress.PRESSED,
-                                    annotation=ModifierAnnotation(
-                                        capslock=event.annotation.capslock
-                                    ),
+                                    annotation=ModifierAnnotation(capslock=event.annotation.capslock),
                                 )
                             )
                             self.collected = []
@@ -181,7 +170,7 @@ class SynthesizeKeys(TrioSection):
 
 
 # stage 3: compose sequences
-class ComposeCharacters(TrioSection):
+class ComposeCharacters(Section):
     devoured: list[AnnotatedKeyEvent]
     devoured_characters: list[str]
 
@@ -191,9 +180,8 @@ class ComposeCharacters(TrioSection):
         self.devoured = []
         self.devoured_characters = []
 
-    async def refine(self, input, output):
-        event: AnnotatedKeyEvent
-        async with aclosing(input) as source:
+    async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
+        async with aclosing(source), aclosing(sink):
             async for event in source:
                 # TODO: figure out how to improve this state machine; the COLLECTING state is super complex
                 match self.state:
@@ -203,7 +191,7 @@ class ComposeCharacters(TrioSection):
                             self.devoured = []
                             self.devoured_characters = []
                             # fallthrough and emit the KEY_COMPOSE event for visibility
-                        await output(event)
+                        await sink.send(event)
                     case KeystreamState.COLLECTING:
                         # TODO: if key is compose, restart the collecting
                         self.devoured.append(event)
@@ -212,60 +200,63 @@ class ComposeCharacters(TrioSection):
                         still_matching = False
                         if event.character is not None:
                             self.devoured_characters.append(event.character)
-                            still_matching = bool(
-                                self.sequences.has_node(self.devoured_characters)
-                            )
+                            still_matching = bool(self.sequences.has_node(self.devoured_characters))
                         if not (still_matching or event.is_modifier):
                             # not a match
                             self.state = KeystreamState.PASSTHROUGH
                             # synthesize a KEY_COMPOSE event for visibility, ending the compose annotation
-                            await output(
+                            await sink.send(
                                 AnnotatedKeyEvent(
                                     key=Key.KEY_COMPOSE,
                                     press=KeyPress.PRESSED,
-                                    annotation=msgspec.structs.replace(
-                                        event.annotation, compose=False
-                                    ),
+                                    annotation=msgspec.structs.replace(event.annotation, compose=False),
                                     is_modifier=True,
                                     is_led_able=True,
                                 )
                             )
                             for devoured_event in self.devoured:
-                                await output(devoured_event)
+                                await sink.send(devoured_event)
                         else:
                             if self.sequences.has_key(self.devoured_characters):
                                 # end of sequence
                                 new_event = AnnotatedKeyEvent(
                                     key=Key.KEY_COMPOSE,
                                     press=KeyPress.PRESSED,
-                                    annotation=ModifierAnnotation(
-                                        capslock=event.annotation.capslock
-                                    ),
+                                    annotation=ModifierAnnotation(capslock=event.annotation.capslock),
                                     character=self.sequences[self.devoured_characters],
                                     is_modifier=False,
                                     is_led_able=True,
                                 )
                                 self.state = KeystreamState.PASSTHROUGH
-                                await output(new_event)
+                                await sink.send(new_event)
                             if event.is_led_able:
                                 # emit the event for visibility, but with compose annotated
                                 visible_event = msgspec.structs.replace(
                                     event,
-                                    annotation=msgspec.structs.replace(
-                                        event.annotation, compose=True
-                                    ),
+                                    annotation=msgspec.structs.replace(event.annotation, compose=True),
                                 )
-                                await output(visible_event)
+                                await sink.send(visible_event)
+
+
+@asynccontextmanager
+async def pump_all(first_source: AsyncIterable[Any], *sections: Section):
+    async with trio.open_nursery() as nursery:
+        section_input = first_source
+        for section in sections:
+            section_send_channel, section_receive_channel = trio.open_memory_channel(0)
+            nursery.start_soon(section.pump, section_input, section_send_channel)
+            section_input = section_receive_channel
+        yield section_input
+        nursery.cancel_scope.cancel()
 
 
 @asynccontextmanager
 async def make_keystream(
-    key_event_channel: trio.MemoryReceiveChannel,
+    key_event_channel: trio.MemoryReceiveChannel[KeyEvent],
     settings: Settings,
     enable_composes: bool,
 ):
     sections = [
-        key_event_channel,
         ModifierTracking(),
         OnlyPresses(),
         MakeCharacter(settings.keymaps),
@@ -274,6 +265,6 @@ async def make_keystream(
     ]
     if enable_composes:
         sections.append(ComposeCharacters(settings.compose_sequences))
-    keystream: trio.MemoryReceiveChannel
-    async with Pipeline.create(*sections) as pipeline, pipeline.tap() as keystream:
-        yield keystream
+
+    async with pump_all(key_event_channel, *sections) as keystream:
+        yield cast(trio.MemoryReceiveChannel[AnnotatedKeyEvent], keystream)

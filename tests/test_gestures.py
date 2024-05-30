@@ -2,7 +2,6 @@ import collections.abc
 from contextlib import aclosing
 import typing
 
-import slurry
 
 from tabula.commontypes import Point
 from tabula.device.hwtypes import (
@@ -12,11 +11,7 @@ from tabula.device.hwtypes import (
     TapEvent,
     TapPhase,
 )
-from tabula.device.gestures import (
-    MakePersistent,
-    TapRecognizer,
-    make_tapstream,
-)
+from tabula.device.gestures import MakePersistent, TapRecognizer, make_tapstream, pump_all
 from tabula.util import checkpoint
 
 T = typing.TypeVar("T")
@@ -66,11 +61,10 @@ SIMPLE_TAP = (
 
 
 async def test_tap_recognition_pipeline():
-    async with aclosing(
-        make_async_source(SIMPLE_TAP)
-    ) as touchsource, slurry.Pipeline.create(
-        touchsource, MakePersistent(), TapRecognizer()
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(make_async_source(SIMPLE_TAP)) as touchsource,
+        pump_all(touchsource, MakePersistent(), TapRecognizer()) as resultsource,
+    ):
         actual = [event async for event in resultsource]
         expected = [
             TapEvent(location=Point(x=408, y=1021), phase=TapPhase.INITIATED),
@@ -80,9 +74,7 @@ async def test_tap_recognition_pipeline():
 
 
 async def test_tap_recognition_tapstream():
-    async with aclosing(make_async_source(SIMPLE_TAP)) as touchsource, make_tapstream(
-        touchsource
-    ) as tapstream:
+    async with aclosing(make_async_source(SIMPLE_TAP)) as touchsource, make_tapstream(touchsource) as tapstream:
         actual = [event async for event in tapstream]
         expected = [
             TapEvent(location=Point(x=408, y=1021), phase=TapPhase.INITIATED),
@@ -152,11 +144,10 @@ TOO_LIGHT = (
 
 
 async def test_tap_recognition_pipeline_too_light():
-    async with aclosing(
-        make_async_source(TOO_LIGHT)
-    ) as touchsource, slurry.Pipeline.create(
-        touchsource, MakePersistent(), TapRecognizer()
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(make_async_source(TOO_LIGHT)) as touchsource,
+        pump_all(touchsource, MakePersistent(), TapRecognizer()) as resultsource,
+    ):
         actual = [event async for event in resultsource]
         assert len(actual) == 0
 
@@ -242,11 +233,10 @@ SWIPE = (
 
 
 async def test_tap_recognition_pipeline_moves_too_much():
-    async with aclosing(
-        make_async_source(SWIPE)
-    ) as touchsource, slurry.Pipeline.create(
-        touchsource, MakePersistent(), TapRecognizer()
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(make_async_source(SWIPE)) as touchsource,
+        pump_all(touchsource, MakePersistent(), TapRecognizer()) as resultsource,
+    ):
         actual = [event async for event in resultsource]
         expected = [
             TapEvent(location=Point(x=764, y=753), phase=TapPhase.INITIATED),
@@ -869,11 +859,10 @@ MULTI_TOUCH_REPORTS = (
 
 
 async def test_make_persistent_multitouch():
-    async with aclosing(
-        make_async_source(MULTI_TOUCH_REPORTS)
-    ) as touchsource, slurry.Pipeline.create(
-        touchsource, MakePersistent()
-    ) as pipeline, pipeline.tap() as resultsource:
+    async with (
+        aclosing(make_async_source(MULTI_TOUCH_REPORTS)) as touchsource,
+        pump_all(touchsource, MakePersistent()) as resultsource,
+    ):
         begun = set()
         ended = set()
         seen = set()

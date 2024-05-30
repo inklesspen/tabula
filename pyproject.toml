@@ -40,7 +40,6 @@ dependencies = [
   'tricycle',
   'sqlalchemy',
   'msgspec',
-  'slurry @ git+https://github.com/andersea/slurry.git@c4fef46332f7702eb3e0d18882809e5764f231df',
   'cattrs',
 ]
 description = 'cool as hecc'
