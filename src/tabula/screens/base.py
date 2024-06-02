@@ -1,26 +1,34 @@
-import abc
+import collections.abc
+import dataclasses
 import enum
+import logging
 import typing
 
 import msgspec
 import trio
 
-if typing.TYPE_CHECKING:
-    from ..device.hardware import Hardware
-    from ..settings import Settings
-    from ..rendering.renderer import Renderer
+from ..device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TapEvent, TabulaEvent
+from ..util import invoke_if_present
+
+
+logger = logging.getLogger(__name__)
 
 
 class TargetScreen(enum.Enum):
-    KeyboardDetect = enum.auto()
     SystemMenu = enum.auto()
     SessionList = enum.auto()
-    SessionChoices = enum.auto()
+    SessionActions = enum.auto()
     Drafting = enum.auto()
     Fonts = enum.auto()
+
+
+class TargetDialog(enum.Enum):
+    Ok = enum.auto()
+    YesNo = enum.auto()
     Help = enum.auto()
     ComposeHelp = enum.auto()
     SprintControl = enum.auto()
+    KeyboardDetect = enum.auto()
 
 
 class ScreenStackBehavior(enum.Enum):
@@ -50,7 +58,33 @@ class DialogResult(msgspec.Struct, frozen=True):
 RetVal = ChangeScreen | Shutdown | Close | DialogResult
 
 
-class Screen(abc.ABC):
-    @abc.abstractmethod
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        ...
+@dataclasses.dataclass(frozen=True)
+class ResponderMetadata:
+    responder: "Responder"
+    event_channel: trio.MemorySendChannel[TabulaEvent]
+    cancel: collections.abc.Callable[[], None]
+
+
+class Responder:
+    async def run(self, *, task_status: trio.TaskStatus):
+        # await invoke_if_present(self, "become_responder")
+        event_send_channel, event_receive_channel = trio.open_memory_channel[TabulaEvent](0)
+        with trio.CancelScope() as cancel_scope:
+            task_status.started(ResponderMetadata(responder=self, event_channel=event_send_channel, cancel=cancel_scope.cancel))
+
+            async with event_receive_channel:
+                while True:
+                    match event := await event_receive_channel.receive():
+                        case AnnotatedKeyEvent():
+                            await invoke_if_present(self, "handle_key_event", event=event)
+                        case TapEvent():
+                            await invoke_if_present(self, "handle_tap_event", event=event)
+                        case KeyboardDisconnect():
+                            await invoke_if_present(self, "handle_keyboard_disconnect")
+        # await invoke_if_present(self, "resign_responder")
+        # event_send_channel.close()
+        # event_receive_channel.close()
+
+
+class Screen(Responder):
+    pass

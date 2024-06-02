@@ -1,43 +1,56 @@
 import argparse
-import collections.abc
+import logging
 import pathlib
 import sys
+from typing import Optional, cast
 
 import trio
 import trio_util
 
-from .device.hardware import Hardware
+from .device.hardware import Hardware, KoboHardware
+from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TapEvent, TabulaEvent
 from .settings import Settings
 from .rendering.renderer import Renderer
-from .screens.base import (
-    Screen,
-    ChangeScreen,
-    ScreenStackBehavior,
-    Close,
-    Shutdown,
-    TargetScreen,
-)
-from .screens import SCREENS
-from .util import invoke
+from .screens.base import Screen, Responder, ResponderMetadata, TargetScreen, TargetDialog
+from .screens.dialogs import Dialog
+from .screens import SCREENS, DIALOGS
+from .util import invoke, invoke_if_present, TABULA, AwaitableCallback, Future, removing, replacing_last
 from .db import make_db
 from .editor.document import DocumentModel
+
+logger = logging.getLogger(__name__)
 
 
 class Tabula:
     hardware: Hardware
     renderer: Renderer
-    screen_stack: trio_util.AsyncValue[list[Screen]]
+    screen_stack: trio_util.AsyncValue[tuple[Screen]]
+    tick_receivers: list[AwaitableCallback]
+    modal_stack: trio_util.AsyncValue[tuple[Dialog]]
+    current_responder_metadata: Optional[ResponderMetadata]
 
     def __init__(self, hardware: Hardware, settings: Settings):
         self.hardware = hardware
         self.settings = settings
         self.db = make_db(settings.db_path)
         self.document = DocumentModel()
-        self.screen_stack = trio_util.AsyncValue([])
+        self.screen_stack = trio_util.AsyncValue(tuple())
+        self.modal_stack = trio_util.AsyncValue(tuple())
+        self.tick_receivers = []
+        self._nursery = None
+        self.current_responder_metadata = None
 
-    def invoke_screen(self, screen: TargetScreen, **additional_kwargs):
+    @property
+    def current_screen(self) -> Optional[Responder]:
+        if self.modal_stack.value:
+            return self.modal_stack.value[-1]
+        if len(self.screen_stack.value) == 0:
+            return None
+        return self.screen_stack.value[-1]
+
+    def invoke_screen(self, screen: TargetScreen, **additional_kwargs) -> Screen:
         screen_type = SCREENS[screen]
-        return invoke(
+        screen_obj = invoke(
             screen_type,
             settings=self.settings,
             renderer=self.renderer,
@@ -47,60 +60,119 @@ class Tabula:
             screen_info=self.screen_info,
             **additional_kwargs,
         )
+        return screen_obj
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        TABULA.set(self)
         async with trio.open_nursery() as nursery:
-            nursery.start_soon(
-                self.dispatch_events,
-                self.hardware.event_receive_channel,
-                nursery.cancel_scope.cancel,
-            )
+            self._nursery = nursery
+            nursery.start_soon(self.dispatch_events, self.hardware.event_receive_channel, nursery)
             await nursery.start(self.hardware.run)
-            self.screen_info = await self.hardware.get_screen_info()
+            self.screen_info = self.hardware.get_screen_info()
             self.renderer = Renderer(self.screen_info)
-            self.screen_stack.value = [
-                self.invoke_screen(TargetScreen.SystemMenu),
-                self.invoke_screen(TargetScreen.KeyboardDetect),
-            ]
-            await self.hardware.clear_screen()
-            nursery.start_soon(self.periodic_save_doc, trio_util.periodic(5))
+            self.hardware.clear_screen()
+            nursery.start_soon(self.ticks, trio_util.periodic(15))
 
+            await self.show_dialog(TargetDialog.KeyboardDetect)
+            self.screen_stack.value = (self.invoke_screen(TargetScreen.SystemMenu),)
             task_status.started()
+        self._nursery = None
+        logger.debug("goodbye")
 
-    async def periodic_save_doc(self, trigger):
+    async def ticks(self, trigger):
         async for _ in trigger:
-            self.document.save_session(self.db)
+            for receiver in self.tick_receivers:
+                await receiver()
+
+    async def show_dialog(self, target_dialog: TargetDialog, **additional_kwargs):
+        dialog_cls = DIALOGS[target_dialog]
+        dialog = cast(
+            Dialog, invoke(dialog_cls, settings=self.settings, screen_info=self.screen_info, renderer=self.renderer, **additional_kwargs)
+        )
+
+        if self.current_responder_metadata is not None and self.current_responder_metadata.responder is self.current_screen:
+            await invoke_if_present(self.current_screen, "resign_responder")
+        saved_metadata = self.current_responder_metadata
+        self.current_responder_metadata = None
+        self.modal_stack.value += tuple([dialog])
+
+        async def modal_wait(inner_future: Future, *, task_status: trio.TaskStatus):
+            outer_future = Future()
+            task_status.started(outer_future)
+            await inner_future._event.wait()
+            if self.current_responder_metadata.responder is not dialog:
+                raise Exception("expected %r to be responder; it was instead %r", dialog, self.current_responder_metadata.responder)
+            self.current_responder_metadata.cancel()
+            await invoke_if_present(dialog, "resign_responder")
+            self.modal_stack.value = removing(self.modal_stack.value, dialog)
+            self.current_responder_metadata = saved_metadata
+            if saved_metadata is not None:
+                # it might be None if this is the KeyboardDetect modal launched at startup
+                # because the SystemMenu hadn't been invoked yet.
+                await invoke_if_present(saved_metadata.responder, "become_responder")
+            outer_future.finalize(inner_future._outcome)
+
+        return cast(Future, await self._nursery.start(modal_wait, dialog.future))
+
+    async def shutdown(self):
+        if self.current_responder_metadata is not None:
+            await invoke_if_present(self.current_responder_metadata.responder, "resign_responder")
+            self.current_responder_metadata.cancel()
+
+        self.settings.save()
+        # TODO: clean shutdown tasks?
+        self.hardware.event_receive_channel.close()
+        self._nursery.cancel_scope.cancel()
+        logger.warn("Shutting down…")
+        self.hardware.clear_screen()
+
+    async def change_screen(self, target_screen: TargetScreen, **kwargs):
+        if self.modal_stack.value:
+            raise Exception("this is not the right way to close a modal")
+        if self.current_responder_metadata.responder is not self.current_screen:
+            raise Exception("attempted to change screen when not current responder")
+
+        await invoke_if_present(self.current_screen, "resign_responder")
+        self.current_responder_metadata.cancel()
+        self.current_responder_metadata = None
+        new_screen = self.invoke_screen(target_screen, **kwargs)
+        self.screen_stack.value = replacing_last(self.screen_stack.value, new_screen)
 
     async def dispatch_events(
         self,
-        receive_channel: trio.MemoryReceiveChannel,
-        cancel_callback: collections.abc.Callable[[], None],
+        receive_channel: trio.MemoryReceiveChannel[TabulaEvent],
+        nursery: trio.Nursery,
         *,
         task_status=trio.TASK_STATUS_IGNORED,
     ):
         task_status.started()
+
+        await self.screen_stack.wait_value(lambda v: len(v) > 0)
         while True:
-            await self.screen_stack.wait_value(lambda v: len(v) > 0)
-            current_screen = self.screen_stack.value[-1]
-            next_action = await current_screen.run(receive_channel)
-            match next_action:
-                case ChangeScreen():
-                    new_screen = self.invoke_screen(next_action.new_screen, **next_action.kwargs)
-                    match next_action.screen_stack_behavior:
-                        case ScreenStackBehavior.REPLACE_ALL:
-                            self.screen_stack.value = [new_screen]
-                        case ScreenStackBehavior.REPLACE_LAST:
-                            self.screen_stack.value[-1] = new_screen
-                        case ScreenStackBehavior.APPEND:
-                            self.screen_stack.value.append(new_screen)
-                case Close():
-                    self.screen_stack.value.pop()
-                case Shutdown():
-                    self.settings.save()
-                    # TODO: clean shutdown tasks?
-                    print("Shutting down…")
-                    await self.hardware.clear_screen()
-                    cancel_callback()
+            await trio.lowlevel.checkpoint()
+
+            if self.current_screen is None:
+                raise Exception("no current screen, which shouldn't ever happen")
+            if self.current_responder_metadata is None or self.current_screen is not self.current_responder_metadata.responder:
+                logger.debug("invoking current screen %r runloop", self.current_screen)
+                self.current_responder_metadata = cast(ResponderMetadata, await nursery.start(self.current_screen.run))
+                await invoke_if_present(self.current_screen, "become_responder")
+
+            try:
+                event = receive_channel.receive_nowait()
+            except trio.WouldBlock:
+                continue
+
+            match event:
+                case AnnotatedKeyEvent():
+                    await self.current_responder_metadata.event_channel.send(event)
+                case TapEvent():
+                    await self.current_responder_metadata.event_channel.send(event)
+                case KeyboardDisconnect():
+                    await self.current_responder_metadata.event_channel.send(event)
+                    await self.show_dialog(TargetDialog.KeyboardDetect)
+                case _:
+                    raise NotImplementedError(f"Don't know how to handle {type(event)}.")
 
     @classmethod
     async def start_app(cls, hardware, settings_path):
@@ -124,6 +196,5 @@ def main(argv=sys.argv):
     Does stuff.
     """
     parsed = parser.parse_args(argv[1:])
-    # TODO: use a Hardware subclass
-    trio.run(Tabula.start_app, Hardware(parsed.settings), parsed.settings)
+    trio.run(Tabula.start_app, KoboHardware(parsed.settings), parsed.settings)
     return 0

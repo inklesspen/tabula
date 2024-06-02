@@ -1,19 +1,25 @@
-from .base import TargetScreen
-from .keyboard_detect import KeyboardDetect
-from .menus import SystemMenu, SessionList, SessionChoices
+from .base import TargetScreen, TargetDialog, Screen
+from .menus import SystemMenu, SessionList, SessionActions
 from .fonts import Fonts
 from .drafting import Drafting
 from .help import Help, ComposeHelp
+from .keyboard_detect import KeyboardDetectDialog
 from .sprint_control import SprintControl
+from .dialogs import Dialog, OkDialog, YesNoDialog
 
-SCREENS = {
-    TargetScreen.KeyboardDetect: KeyboardDetect,
+SCREENS: dict[TargetScreen, type[Screen]] = {
     TargetScreen.SystemMenu: SystemMenu,
     TargetScreen.Drafting: Drafting,
     TargetScreen.SessionList: SessionList,
-    TargetScreen.SessionChoices: SessionChoices,
+    TargetScreen.SessionActions: SessionActions,
     TargetScreen.Fonts: Fonts,
-    TargetScreen.Help: Help,
-    TargetScreen.ComposeHelp: ComposeHelp,
-    TargetScreen.SprintControl: SprintControl,
+}
+
+DIALOGS: dict[TargetDialog, type[Dialog]] = {
+    TargetDialog.Ok: OkDialog,
+    TargetDialog.YesNo: YesNoDialog,
+    TargetDialog.Help: Help,
+    TargetDialog.ComposeHelp: ComposeHelp,
+    TargetDialog.KeyboardDetect: KeyboardDetectDialog,
+    TargetDialog.SprintControl: SprintControl,
 }

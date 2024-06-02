@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2023 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-
+import logging
 import typing
 import unicodedata
 
@@ -15,6 +15,8 @@ if typing.TYPE_CHECKING:
     from ..db import TabulaDb
     import pathlib
 
+
+logger = logging.getLogger(__name__)
 
 # https://faultlore.com/blah/text-hates-you/
 # https://lord.io/text-editing-hates-you-too/
@@ -72,9 +74,7 @@ class DocumentModel:
 
     @property
     def wordcount(self):
-        return wordcount.count_plain_text(
-            wordcount.make_plain_text("\n\n".join([p.markdown for p in self.contents]))
-        )
+        return wordcount.count_plain_text(wordcount.make_plain_text("\n\n".join([p.markdown for p in self.contents])))
 
     def __len__(self):
         return len(self._contents_by_id)
@@ -102,10 +102,12 @@ class DocumentModel:
         self.sprint_id = None
         self.unsaved_changes = False
 
-    def save_session(self, db: "TabulaDb"):
+    def save_session(self, db: "TabulaDb", called_from=None):
         if not self.has_session or not self.unsaved_changes:
             return
+        logger.debug("(called from %s) actually saving session", called_from)
         db.save_session(self.session_id, self.wordcount, self.contents)
+        self.unsaved_changes = False
 
     def delete_session(self, db: "TabulaDb"):
         db.delete_session(self.session_id)

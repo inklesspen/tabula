@@ -6,22 +6,23 @@ import typing
 from os.path import commonprefix
 
 from dateutil.tz import tzlocal
+import outcome
 import trio
-import trio_util
-import tricycle
 
 if typing.TYPE_CHECKING:
     from _cffi_backend import FFI as FFIType
+    from .app import Tabula
 
 
-def check_c_enum(
-    ffi: "FFIType", enum_t: str, allow_skipped_c_values=False, **extras: int
-):
+TABULA: trio.lowlevel.RunVar["Tabula"] = trio.lowlevel.RunVar("tabula_app_instance")
+
+AwaitableCallback = collections.abc.Callable[[], collections.abc.Awaitable[None]]
+
+
+def check_c_enum(ffi: "FFIType", enum_t: str, allow_skipped_c_values=False, **extras: int):
     ctype = ffi.typeof(enum_t)
     prefix = commonprefix(tuple(ctype.relements.keys()))
-    values: dict[str, int] = {
-        k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())
-    }
+    values: dict[str, int] = {k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())}
     values.update(extras)
 
     def checker[E: typing.Type[enum.IntEnum]](cls: E):
@@ -39,8 +40,16 @@ def check_c_enum(
     return checker
 
 
-async def checkpoint():
-    await trio.sleep(0)
+async def invoke_if_present(obj: typing.Any, method_name: str, **provided_kwargs):
+    if not hasattr(obj, method_name):
+        return
+    c = getattr(obj, method_name)
+    if not callable(c):
+        return
+    result = invoke(c, **provided_kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 def invoke(c: typing.Callable, **provided_kwargs):
@@ -64,6 +73,18 @@ def maybe_int(val: float):
 
 def now():
     return datetime.datetime.now(tzlocal())
+
+
+def removing(tup: tuple[V], item: V):
+    temp = list(tup)
+    temp.remove(item)
+    return tuple(temp)
+
+
+def replacing_last(tup: tuple[V], item: V):
+    temp = list(tup)
+    temp[-1] = item
+    return tuple(temp)
 
 
 def humanized_delta(delta: datetime.timedelta, allow_future: bool = False):
@@ -125,18 +146,26 @@ def humanized_delta(delta: datetime.timedelta, allow_future: bool = False):
     return relative_template.format("a good long while")
 
 
-class TickCaller(tricycle.BackgroundObject, daemon=True):
-    def __init__(
-        self,
-        period_length: int,
-        callback: collections.abc.Callable[[], collections.abc.Awaitable[None]],
-    ):
-        self.length = period_length
-        self.callback = callback
+class Future[V]:
+    _outcome: typing.Optional[outcome.Outcome]
 
-    async def __open__(self) -> None:
-        self.nursery.start_soon(self.ticker, trio_util.periodic(self.length))
+    def __init__(self):
+        self._event = trio.Event()
+        self._outcome = None
 
-    async def ticker(self, trigger):
-        async for _ in trigger:
-            await self.callback()
+    def finalize(self, result: V | outcome.Outcome[V]):
+        if self._outcome is not None:
+            raise Exception("already finalized")
+        if isinstance(result, outcome.Outcome):
+            self._outcome = result
+        else:
+            self._outcome = outcome.Value(result)
+        self._event.set()
+
+    async def wait(self) -> V:
+        await self._event.wait()
+        return self._outcome.unwrap()
+
+    @property
+    def is_final(self):
+        return self._event.is_set()

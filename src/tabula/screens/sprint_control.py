@@ -1,56 +1,37 @@
-import collections
-import collections.abc
 import typing
 
-import trio
-
-from ..device.hwtypes import (
-    AnnotatedKeyEvent,
-    TapEvent,
-    TapPhase,
-    Key,
-    KeyboardDisconnect,
-)
+from ..device.hwtypes import AnnotatedKeyEvent, Key
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 from .widgets import ButtonState, Button
 
-from .base import (
-    ChangeScreen,
-    ScreenStackBehavior,
-    Close,
-    RetVal,
-    Screen,
-    TargetScreen,
-)
+from .dialogs import Dialog
 from ..durations import format_duration
-from ..util import now
+from ..util import now, TABULA, Future
 
 if typing.TYPE_CHECKING:
-    from ..device.hardware import Hardware
     from ..settings import Settings
     from ..commontypes import ScreenInfo
     from ..editor.document import DocumentModel
 
 
-class SprintControl(Screen):
+class SprintControl(Dialog):
     def __init__(
         self,
         *,
         settings: "Settings",
-        hardware: "Hardware",
         screen_info: "ScreenInfo",
         document: "DocumentModel",
     ):
         self.settings = settings
-        self.hardware = hardware
         self.pango = Pango(dpi=screen_info.dpi)
         self.screen_size = screen_info.size
         self.document = document
         self.lengths = self.settings.sprint_lengths
         self.selected_index = None
+        self.future = Future()
 
     @property
     def sprint_length(self):
@@ -71,21 +52,15 @@ class SprintControl(Screen):
             if length is not None:
                 return now() + length
 
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        self.hardware.reset_keystream(enable_composes=False)
+    async def become_responder(self):
+        app = TABULA.get()
+        app.hardware.reset_keystream(enable_composes=False)
         screen = self.render()
-        await self.hardware.display_rendered(screen)
-        while True:
-            event = await event_channel.receive()
-            match event:
-                case AnnotatedKeyEvent():
-                    if event.key is Key.KEY_ESC:
-                        return Close()
-                case KeyboardDisconnect():
-                    return ChangeScreen(
-                        TargetScreen.KeyboardDetect,
-                        screen_stack_behavior=ScreenStackBehavior.APPEND,
-                    )
+        app.hardware.display_rendered(screen)
+
+    async def handle_key_event(self, event: AnnotatedKeyEvent):
+        if event.key is Key.KEY_ESC:
+            await self.future.finalize(None)
 
     def make_buttons(self):
         button_size = Size(width=80, height=80)
@@ -102,9 +77,7 @@ class SprintControl(Screen):
                 font="B612 8",
                 screen_location=button_origin,
                 button_value=index,
-                state=ButtonState.SELECTED
-                if self.selected_index == index
-                else ButtonState.NORMAL,
+                state=ButtonState.SELECTED if self.selected_index == index else ButtonState.NORMAL,
             )
             button_x += button_size.width + between
             self.length_buttons.append(button)
@@ -149,19 +122,19 @@ class SprintControl(Screen):
             )
 
     async def update_button_state(self):
+        app = TABULA.get()
         for length_button in self.length_buttons:
             render_needed = length_button.update_state(
-                ButtonState.SELECTED
-                if self.selected_index == length_button.button_value
-                else ButtonState.NORMAL
+                ButtonState.SELECTED if self.selected_index == length_button.button_value else ButtonState.NORMAL
             )
             if render_needed:
-                await self.hardware.display_rendered(length_button.render())
+                app.hardware.display_rendered(length_button.render())
         for action_button in self.action_buttons:
             if action_button.needs_render():
-                await self.hardware.display_rendered(action_button.render())
+                app.hardware.display_rendered(action_button.render())
 
     async def render_sample(self):
+        app = TABULA.get()
         sample_size = Size(width=900, height=400)
         with Cairo(sample_size) as smaller_cairo:
             smaller_cairo.fill_with_color(CairoColor.WHITE)
@@ -182,11 +155,12 @@ class SprintControl(Screen):
                 image=smaller_cairo.get_image_bytes(),
                 extent=Rect(origin=Point(x=smaller_x, y=100), spread=sample_size),
             )
-        await self.hardware.display_rendered(rendered)
+        app.hardware.display_rendered(rendered)
 
     async def render_screen(self):
-        await self.hardware.clear_screen()
+        app = TABULA.get()
+        app.hardware.clear_screen()
         self.make_buttons()
         await self.render_sample()
         for button in self.length_buttons + self.action_buttons:
-            await self.hardware.display_rendered(button.render())
+            app.hardware.display_rendered(button.render())

@@ -8,37 +8,20 @@ import typing
 import msgspec
 import trio
 
-from ..device.hwtypes import (
-    AnnotatedKeyEvent,
-    TapEvent,
-    TapPhase,
-    Key,
-    KeyboardDisconnect,
-)
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase, Key
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, Alignment, CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 from ..editor.document import DocumentModel
 from ..editor.doctypes import Session
-from ..util import checkpoint, now, humanized_delta
+from ..util import now, humanized_delta, TABULA
 from .widgets import ButtonState, Button
 
 from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
-from .base import (
-    ChangeScreen,
-    ScreenStackBehavior,
-    Close,
-    Shutdown,
-    DialogResult,
-    RetVal,
-    Screen,
-    TargetScreen,
-)
-from .dialogs import OkDialog, YesNoDialog
+from .base import Screen, TargetScreen, TargetDialog
 
 if typing.TYPE_CHECKING:
-    from ..device.hardware import Hardware
     from ..settings import Settings
     from ..rendering.renderer import Renderer
     from ..db import TabulaDb
@@ -47,9 +30,7 @@ if typing.TYPE_CHECKING:
 
 class MenuButton(msgspec.Struct):
     button: Button
-    handler: collections.abc.Callable[
-        [], collections.abc.Awaitable[typing.Optional[RetVal]]
-    ]
+    handler: collections.abc.Callable[[], collections.abc.Awaitable[None]]
     key: typing.Optional[Key] = None
 
 
@@ -63,65 +44,52 @@ class ButtonMenu(Screen):
         *,
         settings: "Settings",
         renderer: "Renderer",
-        hardware: "Hardware",
         screen_info: "ScreenInfo",
     ):
         self.settings = settings
         self.renderer = renderer
-        self.hardware = hardware
         self.screen_info = screen_info
         self.pango = Pango(dpi=screen_info.dpi)
 
-    async def run(self, event_channel: trio.abc.ReceiveChannel):
-        self.hardware.reset_keystream(enable_composes=False)
-        await self.render_screen()
-        while True:
-            event = await event_channel.receive()
-            handler = None
-            match event:
-                case AnnotatedKeyEvent():
-                    for menu_button in self.menu_buttons:
-                        if event.key == menu_button.key:
-                            handler = menu_button.handler
-                            await self.hardware.display_rendered(
-                                menu_button.button.render(
-                                    override_state=ButtonState.PRESSED
-                                )
-                            )
-                case TapEvent():
-                    if event.phase is TapPhase.COMPLETED:
-                        for menu_button in self.menu_buttons:
-                            if event.location in menu_button.button:
-                                handler = menu_button.handler
-                                await self.hardware.display_rendered(
-                                    menu_button.button.render(
-                                        override_state=ButtonState.PRESSED
-                                    )
-                                )
+    async def become_responder(self):
+        app = TABULA.get()
+        app.hardware.reset_keystream(enable_composes=False)
+        self.render_screen()
 
-                case KeyboardDisconnect():
-                    return ChangeScreen(
-                        TargetScreen.KeyboardDetect,
-                        screen_stack_behavior=ScreenStackBehavior.APPEND,
-                    )
-            if handler is not None:
-                result = await handler(event_channel)
-                if result is not None:
-                    return result
-                await self.render_screen()
+    async def handle_key_event(self, event: AnnotatedKeyEvent):
+        app = TABULA.get()
+        handler = None
 
-    async def render_screen(self):
+        for menu_button in self.menu_buttons:
+            if event.key == menu_button.key:
+                handler = menu_button.handler
+                app.hardware.display_rendered(menu_button.button.render(override_state=ButtonState.PRESSED))
+
+        if handler is not None:
+            await handler()
+
+    async def handle_tap_event(self, event: TapEvent):
+        app = TABULA.get()
+        handler = None
+        if event.phase is TapPhase.COMPLETED:
+            for menu_button in self.menu_buttons:
+                if event.location in menu_button.button:
+                    handler = menu_button.handler
+                    app.hardware.display_rendered(menu_button.button.render(override_state=ButtonState.PRESSED))
+        if handler is not None:
+            await handler()
+
+    def render_screen(self):
+        app = TABULA.get()
         self.make_buttons()
         screen = self.render()
-        await self.hardware.display_pixels(screen.image, screen.extent)
+        app.hardware.display_rendered(screen)
 
     @abc.abstractmethod
-    def make_buttons(self):
-        ...
+    def make_buttons(self): ...
 
     @abc.abstractmethod
-    def render(self) -> Rendered:
-        ...
+    def render(self) -> Rendered: ...
 
 
 class SystemMenu(ButtonMenu):
@@ -130,7 +98,6 @@ class SystemMenu(ButtonMenu):
         *,
         settings: "Settings",
         renderer: "Renderer",
-        hardware: "Hardware",
         screen_info: "ScreenInfo",
         db: "TabulaDb",
         document: "DocumentModel",
@@ -138,7 +105,6 @@ class SystemMenu(ButtonMenu):
         super().__init__(
             settings=settings,
             renderer=renderer,
-            hardware=hardware,
             screen_info=screen_info,
         )
         self.db = db
@@ -230,36 +196,37 @@ class SystemMenu(ButtonMenu):
             )
         return rendered
 
-    async def new_session(self, event_channel: trio.abc.ReceiveChannel):
+    async def new_session(self):
+        app = TABULA.get()
         session_id = self.db.new_session()
         self.document.load_session(session_id, self.db)
-        await checkpoint()
-        return ChangeScreen(TargetScreen.Drafting)
+        await trio.lowlevel.checkpoint()
+        return await app.change_screen(TargetScreen.Drafting)
 
-    async def previous_session(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return ChangeScreen(TargetScreen.SessionList)
+    async def previous_session(self):
+        app = TABULA.get()
+        await trio.lowlevel.checkpoint()
+        return await app.change_screen(TargetScreen.SessionList)
 
-    async def export_current_session(self, event_channel: trio.abc.ReceiveChannel):
+    async def export_current_session(self):
+        app = TABULA.get()
         self.document.export_session(self.db, self.settings.export_path)
-        dialog = OkDialog(
-            renderer=self.renderer, hardware=self.hardware, message="Export complete!"
-        )
-        result = await dialog.run(event_channel)
-        if not isinstance(result, DialogResult):
-            return result
+        await app.show_dialog(TargetDialog.Ok, message="Export complete!")
 
-    async def set_font(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return ChangeScreen(TargetScreen.Fonts)
+    async def set_font(self):
+        app = TABULA.get()
+        await trio.lowlevel.checkpoint()
+        await app.change_screen(TargetScreen.Fonts)
 
-    async def resume_drafting(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return ChangeScreen(TargetScreen.Drafting)
+    async def resume_drafting(self):
+        app = TABULA.get()
+        await trio.lowlevel.checkpoint()
+        return await app.change_screen(TargetScreen.Drafting)
 
-    async def shutdown(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return Shutdown()
+    async def shutdown(self):
+        await trio.lowlevel.checkpoint()
+        app = TABULA.get()
+        await app.shutdown()
 
 
 class SessionList(ButtonMenu):
@@ -271,14 +238,12 @@ class SessionList(ButtonMenu):
         *,
         settings: "Settings",
         renderer: "Renderer",
-        hardware: "Hardware",
         screen_info: "ScreenInfo",
         db: "TabulaDb",
     ):
         super().__init__(
             settings=settings,
             renderer=renderer,
-            hardware=hardware,
             screen_info=screen_info,
         )
         self.db = db
@@ -289,9 +254,7 @@ class SessionList(ButtonMenu):
         screen_size = self.screen_info.size
         min_skip_height = math.floor(self.button_size.height * 0.75)
         usable_height = screen_size.height - (min_skip_height + self.button_size.height)
-        num_session_buttons = usable_height // (
-            min_skip_height + self.button_size.height
-        )
+        num_session_buttons = usable_height // (min_skip_height + self.button_size.height)
         session_page = self.sessions[self.offset : self.offset + num_session_buttons]
 
         button_x = math.floor((screen_size.width - self.session_button_size.width) / 2)
@@ -371,9 +334,7 @@ class SessionList(ButtonMenu):
                     font="B612 8",
                     corner_radius=50,
                     screen_location=Point(
-                        x=math.floor(
-                            (screen_size.width - self.page_button_size.width) / 2
-                        ),
+                        x=math.floor((screen_size.width - self.page_button_size.width) / 2),
                         y=1300,
                     ),
                 ),
@@ -398,33 +359,24 @@ class SessionList(ButtonMenu):
     def refresh_sessions(self):
         self.sessions = self.db.list_sessions()
 
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+    async def become_responder(self):
         self.refresh_sessions()
-        return await super().run(event_channel)
+        return await super().become_responder()
 
-    async def select_session(
-        self, selected_session: Session, event_channel: trio.abc.ReceiveChannel
-    ):
-        await checkpoint()
-        return ChangeScreen(
-            TargetScreen.SessionChoices,
-            kwargs={"session": selected_session},
-            screen_stack_behavior=ScreenStackBehavior.APPEND,
-        )
+    async def select_session(self, selected_session: Session):
+        app = TABULA.get()
+        await app.change_screen(TargetScreen.SessionActions, session=selected_session)
 
-    async def change_page(
-        self, new_offset: int, event_channel: trio.abc.ReceiveChannel
-    ):
+    async def change_page(self, new_offset: int):
         self.offset = new_offset
-        await checkpoint()
-        return
+        self.render_screen()
 
-    async def close_menu(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return ChangeScreen(TargetScreen.SystemMenu)
+    async def close_menu(self):
+        app = TABULA.get()
+        await app.change_screen(TargetScreen.SystemMenu)
 
 
-class SessionChoices(ButtonMenu):
+class SessionActions(ButtonMenu):
     session_button_size = Size(width=800, height=100)
     page_button_size = Size(width=200, height=100)
 
@@ -433,7 +385,6 @@ class SessionChoices(ButtonMenu):
         *,
         settings: "Settings",
         renderer: "Renderer",
-        hardware: "Hardware",
         screen_info: "ScreenInfo",
         db: "TabulaDb",
         document: "DocumentModel",
@@ -442,7 +393,6 @@ class SessionChoices(ButtonMenu):
         super().__init__(
             settings=settings,
             renderer=renderer,
-            hardware=hardware,
             screen_info=screen_info,
         )
         self.db = db
@@ -475,7 +425,7 @@ class SessionChoices(ButtonMenu):
                     handler=self.load_session,
                 )
             )
-        if self.selected_session.needs_export:
+        if self.selected_session.needs_export or True:
             menu_buttons.append(
                 MenuButton(
                     button=Button(
@@ -545,9 +495,7 @@ class SessionChoices(ButtonMenu):
                     alignment=Alignment.CENTER,
                 ) as layout:
                     layout.set_font("B612 8")
-                    layout.set_content(
-                        "This session is now locked for editing", is_markup=False
-                    )
+                    layout.set_content("This session is now locked for editing", is_markup=False)
                     layout.render(cairo)
 
             rendered = Rendered(
@@ -559,43 +507,38 @@ class SessionChoices(ButtonMenu):
     def refresh_sessions(self):
         self.sessions = self.db.list_sessions()
 
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+    async def become_responder(self):
         self.refresh_sessions()
-        return await super().run(event_channel)
+        return await super().become_responder()
 
-    async def load_session(self, event_channel: trio.abc.ReceiveChannel):
+    async def load_session(self):
+        app = TABULA.get()
         self.document.load_session(self.selected_session.id, self.db)
-        await checkpoint()
-        return ChangeScreen(TargetScreen.Drafting)
+        await app.change_screen(TargetScreen.Drafting)
 
-    async def export_session(self, event_channel: trio.abc.ReceiveChannel):
+    async def export_session(self):
+        app = TABULA.get()
         session_document = DocumentModel()
         session_document.load_session(self.selected_session.id, self.db)
 
         session_document.export_session(self.db, self.settings.export_path)
-        self.selected_session = None
-        dialog = OkDialog(
-            renderer=self.renderer, hardware=self.hardware, message="Export complete!"
-        )
-        result = await dialog.run(event_channel)
-        if not isinstance(result, DialogResult):
-            return result
-        return
 
-    async def delete_session(self, event_channel: trio.abc.ReceiveChannel):
-        dialog = YesNoDialog(
-            renderer=self.renderer, hardware=self.hardware, message="Really delete?"
-        )
-        result = await dialog.run(event_channel)
-        if not isinstance(result, DialogResult):
-            return result
-        if result.value:
+        future = await app.show_dialog(TargetDialog.Ok, message="Export complete!")
+        await future.wait()
+        await app.change_screen(TargetScreen.SessionList)
+
+    async def delete_session(self):
+        app = TABULA.get()
+        future = await app.show_dialog(TargetDialog.YesNo, message="Really delete?")
+        result = typing.cast(bool, await future.wait())
+
+        if result:
             if self.selected_session.id == self.document.session_id:
                 self.document.delete_session(self.db)
             else:
                 self.db.delete_session(self.selected_session.id)
-        return Close()
+        await app.change_screen(TargetScreen.SessionList)
 
-    async def back_to_session_list(self, event_channel: trio.abc.ReceiveChannel):
-        await checkpoint()
-        return Close()
+    async def back_to_session_list(self):
+        app = TABULA.get()
+        await app.change_screen(TargetScreen.SessionList)

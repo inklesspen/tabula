@@ -161,3 +161,6 @@ class TapEvent(msgspec.Struct, frozen=True):
 class TouchScreenInfo(msgspec.Struct, frozen=True):
     screen_info: ScreenInfo
     touch_coordinate_transform: TouchCoordinateTransform
+
+
+TabulaEvent = AnnotatedKeyEvent | TapEvent | KeyboardDisconnect

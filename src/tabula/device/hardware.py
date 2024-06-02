@@ -1,13 +1,10 @@
 import abc
 import typing
 
-import msgspec
 import trio
-import trio_util
 import tricycle
 
 from .hwtypes import (
-    ScreenRect,
     KeyEvent,
     AnnotatedKeyEvent,
     TouchReport,
@@ -15,64 +12,14 @@ from .hwtypes import (
     SetLed,
     Led,
     TouchCoordinateTransform,
-    KeyboardDisconnect,
 )
 from ..commontypes import Rect, Size, ScreenInfo
-from .rpctypes import (
-    KoboRequests,
-    HostRequests,
-    ScreenInfo as RpcScreenInfo,
-    GetScreenInfo as RpcGetScreenInfo,
-    DisplayPixels as RpcDisplayPixels,
-    ClearScreen as RpcClearScreen,
-    KeyEvent as RpcKeyEvent,
-    TouchReport as RpcTouchReport,
-    KeyboardDisconnect as RpcKeyboardDisconnect,
-    SetLed as RpcSetLed,
-)
 from .keystreams import make_keystream
 from .gestures import make_tapstream
 from ..settings import Settings
-from ..util import checkpoint
-
-import PIL.Image
-import PIL.ImageChops
 
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
-
-# this needs some serious cleanup
-# Hardware needs to:
-# 1. dispatch hardware events (keyboard, touchscreen, power button, battery)
-#    to the app
-# 2. Provide hardware info (screen info)
-# 3. Render screen updates, maybe update keyboard LEDs
-# We're starting over from scratch.
-
-
-class LengthPrefixedMsgpackStreamChannel(trio.abc.Channel):
-    def __init__(self, socket_stream: trio.SocketStream):
-        self.decoder = msgspec.msgpack.Decoder(KoboRequests)
-        self.encoder = msgspec.msgpack.Encoder()
-        self.socket_stream = socket_stream
-        self.buffered_stream = tricycle.BufferedReceiveStream(socket_stream)
-        self._prefix_length = 4
-
-    async def send(self, value: HostRequests):
-        buffer = self.encoder.encode(value)
-        prefix = len(buffer).to_bytes(self._prefix_length, "big")
-        await self.socket_stream.send_all(prefix)
-        await self.socket_stream.send_all(buffer)
-        await self.socket_stream.wait_send_all_might_not_block()
-
-    async def receive(self) -> KoboRequests:
-        prefix = await self.buffered_stream.receive_exactly(self._prefix_length)
-        n = int.from_bytes(prefix, "big")
-        buffer = await self.buffered_stream.receive_exactly(n)
-        return self.decoder.decode(buffer)
-
-    async def aclose(self):
-        await self.socket_stream.aclose()
 
 
 class Hardware(metaclass=abc.ABCMeta):
@@ -103,25 +50,25 @@ class Hardware(metaclass=abc.ABCMeta):
         self.reset_touchstream()
 
     @abc.abstractmethod
-    async def get_screen_info(self) -> ScreenInfo: ...
+    def get_screen_info(self) -> ScreenInfo: ...
 
     @abc.abstractmethod
-    async def display_pixels(self, imagebytes: bytes, rect: Rect): ...
+    def display_pixels(self, imagebytes: bytes, rect: Rect): ...
 
-    async def display_rendered(self, rendered: "Rendered"):
-        await self.display_pixels(rendered.image, rendered.extent)
-
-    @abc.abstractmethod
-    async def clear_screen(self): ...
+    def display_rendered(self, rendered: "Rendered"):
+        self.display_pixels(rendered.image, rendered.extent)
 
     @abc.abstractmethod
-    async def set_led_state(self, state: SetLed): ...
+    def clear_screen(self): ...
+
+    @abc.abstractmethod
+    def set_led_state(self, state: SetLed): ...
 
     async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
         while True:
             if self.keystream is None:
-                await checkpoint()
+                await trio.lowlevel.checkpoint()
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.keystream_cancel_scope = cancel_scope
@@ -153,7 +100,7 @@ class Hardware(metaclass=abc.ABCMeta):
         task_status.started()
         while True:
             if self.touchstream is None:
-                await checkpoint()
+                await trio.lowlevel.checkpoint()
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.touchstream_cancel_scope = cancel_scope
@@ -197,33 +144,34 @@ class KoboHardware(Hardware):
         settings: Settings,
     ):
         super().__init__(settings)
+        from .fbink_screen_display import FbInk
+
         self.fbink = FbInk()
         self.keyboards = None
 
-    async def get_screen_info(self) -> ScreenInfo:
+    def get_screen_info(self) -> ScreenInfo:
         info = self.fbink.get_screen_info()
-        await checkpoint()
+        return info
 
-    async def display_pixels(self, imagebytes: bytes, rect: Rect):
+    def display_pixels(self, imagebytes: bytes, rect: Rect):
         if self.fbink.active:
             self.fbink.display_pixels(imagebytes, rect)
-        await checkpoint()
 
-    async def clear_screen(self):
+    def clear_screen(self):
         if self.fbink.active:
             self.fbink.clear()
-        await checkpoint()
 
-    async def set_led_state(self, state: SetLed):
+    def set_led_state(self, state: SetLed):
         if self.keyboards is not None:
             self.keyboards.set_led(state.led, state.state)
-        await checkpoint()
 
-    async def set_waveform_mode(self, wfm_mode: str):
+    def set_waveform_mode(self, wfm_mode: str):
         self.fbink.set_waveform_mode(wfm_mode)
-        await checkpoint()
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        from .kobo_keyboard import AllKeyboards
+        from .kobo_touchscreen import Touchscreen
+
         with self.fbink:
             async with trio.open_nursery() as nursery:
                 task_status.started()
@@ -231,122 +179,6 @@ class KoboHardware(Hardware):
                 nursery.start_soon(self.keyboards.run)
                 touchscreen = Touchscreen(self.send_channel.clone())
                 nursery.start_soon(touchscreen.run)
-
-
-class RpcHardware(Hardware):
-    screen_info_response: trio_util.AsyncValue[typing.Optional[ScreenInfo]]
-
-    def __init__(
-        self,
-        settings: Settings,
-    ):
-        super().__init__(settings)
-        self.host = "kobo"
-        self.port = 1234
-        self.screen_info_response = trio_util.AsyncValue(None)
-
-        self.req_send_channel, self.req_receive_channel = trio.open_memory_channel(0)
-
-        # used to optimize display RPC
-        self.pil = None
-
-    async def get_screen_info(self) -> ScreenInfo:
-        self.screen_info_response.value = None
-        await self.req_send_channel.send(RpcGetScreenInfo())
-        resp = await self.screen_info_response.wait_value(lambda v: v is not None)
-        self.pil = PIL.Image.new("L", resp.size.pillow_size, color=255)
-        return resp
-
-    async def display_pixels(self, imagebytes: bytes, rect: Rect):
-        if not isinstance(imagebytes, bytes):
-            raise TypeError("can only display bytes")
-        if self.pil is not None:
-            new_pil = self.pil.copy()
-            pixels = PIL.Image.frombytes("L", rect.spread.pillow_size, imagebytes, "raw", "L", 0, 1)
-            new_pil.paste(pixels, rect.origin.tuple)
-            image_diff = PIL.ImageChops.difference(self.pil, new_pil)
-            bbox = image_diff.getbbox()
-            if bbox is None:
-                return
-            (
-                changed_left,
-                changed_top,
-                changed_right,
-                changed_bottom,
-            ) = bbox
-            cropped = new_pil.crop((changed_left, changed_top, changed_right, changed_bottom))
-            cropped_bytes = cropped.tobytes("raw")
-            cropped_rect = ScreenRect(
-                x=changed_left,
-                y=changed_top,
-                width=(changed_right - changed_left),
-                height=(changed_bottom - changed_top),
-            )
-            await self.req_send_channel.send(RpcDisplayPixels(cropped_bytes, cropped_rect))
-            self.pil = new_pil
-        else:
-            await self.req_send_channel.send(RpcDisplayPixels(imagebytes, ScreenRect.from_rect(rect)))
-
-    async def clear_screen(self):
-        if self.pil is not None:
-            existing_size = self.pil.size
-            self.pil = PIL.Image.new("L", existing_size, color=255)
-        await self.req_send_channel.send(RpcClearScreen())
-
-    async def set_led_state(self, state: SetLed):
-        await self.req_send_channel.send(RpcSetLed(led=state.led, state=state.state))
-
-    async def _send_host_requests(
-        self,
-        network_channel: trio.abc.SendChannel,
-        *,
-        task_status=trio.TASK_STATUS_IGNORED,
-    ):
-        task_status.started()
-        while True:
-            msg = await self.req_receive_channel.receive()
-            await network_channel.send(msg)
-            await checkpoint()
-
-    async def _handle_kobo_requests(
-        self,
-        network_channel: trio.abc.ReceiveChannel,
-        *,
-        task_status=trio.TASK_STATUS_IGNORED,
-    ):
-        task_status.started()
-        while True:
-            req: KoboRequests = await network_channel.receive()
-            match req:
-                case RpcScreenInfo():
-                    screen_size = Size(width=req.width, height=req.height)
-                    self.screen_size = screen_size
-                    self.touch_coordinate_transform = req.touch_coordinate_transform
-                    self.screen_info_response.value = ScreenInfo(size=screen_size, dpi=req.dpi)
-                case RpcKeyEvent():
-                    await self.keystream_send_channel.send(KeyEvent(key=req.key, press=req.press))
-                case RpcTouchReport():
-                    # TODO: incorporate the transform into the touchscreen evdev procesing
-                    await self.touchstream_send_channel.send(
-                        TouchReport(
-                            touches=[self._transform_touch_event(evt) for evt in req.touches],
-                            sec=req.sec,
-                            usec=req.usec,
-                        )
-                    )
-                case RpcKeyboardDisconnect():
-                    await self.event_channel.send(KeyboardDisconnect())
-            await checkpoint()
-
-    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        client_stream = await trio.open_tcp_stream(self.host, self.port)
-        async with client_stream, tricycle.open_service_nursery() as nursery:
-            task_status.started()
-            network_channel = LengthPrefixedMsgpackStreamChannel(client_stream)
-            nursery.start_soon(self._handle_kobo_requests, network_channel)
-            nursery.start_soon(self._send_host_requests, network_channel)
-            nursery.start_soon(self._handle_keystream)
-            nursery.start_soon(self._handle_touchstream)
 
 
 class EventTestHardware(Hardware):
@@ -362,18 +194,16 @@ class EventTestHardware(Hardware):
         self.capslock_led = False
         self.compose_led = False
 
-    async def get_screen_info(self) -> ScreenInfo:
-        await checkpoint()
+    def get_screen_info(self) -> ScreenInfo:
         return ScreenInfo(width=100, height=100, dpi=100)
 
-    async def display_pixels(self, imagebytes: bytes, rect: Rect):
-        await checkpoint()
+    def display_pixels(self, imagebytes: bytes, rect: Rect):
+        pass
 
-    async def clear_screen(self):
-        await checkpoint()
+    def clear_screen(self):
+        pass
 
-    async def set_led_state(self, state: SetLed):
-        await checkpoint()
+    def set_led_state(self, state: SetLed):
         match state.led:
             case Led.LED_CAPSL:
                 self.capslock_led = state.state

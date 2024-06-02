@@ -1,23 +1,23 @@
-import abc
+import logging
 import typing
 
-import trio
+import outcome
 
-from ..device.hwtypes import TapEvent, TapPhase, KeyboardDisconnect
+from ..device.hwtypes import TapEvent, TapPhase
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import Rendered, Alignment, WrapMode
-
-from .base import RetVal, DialogResult, TargetScreen, ChangeScreen, ScreenStackBehavior
+from ..util import TABULA, Future
+from .base import Responder
 
 if typing.TYPE_CHECKING:
-    from ..device.hardware import Hardware
     from ..rendering.renderer import Renderer
 
 
-class Dialog(abc.ABC):
-    @abc.abstractmethod
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        ...
+logger = logging.getLogger(__name__)
+
+
+class Dialog(Responder):
+    future: Future
 
 
 class OkDialog(Dialog):
@@ -25,45 +25,30 @@ class OkDialog(Dialog):
         self,
         *,
         renderer: "Renderer",
-        hardware: "Hardware",
         message: str,
     ):
         self.renderer = renderer
-        self.hardware = hardware
         self.message = message
+        self.future = Future()
 
         screen_size = self.renderer.screen_info.size
         spread = Size(width=400, height=100)
         origin = Point(x=(screen_size.width - spread.width) / 2, y=960)
         self.button_rect = Rect(origin=origin, spread=spread)
 
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
-        result = DialogResult(value=None)
+    async def become_responder(self):
+        app = TABULA.get()
         screen = self.make_screen()
-        await self.hardware.display_pixels(screen.image, screen.extent)
-        while True:
-            event = await event_channel.receive()
-            match event:
-                case TapEvent():
-                    if (
-                        event.location in self.button_rect
-                        and event.phase is TapPhase.COMPLETED
-                    ):
-                        return result
-                case KeyboardDisconnect():
-                    # wait until we get a tap in the right place, then
-                    # close this dialog and switch to keyboard detect
-                    result = ChangeScreen(
-                        TargetScreen.KeyboardDetect,
-                        screen_stack_behavior=ScreenStackBehavior.APPEND,
-                    )
+        app.hardware.display_pixels(screen.image, screen.extent)
+
+    async def handle_tap_event(self, event: TapEvent):
+        if event.location in self.button_rect and event.phase is TapPhase.COMPLETED:
+            self.future.finalize(outcome.Value(None))
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
         screen_size = self.renderer.screen_info.size
-        with self.renderer.create_surface(
-            screen_size
-        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
+        with self.renderer.create_surface(screen_size) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
             self.renderer.prepare_background(cairo_context)
             self.renderer.setup_drawing(cairo_context)
 
@@ -86,14 +71,10 @@ class OkDialog(Dialog):
                 width=screen_size.width,
             )
 
-            self.renderer.button(
-                cairo_context, text="OK", font="B612 10", rect=self.button_rect
-            )
+            self.renderer.button(cairo_context, text="OK", font="B612 10", rect=self.button_rect)
 
             buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(
-            image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size)
-        )
+        return Rendered(image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size))
 
 
 class YesNoDialog(Dialog):
@@ -101,12 +82,11 @@ class YesNoDialog(Dialog):
         self,
         *,
         renderer: "Renderer",
-        hardware: "Hardware",
         message: str,
     ):
         self.renderer = renderer
-        self.hardware = hardware
         self.message = message
+        self.future = Future()
 
         button_size = Size(width=400, height=100)
         self.no_rect = Rect(origin=Point(x=100, y=960), spread=button_size)
@@ -115,32 +95,22 @@ class YesNoDialog(Dialog):
             spread=button_size,
         )
 
-    async def run(self, event_channel: trio.abc.ReceiveChannel) -> RetVal:
+    async def become_responder(self):
+        app = TABULA.get()
         screen = self.make_screen()
-        await self.hardware.display_pixels(screen.image, screen.extent)
-        while True:
-            event = await event_channel.receive()
-            match event:
-                case TapEvent():
-                    if event.phase is TapPhase.COMPLETED:
-                        if event.location in self.no_rect:
-                            return DialogResult(value=False)
-                        if event.location in self.yes_rect:
-                            return DialogResult(value=True)
-                case KeyboardDisconnect():
-                    # return the keyboarddetect right away, instead of
-                    # waiting for a result.
-                    return ChangeScreen(
-                        TargetScreen.KeyboardDetect,
-                        screen_stack_behavior=ScreenStackBehavior.APPEND,
-                    )
+        app.hardware.display_pixels(screen.image, screen.extent)
+
+    async def handle_tap_event(self, event: TapEvent):
+        if event.phase is TapPhase.COMPLETED:
+            if event.location in self.no_rect:
+                self.future.finalize(outcome.Value(False))
+            if event.location in self.yes_rect:
+                self.future.finalize(outcome.Value(True))
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
         screen_size = self.renderer.screen_info.size
-        with self.renderer.create_surface(
-            screen_size
-        ) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
+        with self.renderer.create_surface(screen_size) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
             self.renderer.prepare_background(cairo_context)
             self.renderer.setup_drawing(cairo_context)
 
@@ -163,14 +133,8 @@ class YesNoDialog(Dialog):
                 width=screen_size.width,
             )
 
-            self.renderer.button(
-                cairo_context, text="No", font="B612 10", rect=self.no_rect
-            )
-            self.renderer.button(
-                cairo_context, text="Yes", font="B612 10", rect=self.yes_rect
-            )
+            self.renderer.button(cairo_context, text="No", font="B612 10", rect=self.no_rect)
+            self.renderer.button(cairo_context, text="Yes", font="B612 10", rect=self.yes_rect)
 
             buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(
-            image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size)
-        )
+        return Rendered(image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size))

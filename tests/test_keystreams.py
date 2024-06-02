@@ -26,7 +26,7 @@ from tabula.device.hwtypes import (
     ModifierAnnotation,
 )
 from tabula.settings import Settings
-from tabula.util import checkpoint
+from trio.lowlevel import checkpoint
 
 T = typing.TypeVar("T")
 

@@ -12,6 +12,7 @@ from AppKit import (
     NSClosableWindowMask,
     NSTitledWindowMask,
     NSMiniaturizableWindowMask,
+    NSResizableWindowMask,
     NSApplicationActivationPolicyRegular,
     NSBackingStoreBuffered,
     NSViewFrameDidChangeNotification,
@@ -38,16 +39,9 @@ from .keycodes import KEYCODES, MODIFIER_MAP
 from ..app import parser, Tabula
 from ..settings import Settings
 from ..commontypes import Rect, Size, ScreenInfo, Point
-from ..device.hwtypes import (
-    KeyEvent,
-    AnnotatedKeyEvent,
-    SetLed,
-    TapEvent,
-    TapPhase,
-)
+from ..device.hwtypes import KeyEvent, AnnotatedKeyEvent, SetLed, TapEvent, TapPhase, KeyboardDisconnect
 from ..device.keystreams import make_keystream
 from ..device.keyboard_consts import Key, KeyPress
-from ..util import checkpoint
 
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
@@ -116,7 +110,7 @@ class CocoaHardware:
         self.settings = settings
         self.appdelegate = appdelegate
         self.screen_geometry = screen_geometry
-        self.event_channel, self.event_receive_channel = trio.open_memory_channel(0)
+        self.event_channel, self.event_receive_channel = trio.open_memory_channel(1)
         self.capslock_led = False
         self.compose_led = False
         self.keystream_cancel_scope = trio.CancelScope()
@@ -136,12 +130,14 @@ class CocoaHardware:
         phase = TapPhase.INITIATED if down else TapPhase.COMPLETED
         self.touchstream_send_channel.send_nowait((TapEvent(location=point, phase=phase)))
 
-    async def get_screen_info(self) -> ScreenInfo:
+    def disconnect_keyboard(self):
+        self.event_channel.send_nowait(KeyboardDisconnect())
+
+    def get_screen_info(self) -> ScreenInfo:
         val = ScreenInfo(size=self.screen_geometry.value, dpi=300)
-        await checkpoint()
         return val
 
-    async def display_pixels(self, imagebytes: bytes, rect: Rect):
+    def display_pixels(self, imagebytes: bytes, rect: Rect):
         origin = northwest_to_southwest(rect, self.screen_geometry.value)
         # logger.info("Point %r transformed to %r", rect.origin, origin)
         point = NSMakePoint(origin.x, origin.y)
@@ -149,24 +145,21 @@ class CocoaHardware:
         bir = make_grayscale_bir(rect.spread, imageview)
         # We need to transform the point, actually, because Cocoa's origin is lower left
         self.appdelegate.view.drawImageRepAtPoint(bir, point)
-        await checkpoint()
 
-    async def display_rendered(self, rendered: "Rendered"):
-        await self.display_pixels(rendered.image, rendered.extent)
+    def display_rendered(self, rendered: "Rendered"):
+        self.display_pixels(rendered.image, rendered.extent)
 
-    async def clear_screen(self):
+    def clear_screen(self):
         self.appdelegate.view.clearScreen()
-        await checkpoint()
 
-    async def set_led_state(self, state: SetLed):
+    def set_led_state(self, state: SetLed):
         logger.debug("set led: %r", state)
-        await checkpoint()
 
     async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
         while True:
             if self.keystream is None:
-                await checkpoint()
+                await trio.lowlevel.checkpoint()
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.keystream_cancel_scope = cancel_scope
@@ -184,7 +177,7 @@ class CocoaHardware:
         task_status.started()
         while True:
             if self.touchstream_receive_channel is None:
-                await checkpoint()
+                await trio.lowlevel.checkpoint()
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.touchstream_cancel_scope = cancel_scope
@@ -229,7 +222,7 @@ class KoboView(NSImageView):
     current_size: NSSize
 
     @classmethod
-    def newWithHardware_(cls, hardware: CocoaHardware):
+    def newWithHardware_(cls, hardware: CocoaHardware) -> "KoboView":
         obj = cls.alloc().initWithFrame_(NSMakeRect(0, 0, 100, 100))
         obj.setImage_(NSImage.alloc().initWithSize_(NSMakeSize(100, 100)))
         NSNotificationCenter.defaultCenter().addObserver_selector_name_object_(
@@ -241,22 +234,17 @@ class KoboView(NSImageView):
         obj.hardware = hardware
         return obj
 
-    def postsFrameChangedNotifications(self):
-        return True
+    def frameSizeUpdate_(self, unused):
+        # For some reason this method has to exist or else the app crashes.
+        # It doesn't have to do anything, though.
+        pass
 
-    # def isFlipped(self):
-    #     return True
-
-    def frameSizeUpdate_(self, aNotification):
-        sender = aNotification.object()
-        if sender is not self:
-            return
-        size = typing.cast(NSSize, self.frame().size)
-        self.current_size = size
-        self.image().setSize_(size)
+    @objc.python_method
+    def setTabulaScreenSize(self, size: Size):
+        logger.info(f"setTabulaScreenSize: {size}")
+        self.current_size = NSMakeSize(size.width, size.height)
+        self.image().setSize_(self.current_size)
         self.clearScreen()
-
-        logger.info(f"frameSizeUpdate:{size}")
 
     @objc.python_method
     def drawImageRepAtPoint(self, imageRep: NSImageRep, point: NSPoint):
@@ -284,13 +272,20 @@ class KoboView(NSImageView):
     def canBecomeKeyView(self):
         return True
 
+    @objc.python_method
+    def convert_window_point(self, window_point: NSPoint):
+        window_size = typing.cast(NSSize, self.frame().size)
+        image_size = self.current_size
+        image_point = NSMakePoint(
+            window_point.x * image_size.width / window_size.width, window_point.y * image_size.height / window_size.height
+        )
+        return image_point
+
     def mouseDown_(self, theEvent):
-        self.hardware.handle_mouseclick(theEvent.locationInWindow(), down=True)
-        # print(f"mouseDown:{theEvent.locationInWindow()}")
+        self.hardware.handle_mouseclick(self.convert_window_point(theEvent.locationInWindow()), down=True)
 
     def mouseUp_(self, theEvent):
-        self.hardware.handle_mouseclick(theEvent.locationInWindow(), down=False)
-        # print(f"mouseUp:{theEvent.locationInWindow()}")
+        self.hardware.handle_mouseclick(self.convert_window_point(theEvent.locationInWindow()), down=False)
 
     def keyDown_(self, theEvent):
         key_event = KeyEvent.pressed(KEYCODES[theEvent.keyCode()])
@@ -344,14 +339,21 @@ class TabulaAppDelegate(NSResponder, protocols=[NSApplicationDelegate]):
 
     def applicationDidFinishLaunching_(self, aNotification):
         geometry = self.hardware.screen_geometry.value
-        styleMask = NSClosableWindowMask | NSTitledWindowMask | NSMiniaturizableWindowMask
+        styleMask = NSClosableWindowMask | NSTitledWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask
         self.mainWindow = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, geometry.width, geometry.height), styleMask, NSBackingStoreBuffered, False
+            NSMakeRect(0, 0, geometry.width * 0.75, geometry.height * 0.75), styleMask, NSBackingStoreBuffered, False
         )
         self.mainWindow.setTitle_("Tabula")
         self.mainWindowDelegate = KoboWindowDelegate.alloc().initWithCancelScope_(self.app_cancel_scope)
         self.mainWindow.setDelegate_(self.mainWindowDelegate)
+
+        # TODO: if we add orientation flipping, remember to adjust this.
+        aspect_ratio = self.hardware.screen_geometry.ns_size
+        # logger.info("Setting window aspect ratio to %r", aspect_ratio)
+        self.mainWindow.setAspectRatio_(aspect_ratio)
+
         self.view = KoboView.newWithHardware_(self.hardware)
+        self.view.setTabulaScreenSize(geometry)
         self.mainWindow.setContentView_(self.view)
 
         self.mainWindow.cascadeTopLeftFromPoint_(NSMakePoint(20, 20))
@@ -360,8 +362,11 @@ class TabulaAppDelegate(NSResponder, protocols=[NSApplicationDelegate]):
         # self.doDraw()
 
     def requestQuit_(self, param):
-        print(f"requestQuit:{param}")
+        # print(f"requestQuit:{param}")
         self.app_cancel_scope.cancel()
+
+    def disconnectKeyboard_(self, param):
+        self.hardware.disconnect_keyboard()
 
     @objc.python_method
     @classmethod
@@ -401,9 +406,12 @@ class TabulaAppDelegate(NSResponder, protocols=[NSApplicationDelegate]):
         appmenu = NSMenu.new()
         menubar.setSubmenu_(appmenu)
         quititem = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Quit Tabula", objc.selector(appdelegate.requestQuit_), "q")
+        keyboarditem = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Disconnect Keyboard", objc.selector(appdelegate.disconnectKeyboard_), ""
+        )
         # swapitem = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Swap", objc.selector(appdelegate.swapOrientation_), "")
         appmenu.addItem_(quititem)
-        # appmenu.addItem_(swapitem)
+        appmenu.addItem_(keyboarditem)
         mainmenu.addItem_(menubar)
         app.setMainMenu_(mainmenu)
 
@@ -415,7 +423,7 @@ def configure_logging(root_level=logging.DEBUG):
     handler = logging.StreamHandler()
     handler.setLevel(root_level)
     logging.basicConfig(handlers=[handler])
-    logger.setLevel(root_level)
+    logging.getLogger("tabula").setLevel(root_level)
 
 
 def start():

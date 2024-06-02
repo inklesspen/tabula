@@ -51,12 +51,8 @@ class LayoutManager:
         self.document = document
         self.render_width = renderer.screen_info.size.width
         self.cursor_y = renderer.screen_info.size.height // 2
-        self.render_height = (
-            renderer.screen_info.size.height if full_height else self.cursor_y
-        )
-        self.layout = ffi.gc(
-            clib.pango_layout_new(renderer.context), clib.g_object_unref
-        )
+        self.render_height = renderer.screen_info.size.height if full_height else self.cursor_y
+        self.layout = ffi.gc(clib.pango_layout_new(renderer.context), clib.g_object_unref)
         self.setup_layout()
         self.rendered_markups = {}
         self.renderer.set_fontmap_resolution(self.renderer.screen_info.dpi)
@@ -79,22 +75,22 @@ class LayoutManager:
         clib.pango_layout_set_alignment(self.layout, Alignment.LEFT)
 
     def setup_layout_font(self, font: str):
-        with ffi.gc(
-            clib.pango_font_description_from_string(font.encode("utf-8")),
-            clib.pango_font_description_free,
-        ) as font_description, ffi.gc(
-            clib.pango_font_map_load_font(
-                self.renderer.fontmap, self.renderer.context, font_description
-            ),
-            clib.g_object_unref,
-        ) as loaded_font, ffi.gc(
-            clib.pango_font_get_metrics(loaded_font, self.renderer.language),
-            clib.pango_font_metrics_unref,
-        ) as font_metrics:
+        with (
+            ffi.gc(
+                clib.pango_font_description_from_string(font.encode("utf-8")),
+                clib.pango_font_description_free,
+            ) as font_description,
+            ffi.gc(
+                clib.pango_font_map_load_font(self.renderer.fontmap, self.renderer.context, font_description),
+                clib.g_object_unref,
+            ) as loaded_font,
+            ffi.gc(
+                clib.pango_font_get_metrics(loaded_font, self.renderer.language),
+                clib.pango_font_metrics_unref,
+            ) as font_metrics,
+        ):
             clib.pango_layout_set_font_description(self.layout, font_description)
-            font_height = (
-                clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
-            )
+            font_height = clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
             self.skip_height = math.floor(font_height)
 
     def set_font(self, font: str):
@@ -154,9 +150,7 @@ class LayoutManager:
         for laidout in laidouts:
             # Can't use paste_other just yet because the laidouts don't have Cairo instances
             # Now we can
-            clib.cairo_set_operator(
-                self.target_cairo.context, clib.CAIRO_OPERATOR_SOURCE
-            )
+            clib.cairo_set_operator(self.target_cairo.context, clib.CAIRO_OPERATOR_SOURCE)
             clib.cairo_set_source_surface(
                 self.target_cairo.context,
                 laidout.rendered.cairo.surface,
@@ -248,9 +242,7 @@ class StatusLayout:
         self.render_width = renderer.screen_info.size.width
         screen_size = self.renderer.screen_info.size
         self.status_y_bottom = screen_size.height - 50
-        self.layout = ffi.gc(
-            clib.pango_layout_new(renderer.context), clib.g_object_unref
-        )
+        self.layout = ffi.gc(clib.pango_layout_new(renderer.context), clib.g_object_unref)
         self.setup_layout()
         self.capslock = False
         self.compose = False
@@ -289,9 +281,7 @@ class StatusLayout:
         # Line 3: capslock, "Tabula", compose
         # Line 3 is drawn separately to work with the glyphs
         wordcount = self.document.wordcount
-        wordcount_status = (
-            "1 word" if wordcount == 1 else "{:,} words".format(wordcount)
-        )
+        wordcount_status = "1 word" if wordcount == 1 else "{:,} words".format(wordcount)
         wordcount_time_line = " — ".join((wordcount_status, now().strftime("%H:%M")))
         status_lines = [wordcount_time_line]
         status_line = "\n".join(status_lines)

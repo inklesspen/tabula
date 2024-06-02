@@ -12,7 +12,7 @@ from tabula.device.hwtypes import (
     TapPhase,
 )
 from tabula.device.gestures import MakePersistent, TapRecognizer, make_tapstream, pump_all
-from tabula.util import checkpoint
+from trio.lowlevel import checkpoint
 
 T = typing.TypeVar("T")
 

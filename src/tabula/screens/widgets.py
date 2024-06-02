@@ -47,22 +47,14 @@ class Button:
     ):
         if button_value is None:
             button_value = button_text
-        layout = PangoLayout(
-            pango=pango, width=button_size.width, alignment=Alignment.CENTER
-        )
+        layout = PangoLayout(pango=pango, width=button_size.width, alignment=Alignment.CENTER)
         layout.set_font(font)
         layout.set_content(button_text)
         rects = layout.get_layout_rects()
         if align_baseline:
-            text_y = math.floor(
-                button_size.height / 2 - rects.logical.spread.height / 2
-            )
+            text_y = math.floor(button_size.height / 2 - rects.logical.spread.height / 2)
         else:
-            text_y = math.floor(
-                button_size.height / 2
-                - rects.ink.origin.y
-                - rects.ink.spread.height / 2
-            )
+            text_y = math.floor(button_size.height / 2 - rects.ink.origin.y - rects.ink.spread.height / 2)
         text_origin = Point(x=0, y=text_y)
 
         roundrect_bounds = Rect(
@@ -94,9 +86,7 @@ class Button:
             text_origin,
             inverted=True,
         )
-        outline_bounds = Rect(
-            origin=Point(x=4, y=4), spread=button_size - Size(width=8, height=8)
-        )
+        outline_bounds = Rect(origin=Point(x=4, y=4), spread=button_size - Size(width=8, height=8))
         outlined.roundrect(
             rect=outline_bounds,
             radius=corner_radius,
@@ -136,9 +126,7 @@ class Button:
             case ButtonState.PRESSED:
                 return self.inverted
 
-    def paste_onto_cairo(
-        self, cairo: Cairo, override_state: Optional[ButtonState] = None
-    ):
+    def paste_onto_cairo(self, cairo: Cairo, override_state: Optional[ButtonState] = None):
         state = self._render_state(override_state)
         cairo.paste_other(
             self._surface_for_state(state),
@@ -149,9 +137,7 @@ class Button:
 
     def render(self, override_state: Optional[ButtonState] = None):
         state = self._render_state(override_state)
-        rendered = Rendered(
-            image=self._surface_for_state(state).get_image_bytes(), extent=self.bounds
-        )
+        rendered = Rendered(image=self._surface_for_state(state).get_image_bytes(), extent=self.bounds)
         self.last_rendered_state = state
         return rendered
 
@@ -177,13 +163,15 @@ class Button:
             radius=radius,
             line_width=2,
             path_ops=(
-                CairoPathOp(op=CairoOp.FILL, color=CairoColor.BLACK),
-                CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
-            )
-            if inverted
-            else (
-                CairoPathOp(op=CairoOp.FILL, color=CairoColor.WHITE),
-                CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
+                (
+                    CairoPathOp(op=CairoOp.FILL, color=CairoColor.BLACK),
+                    CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
+                )
+                if inverted
+                else (
+                    CairoPathOp(op=CairoOp.FILL, color=CairoColor.WHITE),
+                    CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
+                )
             ),
         )
 
