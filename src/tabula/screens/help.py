@@ -43,6 +43,7 @@ Press <span face="{TT_FACE}">F12</span> to open the system menu.
 published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</small>
 """
 
+# TODO: use examples from settings.json instead
 COMPOSES_TEMPLATE = f"""\
 To enter a compose sequence, press and release the Compose key (<span face="{SYMBOL_FACE}">\u2384</span>), followed by each key of the \
 sequence. You donʼt need to hold down the keys.

@@ -189,6 +189,7 @@ class Settings:
     compose_key: Key
     compose_key_description: str
     compose_sequences: pygtrie.Trie
+    compose_examples: list[dict[str, str]]
     keymaps: dict[Key, list[str]]
     db_path: pathlib.Path
     export_path: pathlib.Path
