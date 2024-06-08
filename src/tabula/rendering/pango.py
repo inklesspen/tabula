@@ -13,6 +13,8 @@ from .rendertypes import (
     LayoutRects,
 )
 
+from .fontconfig import NON_DRAFTING_FONTS
+
 if typing.TYPE_CHECKING:
     from .cairo import Cairo
 
@@ -153,3 +155,6 @@ class Pango:
                 for family in ffi.unpack(ffi.gc(families_p[0], clib.g_free), size_p[0])
             ]
         return sorted(font_names)
+
+    def list_drafting_fonts(self):
+        return sorted(set(self.list_available_fonts()) - NON_DRAFTING_FONTS)

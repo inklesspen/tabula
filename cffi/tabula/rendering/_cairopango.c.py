@@ -67,6 +67,7 @@ typedef enum _FcMatchKind {
 static char *const FC_FAMILY;
 static char *const FC_STYLE;
 static char *const FC_FILE;
+static char *const FC_FULLNAME;
 
 FcBool FcInit(void);
 void FcFini(void);
@@ -80,6 +81,7 @@ void FcConfigAppFontClear(FcConfig *config);
 FcPattern * FcNameParse(const FcChar8 *name);
 FcBool FcConfigSubstitute(FcConfig *config, FcPattern *p, FcMatchKind kind);
 void FcDefaultSubstitute(FcPattern *pattern);
+FcBool FcConfigParseAndLoadFromMemory (FcConfig *config, const FcChar8 *buffer, FcBool complain);
 
 FcFontSet * FcFontSetCreate(void);
 FcObjectSet * FcObjectSetBuild (const char *first, ...);
@@ -674,6 +676,10 @@ void pango_cairo_update_context(cairo_t *cr,
 void pango_cairo_show_layout(cairo_t *cr,
                              PangoLayout *layout);
 
+
+typedef struct _PangoFcFont      PangoFcFont;
+FcPattern *pango_fc_font_get_pattern       (PangoFcFont      *font);
+
 /* quirky bits */
 
 /**
@@ -742,6 +748,7 @@ ffibuilder.set_source(
 #include <cairo.h>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
+#include <pango/pangofc-font.h>
 #include <fontconfig/fontconfig.h>
 
 static int pango_pixels(int d) {

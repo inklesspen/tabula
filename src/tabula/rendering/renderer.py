@@ -3,7 +3,7 @@
 import contextlib
 import math
 
-from ._cairopango import ffi, lib as clib
+from ._cairopango import ffi, lib as clib  # type: ignore
 from .rendertypes import (
     Antialias,
     HintMetrics,
@@ -19,6 +19,7 @@ from .rendertypes import (
     ScreenInfo,
     CairoOp,
 )
+from .fontconfig import NON_DRAFTING_FONTS
 
 
 class Renderer:
@@ -68,6 +69,7 @@ class Renderer:
         self.context = None
         ffi.release(self.fontoptions)
         self.fontoptions = None
+        self._finalizer()
 
     def set_fontmap_resolution(self, dpi: float):
         cast = ffi.cast("PangoCairoFontMap *", self.fontmap)
@@ -164,8 +166,14 @@ class Renderer:
             ) as loaded_font,
             ffi.gc(clib.pango_font_describe(loaded_font), clib.pango_font_description_free) as loaded_font_description,
             ffi.gc(clib.pango_font_description_to_string(loaded_font_description), clib.g_free) as loaded_font_string,
+            ffi.new("FcChar8 **") as fontpath_buf,
         ):
-            return ffi.string(loaded_font_string).decode("utf-8")
+            fc_font = ffi.cast("PangoFcFont*", loaded_font)
+            pattern = clib.pango_fc_font_get_pattern(fc_font)  # owned by font instance; do not free
+            clib.FcPatternGetString(pattern, clib.FC_FILE, 0, fontpath_buf)
+            font_path = ffi.string(fontpath_buf[0]).decode()
+            font_description = ffi.string(loaded_font_string).decode("utf-8")
+            return f"{font_description} ({font_path})"
 
     def list_available_fonts(self) -> list[str]:
         with ffi.new("int *") as size_p, ffi.new("PangoFontFamily***") as families_p:
@@ -175,6 +183,9 @@ class Renderer:
                 for family in ffi.unpack(ffi.gc(families_p[0], clib.g_free), size_p[0])
             ]
         return sorted(font_names)
+
+    def list_drafting_fonts(self):
+        return sorted(set(self.list_available_fonts()) - NON_DRAFTING_FONTS)
 
     def render_border(self, surface, size: Size) -> Size:
         # could use clib.cairo_image_surface_get_width (and height) instead of size param

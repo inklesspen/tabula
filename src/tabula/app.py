@@ -10,6 +10,7 @@ import trio_util
 from .device.hardware import Hardware, KoboHardware
 from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TapEvent, TabulaEvent
 from .settings import Settings
+from .rendering.fontconfig import setup_fontconfig
 from .rendering.renderer import Renderer
 from .screens.base import Screen, Responder, ResponderMetadata, TargetScreen, TargetDialog
 from .screens.dialogs import Dialog
@@ -64,19 +65,20 @@ class Tabula:
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         TABULA.set(self)
-        async with trio.open_nursery() as nursery:
-            self._nursery = nursery
-            nursery.start_soon(self.dispatch_events, self.hardware.event_receive_channel, nursery)
-            await nursery.start(self.hardware.run)
-            self.screen_info = self.hardware.get_screen_info()
-            self.renderer = Renderer(self.screen_info)
-            self.hardware.clear_screen()
-            nursery.start_soon(self.ticks, trio_util.periodic(15))
+        with setup_fontconfig(self.settings.font_path):
+            async with trio.open_nursery() as nursery:
+                self._nursery = nursery
+                nursery.start_soon(self.dispatch_events, self.hardware.event_receive_channel, nursery)
+                await nursery.start(self.hardware.run)
+                self.screen_info = self.hardware.get_screen_info()
+                self.renderer = Renderer(self.screen_info)
+                self.hardware.clear_screen()
+                nursery.start_soon(self.ticks, trio_util.periodic(15))
 
-            await self.show_dialog(TargetDialog.KeyboardDetect)
-            self.screen_stack.value = (self.invoke_screen(TargetScreen.SystemMenu),)
-            task_status.started()
-        self._nursery = None
+                await self.show_dialog(TargetDialog.KeyboardDetect)
+                self.screen_stack.value = (self.invoke_screen(TargetScreen.SystemMenu),)
+                task_status.started()
+            self._nursery = None
         logger.debug("goodbye")
 
     async def ticks(self, trigger):

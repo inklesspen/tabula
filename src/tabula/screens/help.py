@@ -26,47 +26,47 @@ TT_FACE = "B612 Mono"
 # One such font is Noto Sans Symbols; alpine package 'font-noto'
 SYMBOL_FACE = "Noto Sans Symbols"
 
-HELP_TEMPLATE = f"""\
+HELP_TEMPLATE = """\
 Tabula is a portable prose-oriented distraction-free drafting tool.
 
 The cursor is locked at the end of the document. You can delete characters with Backspace, but only within the current paragraph; once you \
 hit Enter, you canʼt go back.
 
 You can enter special characters through the use of the Compose key and <b>compose sequences</b>. On this machine, the Compose key is \
-{{composekey}}. Double-tap the Compose key for examples of common compose sequences.
+{composekey}. Double-tap the Compose key for examples of common compose sequences.
 
-Press <span face="{TT_FACE}">F8</span> to start or end a writing sprint.
+Press <tt>F8</tt> to start or end a writing sprint.
 
-Press <span face="{TT_FACE}">F12</span> to open the system menu.
+Press <tt>F12</tt> to open the system menu.
 
 <small>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as \
 published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</small>
 """
 
 # TODO: use examples from settings.json instead
-COMPOSES_TEMPLATE = f"""\
-To enter a compose sequence, press and release the Compose key (<span face="{SYMBOL_FACE}">\u2384</span>), followed by each key of the \
+COMPOSES_TEMPLATE = """\
+To enter a compose sequence, press and release the Compose key (<tt>\u2384</tt>), followed by each key of the \
 sequence. You donʼt need to hold down the keys.
 
-On this machine, the Compose key (<span face="{SYMBOL_FACE}">\u2384</span>) is {{composekey}}.
+On this machine, the Compose key (<tt>\u2384</tt>) is {composekey}.
 
 Here are some commonly used compose sequences:
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> - a</span> → ā (and similar for other vowels)
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> ^ a</span> → â (and similar for other vowels)
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> ' a</span> → á (and similar for other vowels)
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> ` a</span> → à (and similar for other vowels)
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> ~ n</span> → ñ
+<tt>\u2384 - a</tt> → ā (and similar for other vowels)
+<tt>\u2384 ^ a</tt> → â (and similar for other vowels)
+<tt>\u2384 ' a</tt> → á (and similar for other vowels)
+<tt>\u2384 ` a</tt> → à (and similar for other vowels)
+<tt>\u2384 ~ n</tt> → ñ
 
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> &#60; '</span> → \u2018 (can be given in either order)
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> &#62; '</span> → \u2019
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> &#60; "</span> → \u201C (can be given in either order)
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> &#62; "</span> → \u201D
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> &#60; &#60;</span> → \u00AB
-<span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> &#62; &#62;</span> → \u00BB
+<tt>\u2384 &#60; '</tt> → \u2018 (can be given in either order)
+<tt>\u2384 &#62; '</tt> → \u2019
+<tt>\u2384 &#60; "</tt> → \u201C (can be given in either order)
+<tt>\u2384 &#62; "</tt> → \u201D
+<tt>\u2384 &#60; &#60;</tt> → \u00AB
+<tt>\u2384 &#62; &#62;</tt> → \u00BB
 """
 
 # We now use U+02BC by default for the apostrophe key, since we want to always use it.
-# <span face="{SYMBOL_FACE}">\u2384</span><span face="{TT_FACE}"> ' '</span> → \u02BC (modifier letter apostrophe)
+# <tt>\u2384 ' '</tt> → \u02BC (modifier letter apostrophe)
 
 
 class Help(Dialog):

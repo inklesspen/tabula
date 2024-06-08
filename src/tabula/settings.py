@@ -193,6 +193,7 @@ class Settings:
     keymaps: dict[Key, list[str]]
     db_path: pathlib.Path
     export_path: pathlib.Path
+    font_path: pathlib.Path
     max_editable_age: datetime.timedelta
     sprint_lengths: list[datetime.timedelta]
 
@@ -227,6 +228,7 @@ class Settings:
                 "keymaps": KEYMAPS,
                 "db_path": "test.db",
                 "export_path": "test_export",
+                "font_path": "bogus_font_path",
                 "max_editable_age": "1h",
                 "sprint_lengths": ["5m", "10m", "15m", "30m"],
             },
