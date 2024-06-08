@@ -13,9 +13,7 @@ class Cairo(AbstractContextManager):
 
     def setup(self):
         self.surface = ffi.gc(
-            clib.cairo_image_surface_create(
-                clib.CAIRO_FORMAT_A8, self.size.width, self.size.height
-            ),
+            clib.cairo_image_surface_create(clib.CAIRO_FORMAT_A8, self.size.width, self.size.height),
             clib.cairo_surface_destroy,
             size=self.size.total(),
         )
@@ -75,9 +73,7 @@ class Cairo(AbstractContextManager):
             clib.cairo_surface_destroy,
             size=sub_size.total(),
         )
-        sub_cairo.context = ffi.gc(
-            clib.cairo_create(sub_cairo.surface), clib.cairo_destroy
-        )
+        sub_cairo.context = ffi.gc(clib.cairo_create(sub_cairo.surface), clib.cairo_destroy)
         return sub_cairo
 
     def set_draw_color(self, color: CairoColor):
@@ -95,9 +91,7 @@ class Cairo(AbstractContextManager):
         rect: Rect,
         radius: float,
         line_width: float = 2.0,
-        path_ops: collections.abc.Sequence[CairoPathOp] = (
-            CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
-        ),
+        path_ops: collections.abc.Sequence[CairoPathOp] = (CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),),
     ):
         # This basically just draws the corners, and relies on cairo_arc to draw line segments connecting them.
         # Angles are given in radians; see https://www.cairographics.org/manual/cairo-Paths.html#cairo-arc for more info.
@@ -156,9 +150,7 @@ class Cairo(AbstractContextManager):
         with self.cairo_save_restore():
             clib.cairo_set_operator(self.context, clib.CAIRO_OPERATOR_SOURCE)
             offset = location - other_rect.origin
-            clib.cairo_set_source_surface(
-                self.context, other.surface, offset.x, offset.y
-            )
+            clib.cairo_set_source_surface(self.context, other.surface, offset.x, offset.y)
             clib.cairo_rectangle(
                 self.context,
                 location.x,

@@ -57,6 +57,4 @@ class Paragraph:
         return attrs.evolve(self, markdown=markdown)
 
     def to_db_dict(self):
-        return attrs.asdict(
-            self, filter=attrs.filters.exclude(attrs.fields(Paragraph).markup)
-        )
+        return attrs.asdict(self, filter=attrs.filters.exclude(attrs.fields(Paragraph).markup))

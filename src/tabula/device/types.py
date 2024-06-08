@@ -19,9 +19,7 @@ class InputDevice:
     manufacturer: typing.Optional[str] = attr.field(default=None, eq=False)
     product: typing.Optional[str] = attr.field(default=None, eq=False)
     interface_id: str
-    inputpath: typing.Optional[pathlib.Path] = attr.field(
-        default=None, eq=False, repr=False
-    )
+    inputpath: typing.Optional[pathlib.Path] = attr.field(default=None, eq=False, repr=False)
 
     @classmethod
     def from_dict(self, v):
@@ -71,36 +69,26 @@ class TouchEvent:
 
 @typing.runtime_checkable
 class Runnable(typing.Protocol):
-    async def run(self, *, task_status: trio_typing.TaskStatus):
-        ...
+    async def run(self, *, task_status: trio_typing.TaskStatus): ...
 
 
 class Display(typing.Protocol):
-    def get_screen_info(self) -> ScreenInfo:
-        ...
+    def get_screen_info(self) -> ScreenInfo: ...
 
-    def clear(self):
-        ...
+    def clear(self): ...
 
-    def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
-        ...
+    def display_pixels(self, imagebytes: bytes, rect: ScreenRect): ...
 
-    def save_screen(self) -> None:
-        ...
+    def save_screen(self) -> None: ...
 
-    def restore_screen(self) -> None:
-        ...
+    def restore_screen(self) -> None: ...
 
 
 class Touchable(typing.Protocol):
-    async def touchstream(self) -> collections.abc.AsyncIterable[TouchEvent]:
-        ...
+    async def touchstream(self) -> collections.abc.AsyncIterable[TouchEvent]: ...
 
 
 class Keyboard(typing.Protocol):
     present_devices: trio_util.AsyncValue
 
-    async def keystream(
-        self, devicespec: InputDevice
-    ) -> collections.abc.AsyncIterable[KeyEvent]:
-        ...
+    async def keystream(self, devicespec: InputDevice) -> collections.abc.AsyncIterable[KeyEvent]: ...

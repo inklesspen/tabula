@@ -27,9 +27,7 @@ async def _devicewatch(buttonstate: AsyncBool, *, task_status=trio.TASK_STATUS_I
                 buttonstate.value = bool(e.value)
 
 
-async def _boolwatch(
-    buttonstate: AsyncBool, trigger, *, task_status=trio.TASK_STATUS_IGNORED
-):
+async def _boolwatch(buttonstate: AsyncBool, trigger, *, task_status=trio.TASK_STATUS_IGNORED):
     task_status.started()
     while True:
         await buttonstate.wait_value(True, held_for=1)

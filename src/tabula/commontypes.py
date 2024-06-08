@@ -93,9 +93,7 @@ class Rect(msgspec.Struct, frozen=True):
         if not isinstance(item, Point):
             return NotImplemented
         min_x, min_y, max_x, max_y = self.as_pillow_box
-        return (
-            item.x >= min_x and item.x <= max_x and item.y >= min_y and item.y <= max_y
-        )
+        return item.x >= min_x and item.x <= max_x and item.y >= min_y and item.y <= max_y
 
 
 class ScreenInfo(msgspec.Struct, frozen=True):

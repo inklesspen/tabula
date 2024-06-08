@@ -146,13 +146,9 @@ class DbVersionError(Exception):
 
 
 def check_version(conn: Connectable, path: pathlib.Path, expected_version: int):
-    found_version = conn.scalar(
-        text("PRAGMA user_version").columns(column("version", Integer))
-    )
+    found_version = conn.scalar(text("PRAGMA user_version").columns(column("version", Integer)))
     if found_version != expected_version:
-        raise DbVersionError(
-            f"Expected DB version {expected_version} in {path}, but found {found_version}."
-        )
+        raise DbVersionError(f"Expected DB version {expected_version} in {path}, but found {found_version}.")
 
 
 def set_version(conn: Connectable, version: int):
@@ -163,9 +159,7 @@ def set_version(conn: Connectable, version: int):
 def make_db(sqlite_path: pathlib.Path):
     exists = sqlite_path.is_file()
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-    engine_url = EngineURL.create(
-        drivername="sqlite", database=sqlite_path.__fspath__()
-    )
+    engine_url = EngineURL.create(drivername="sqlite", database=sqlite_path.__fspath__())
     engine = create_engine(engine_url, future=True)
     with engine.begin() as conn:
         if exists:
@@ -194,11 +188,7 @@ class TabulaDb:
                     wordcount=0,
                 )
             )
-            conn.execute(
-                paragraph_table.insert().values(
-                    id=Timeflake.generate(), session_id=session_id, index=0, markdown=""
-                )
-            )
+            conn.execute(paragraph_table.insert().values(id=Timeflake.generate(), session_id=session_id, index=0, markdown=""))
 
         return session_id
 
@@ -220,49 +210,31 @@ class TabulaDb:
     def load_session_paragraphs(self, session_id):
         with self.engine.begin() as conn:
             result = conn.execute(
-                select(paragraph_table)
-                .where(paragraph_table.c.session_id == session_id)
-                .order_by(paragraph_table.c.index.asc())
+                select(paragraph_table).where(paragraph_table.c.session_id == session_id).order_by(paragraph_table.c.index.asc())
             )
             return [Paragraph(**row._mapping) for row in result]
 
     def save_session(self, session_id, wordcount, paragraphs):
         timestamp = now()
         with self.engine.begin() as conn:
-            conn.execute(
-                session_table.update()
-                .where(session_table.c.id == session_id)
-                .values(updated_at=timestamp, wordcount=wordcount)
-            )
+            conn.execute(session_table.update().where(session_table.c.id == session_id).values(updated_at=timestamp, wordcount=wordcount))
             pstmt = insert(paragraph_table)
             p_on_update = pstmt.on_conflict_do_update(
                 # the unique constraint apparently fires before the id constraint
                 # and sqlite < 3.35.0 only allows a single conflict target.
                 index_elements=["session_id", "index"],
-                set_=dict(
-                    sprint_id=pstmt.excluded.sprint_id, markdown=pstmt.excluded.markdown
-                ),
+                set_=dict(sprint_id=pstmt.excluded.sprint_id, markdown=pstmt.excluded.markdown),
             )
             conn.execute(p_on_update, [para.to_db_dict() for para in paragraphs])
 
     def set_exported_time(self, session_id, timestamp):
         with self.engine.begin() as conn:
-            conn.execute(
-                session_table.update()
-                .where(session_table.c.id == session_id)
-                .values(exported_at=timestamp)
-            )
+            conn.execute(session_table.update().where(session_table.c.id == session_id).values(exported_at=timestamp))
 
     def delete_session(self, session_id):
         with self.engine.begin() as conn:
-            conn.execute(
-                paragraph_table.delete().where(
-                    paragraph_table.c.session_id == session_id
-                )
-            )
-            conn.execute(
-                sprint_table.delete().where(sprint_table.c.session_id == session_id)
-            )
+            conn.execute(paragraph_table.delete().where(paragraph_table.c.session_id == session_id))
+            conn.execute(sprint_table.delete().where(sprint_table.c.session_id == session_id))
             conn.execute(session_table.delete().where(session_table.c.id == session_id))
 
     def new_sprint(self, session_id: timeflake.Timeflake, duration: datetime.timedelta):

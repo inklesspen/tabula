@@ -36,7 +36,5 @@ def make_markup(markdown):
 
 
 def _escape_for_markup(text):
-    with ffi.gc(
-        clib.g_markup_escape_text(text.encode("utf-8"), -1), clib.g_free
-    ) as result:
+    with ffi.gc(clib.g_markup_escape_text(text.encode("utf-8"), -1), clib.g_free) as result:
         return ffi.string(result).decode("utf-8")

@@ -29,9 +29,7 @@ class PangoLayout(AbstractContextManager):
         wrap: WrapMode = WrapMode.WORD_CHAR,
     ):
         self.pango = pango
-        self.layout = ffi.gc(
-            clib.pango_layout_new(self.pango.context), clib.g_object_unref
-        )
+        self.layout = ffi.gc(clib.pango_layout_new(self.pango.context), clib.g_object_unref)
         self.setup_layout(
             width=width,
             justify=justify,
@@ -65,9 +63,7 @@ class PangoLayout(AbstractContextManager):
             clib.pango_layout_set_font_description(self.layout, font_description)
 
     def set_content(self, text: str, is_markup: bool = False):
-        setter = (
-            clib.pango_layout_set_markup if is_markup else clib.pango_layout_set_text
-        )
+        setter = clib.pango_layout_set_markup if is_markup else clib.pango_layout_set_text
         # -1 means null-terminated, which cffi will automatically do for us
         setter(self.layout, text.encode("utf-8"), -1)
 
@@ -108,41 +104,29 @@ class Pango:
 
         # This fontmap is owned by Pango, not by us; we must not free it.
         self.fontmap = clib.pango_cairo_font_map_get_default()
-        clib.pango_cairo_font_map_set_resolution(
-            ffi.cast("PangoCairoFontMap *", self.fontmap), dpi
-        )
+        clib.pango_cairo_font_map_set_resolution(ffi.cast("PangoCairoFontMap *", self.fontmap), dpi)
 
-        self.fontoptions = ffi.gc(
-            clib.cairo_font_options_create(), clib.cairo_font_options_destroy
-        )
+        self.fontoptions = ffi.gc(clib.cairo_font_options_create(), clib.cairo_font_options_destroy)
         if hinting is not HintMode.DEFAULT:
             clib.cairo_font_options_set_hint_style(self.fontoptions, hinting.value)
 
         if subpixel_order is not SubpixelOrder.DEFAULT:
-            clib.cairo_font_options_set_subpixel_order(
-                self.fontoptions, subpixel_order.value
-            )
+            clib.cairo_font_options_set_subpixel_order(self.fontoptions, subpixel_order.value)
 
         if hint_metrics is not HintMetrics.DEFAULT:
-            clib.cairo_font_options_set_hint_metrics(
-                self.fontoptions, hint_metrics.value
-            )
+            clib.cairo_font_options_set_hint_metrics(self.fontoptions, hint_metrics.value)
 
         if antialias is not Antialias.DEFAULT:
             clib.cairo_font_options_set_antialias(self.fontoptions, antialias.value)
 
-        self.context = ffi.gc(
-            clib.pango_font_map_create_context(self.fontmap), clib.g_object_unref
-        )
+        self.context = ffi.gc(clib.pango_font_map_create_context(self.fontmap), clib.g_object_unref)
         clib.pango_cairo_context_set_font_options(self.context, self.fontoptions)
 
         self.language = clib.pango_language_from_string(language.encode("ascii"))
         clib.pango_context_set_language(self.context, self.language)
         clib.pango_context_set_base_dir(self.context, clib.PANGO_DIRECTION_LTR)
         clib.pango_context_set_base_gravity(self.context, clib.PANGO_GRAVITY_SOUTH)
-        clib.pango_context_set_gravity_hint(
-            self.context, clib.PANGO_GRAVITY_HINT_NATURAL
-        )
+        clib.pango_context_set_gravity_hint(self.context, clib.PANGO_GRAVITY_HINT_NATURAL)
 
     @staticmethod
     def _make_font_description(font: str):
@@ -155,9 +139,7 @@ class Pango:
         with (
             self._make_font_description(font) as font_description,
             ffi.gc(
-                clib.pango_context_get_metrics(
-                    self.context, font_description, ffi.NULL
-                ),
+                clib.pango_context_get_metrics(self.context, font_description, ffi.NULL),
                 clib.pango_font_metrics_unref,
             ) as font_metrics,
         ):

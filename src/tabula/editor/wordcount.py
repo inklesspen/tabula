@@ -21,9 +21,7 @@ class PlainRenderer(markdown_it.renderer.RendererProtocol):
     def __init__(self, parser: markdown_it.main.MarkdownIt):
         pass
 
-    def render(
-        self, tokens: Sequence[Token], options: OptionsDict, env: MutableMapping
-    ) -> Any:
+    def render(self, tokens: Sequence[Token], options: OptionsDict, env: MutableMapping) -> Any:
         result = ""
 
         skip = False
@@ -64,11 +62,7 @@ class PlainRenderer(markdown_it.renderer.RendererProtocol):
 
 
 def make_plain_text(markdown: Text) -> Text:
-    return (
-        markdown_it.MarkdownIt("commonmark", renderer_cls=PlainRenderer)
-        .render(markdown)
-        .rstrip("\n")
-    )
+    return markdown_it.MarkdownIt("commonmark", renderer_cls=PlainRenderer).render(markdown).rstrip("\n")
 
 
 def count_plain_text(text: Text) -> int:

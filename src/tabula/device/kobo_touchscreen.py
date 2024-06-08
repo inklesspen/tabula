@@ -100,9 +100,7 @@ class Touchscreen:
                                     self.active_touches.clear()
                                     self.wip.clear()
                                 case libevdev.EV_SYN.SYN_MT_REPORT:
-                                    self.active_touches[
-                                        self.wip.mt_tracking_id
-                                    ] = self.wip.finalize()
+                                    self.active_touches[self.wip.mt_tracking_id] = self.wip.finalize()
                                     self.wip.clear()
                                 case libevdev.EV_SYN.SYN_DROPPED:
                                     disregard = True

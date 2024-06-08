@@ -17,16 +17,20 @@ FONT_HEIGHT_STOPS = (37, 40, 43, 46, 49, 52, 55)
 
 
 def _font_height(font_str, fontmap, context, language):
-    with ffi.gc(
-        clib.pango_font_description_from_string(font_str.encode("utf-8")),
-        clib.pango_font_description_free,
-    ) as font_description, ffi.gc(
-        clib.pango_font_map_load_font(fontmap, context, font_description),
-        clib.g_object_unref,
-    ) as loaded_font, ffi.gc(
-        clib.pango_font_get_metrics(loaded_font, language),
-        clib.pango_font_metrics_unref,
-    ) as font_metrics:
+    with (
+        ffi.gc(
+            clib.pango_font_description_from_string(font_str.encode("utf-8")),
+            clib.pango_font_description_free,
+        ) as font_description,
+        ffi.gc(
+            clib.pango_font_map_load_font(fontmap, context, font_description),
+            clib.g_object_unref,
+        ) as loaded_font,
+        ffi.gc(
+            clib.pango_font_get_metrics(loaded_font, language),
+            clib.pango_font_metrics_unref,
+        ) as font_metrics,
+    ):
         return clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
 
 
@@ -34,9 +38,7 @@ def font_sizes(font, dpi=300):
     fontmap = clib.pango_cairo_font_map_get_default()
     context = ffi.gc(clib.pango_font_map_create_context(fontmap), clib.g_object_unref)
     language = clib.pango_language_from_string("en-us".encode("ascii"))
-    clib.pango_cairo_font_map_set_resolution(
-        ffi.cast("PangoCairoFontMap *", fontmap), dpi
-    )
+    clib.pango_cairo_font_map_set_resolution(ffi.cast("PangoCairoFontMap *", fontmap), dpi)
     sizes = []
     size = decimal.Decimal("4")
     for height_stop in FONT_HEIGHT_STOPS:

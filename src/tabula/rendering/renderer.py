@@ -40,37 +40,27 @@ class Renderer:
         # This fontmap is owned by Pango, not by us; we must not free it.
         self.fontmap = clib.pango_cairo_font_map_get_default()
 
-        self.fontoptions = ffi.gc(
-            clib.cairo_font_options_create(), clib.cairo_font_options_destroy
-        )
+        self.fontoptions = ffi.gc(clib.cairo_font_options_create(), clib.cairo_font_options_destroy)
         if hinting != HintMode.DEFAULT:
             clib.cairo_font_options_set_hint_style(self.fontoptions, hinting.value)
 
         if subpixel_order != SubpixelOrder.DEFAULT:
-            clib.cairo_font_options_set_subpixel_order(
-                self.fontoptions, subpixel_order.value
-            )
+            clib.cairo_font_options_set_subpixel_order(self.fontoptions, subpixel_order.value)
 
         if hint_metrics != HintMetrics.DEFAULT:
-            clib.cairo_font_options_set_hint_metrics(
-                self.fontoptions, hint_metrics.value
-            )
+            clib.cairo_font_options_set_hint_metrics(self.fontoptions, hint_metrics.value)
 
         if antialias != Antialias.DEFAULT:
             clib.cairo_font_options_set_antialias(self.fontoptions, antialias.value)
 
-        self.context = ffi.gc(
-            clib.pango_font_map_create_context(self.fontmap), clib.g_object_unref
-        )
+        self.context = ffi.gc(clib.pango_font_map_create_context(self.fontmap), clib.g_object_unref)
         clib.pango_cairo_context_set_font_options(self.context, self.fontoptions)
 
         self.language = clib.pango_language_from_string(language.encode("ascii"))
         clib.pango_context_set_language(self.context, self.language)
         clib.pango_context_set_base_dir(self.context, clib.PANGO_DIRECTION_LTR)
         clib.pango_context_set_base_gravity(self.context, clib.PANGO_GRAVITY_SOUTH)
-        clib.pango_context_set_gravity_hint(
-            self.context, clib.PANGO_GRAVITY_HINT_NATURAL
-        )
+        clib.pango_context_set_gravity_hint(self.context, clib.PANGO_GRAVITY_HINT_NATURAL)
 
     def destroy(self):
         # optional; call for more efficient memory cleanup
@@ -87,9 +77,7 @@ class Renderer:
         if size is None:
             size = self.screen_info.size
         return ffi.gc(
-            clib.cairo_image_surface_create(
-                clib.CAIRO_FORMAT_A8, size.width, size.height
-            ),
+            clib.cairo_image_surface_create(clib.CAIRO_FORMAT_A8, size.width, size.height),
             clib.cairo_surface_destroy,
         )
 
@@ -154,24 +142,29 @@ class Renderer:
         if dpi is None:
             dpi = self.screen_info.dpi
         self.set_fontmap_resolution(dpi)
-        with self._make_font_description(font) as font_description, ffi.gc(
-            clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
-            clib.g_object_unref,
-        ) as loaded_font, ffi.gc(
-            clib.pango_font_get_metrics(loaded_font, self.language),
-            clib.pango_font_metrics_unref,
-        ) as font_metrics:
+        with (
+            self._make_font_description(font) as font_description,
+            ffi.gc(
+                clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
+                clib.g_object_unref,
+            ) as loaded_font,
+            ffi.gc(
+                clib.pango_font_get_metrics(loaded_font, self.language),
+                clib.pango_font_metrics_unref,
+            ) as font_metrics,
+        ):
             return clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
 
     def describe_loaded_font(self, font: str):
-        with self._make_font_description(font) as font_description, ffi.gc(
-            clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
-            clib.g_object_unref,
-        ) as loaded_font, ffi.gc(
-            clib.pango_font_describe(loaded_font), clib.pango_font_description_free
-        ) as loaded_font_description, ffi.gc(
-            clib.pango_font_description_to_string(loaded_font_description), clib.g_free
-        ) as loaded_font_string:
+        with (
+            self._make_font_description(font) as font_description,
+            ffi.gc(
+                clib.pango_font_map_load_font(self.fontmap, self.context, font_description),
+                clib.g_object_unref,
+            ) as loaded_font,
+            ffi.gc(clib.pango_font_describe(loaded_font), clib.pango_font_description_free) as loaded_font_description,
+            ffi.gc(clib.pango_font_description_to_string(loaded_font_description), clib.g_free) as loaded_font_string,
+        ):
             return ffi.string(loaded_font_string).decode("utf-8")
 
     def list_available_fonts(self) -> list[str]:
@@ -289,12 +282,7 @@ class Renderer:
             op=CairoOp.FILL if inverted else CairoOp.STROKE,
         )
         text_x = rect.origin.x
-        text_y = math.floor(
-            rect.origin.y
-            + rect.spread.height / 2
-            - ink_rect.origin.y
-            - ink_rect.spread.height / 2
-        )
+        text_y = math.floor(rect.origin.y + rect.spread.height / 2 - ink_rect.origin.y - ink_rect.spread.height / 2)
 
         self.move_to(cairo_context, Point(x=text_x, y=text_y))
         if inverted:
@@ -383,9 +371,7 @@ class Renderer:
                 wrap=wrap,
             )
 
-            with ffi.new("PangoRectangle *") as ink_rect, ffi.new(
-                "PangoRectangle *"
-            ) as logical_rect:
+            with ffi.new("PangoRectangle *") as ink_rect, ffi.new("PangoRectangle *") as logical_rect:
                 clib.pango_layout_get_pixel_extents(layout, ink_rect, logical_rect)
                 return {
                     name: Rect.from_pango_rect(pango_rect)
@@ -459,9 +445,7 @@ class Renderer:
                 AffineTransform.translation(margins.left, margins.top),
             )
 
-            with ffi.gc(
-                clib.pango_layout_new(self.context), clib.g_object_unref
-            ) as layout:
+            with ffi.gc(clib.pango_layout_new(self.context), clib.g_object_unref) as layout:
                 self._setup_layout(
                     layout,
                     width=(render_size.width - (margins.left + margins.right)),
@@ -489,9 +473,7 @@ class Renderer:
                     clib.cairo_surface_flush(clib.cairo_get_target(cairo_context))
 
                     logical_rect_width = logical_rect.x + logical_rect.width
-                    pango_layout_width = clib.pango_pixels(
-                        clib.pango_layout_get_width(layout)
-                    )
+                    pango_layout_width = clib.pango_pixels(clib.pango_layout_get_width(layout))
 
                     # pango_layout_get_height is always zero, since ellipsization is disabled.
                     logical_rect_height = logical_rect.y + logical_rect.height
