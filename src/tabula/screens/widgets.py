@@ -1,7 +1,7 @@
 import enum
 import math
 
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 import attrs
 
@@ -15,6 +15,10 @@ from ..rendering.rendertypes import (
     Alignment,
     Rendered,
 )
+
+
+class DrawCallback(Protocol):
+    def __call__(self, cairo: Cairo): ...
 
 
 class ButtonState(enum.Enum):
@@ -44,6 +48,7 @@ class Button:
         state=ButtonState.NORMAL,
         button_value: Optional[Any] = None,
         align_baseline: bool = False,
+        draw_callback: Optional[DrawCallback] = None,
     ):
         if button_value is None:
             button_value = button_text
@@ -63,28 +68,13 @@ class Button:
         )
 
         normal = Button._draw_button(
-            button_size,
-            layout,
-            roundrect_bounds,
-            corner_radius,
-            text_origin,
-            inverted=False,
+            button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=False, draw_callback=draw_callback
         )
         inverted = Button._draw_button(
-            button_size,
-            layout,
-            roundrect_bounds,
-            corner_radius,
-            text_origin,
-            inverted=True,
+            button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=True, draw_callback=draw_callback
         )
         outlined = Button._draw_button(
-            button_size,
-            layout,
-            roundrect_bounds,
-            corner_radius,
-            text_origin,
-            inverted=True,
+            button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=True, draw_callback=draw_callback
         )
         outline_bounds = Rect(origin=Point(x=4, y=4), spread=button_size - Size(width=8, height=8))
         outlined.roundrect(
@@ -154,6 +144,7 @@ class Button:
         radius: int,
         layout_origin: Point,
         inverted: bool,
+        draw_callback: Optional[DrawCallback],
     ) -> Cairo:
         cairo = Cairo(button_size)
         cairo.setup()
@@ -178,5 +169,7 @@ class Button:
         cairo.move_to(layout_origin)
         cairo.set_draw_color(CairoColor.WHITE if inverted else CairoColor.BLACK)
         layout.render(cairo)
+        if draw_callback is not None:
+            draw_callback(cairo)
         cairo.set_draw_color(CairoColor.BLACK)
         return cairo

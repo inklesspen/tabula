@@ -2,6 +2,7 @@ import enum
 import collections.abc
 import datetime
 import inspect
+import math
 import typing
 from os.path import commonprefix
 
@@ -169,3 +170,18 @@ class Future[V]:
     @property
     def is_final(self):
         return self._event.is_set()
+
+
+GOLDEN_RATIO = (math.sqrt(5) + 1) / 2
+
+
+def golden_section_search(eval_func: collections.abc.Callable[[float], float], lower_bound: float, upper_bound: float, tolerance=1e-5):
+    while abs(upper_bound - lower_bound) > tolerance:
+        candidate_from_upper = upper_bound - (upper_bound - lower_bound) / GOLDEN_RATIO
+        candidate_from_lower = lower_bound + (upper_bound - lower_bound) / GOLDEN_RATIO
+        if eval_func(candidate_from_upper) < eval_func(candidate_from_lower):  # f(c) > f(d) to find the maximum
+            upper_bound = candidate_from_lower
+        else:
+            lower_bound = candidate_from_upper
+
+    return (upper_bound + lower_bound) / 2

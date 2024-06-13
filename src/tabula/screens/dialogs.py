@@ -4,13 +4,17 @@ import typing
 import outcome
 
 from ..device.hwtypes import TapEvent, TapPhase
-from ..commontypes import Point, Size, Rect
-from ..rendering.rendertypes import Rendered, Alignment, WrapMode
+from ..commontypes import Point, Size
+from ..rendering.fonts import SERIF
+from ..rendering.cairo import Cairo
+from ..rendering.pango import Pango, PangoLayout
+from ..rendering.rendertypes import Alignment, WrapMode, CairoColor
 from ..util import TABULA, Future
 from .base import Responder
+from .widgets import Button
 
 if typing.TYPE_CHECKING:
-    from ..rendering.renderer import Renderer
+    from ..commontypes import ScreenInfo
 
 
 logger = logging.getLogger(__name__)
@@ -21,20 +25,23 @@ class Dialog(Responder):
 
 
 class OkDialog(Dialog):
-    def __init__(
-        self,
-        *,
-        renderer: "Renderer",
-        message: str,
-    ):
-        self.renderer = renderer
+    def __init__(self, *, screen_info: "ScreenInfo", message: str):
+        self.screen_info = screen_info
         self.message = message
         self.future = Future()
 
-        screen_size = self.renderer.screen_info.size
-        spread = Size(width=400, height=100)
-        origin = Point(x=(screen_size.width - spread.width) / 2, y=960)
-        self.button_rect = Rect(origin=origin, spread=spread)
+        self.pango = Pango(dpi=screen_info.dpi)
+        button_spread = Size(width=400, height=100)
+        button_origin = Point(x=(screen_info.size.width - button_spread.width) / 2, y=960)
+
+        self.button = Button(
+            self.pango,
+            button_text="Exit",
+            button_size=button_spread,
+            corner_radius=50,
+            font="B612 10",
+            screen_location=button_origin,
+        )
 
     async def become_responder(self):
         app = TABULA.get()
@@ -42,57 +49,56 @@ class OkDialog(Dialog):
         app.hardware.display_pixels(screen.image, screen.extent)
 
     async def handle_tap_event(self, event: TapEvent):
-        if event.location in self.button_rect and event.phase is TapPhase.COMPLETED:
+        if event.location in self.button and event.phase is TapPhase.COMPLETED:
             self.future.finalize(outcome.Value(None))
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
-        screen_size = self.renderer.screen_info.size
-        with self.renderer.create_surface(screen_size) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
-            self.renderer.prepare_background(cairo_context)
-            self.renderer.setup_drawing(cairo_context)
+        with Cairo(self.screen_info.size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            cairo.move_to(Point(x=0, y=160))
+            with PangoLayout(pango=self.pango, width=self.screen_info.size.width, alignment=Alignment.CENTER) as layout:
+                layout.set_font(f"{SERIF} 48")
+                layout.set_content("Tabula")
+                layout.render(cairo)
 
-            self.renderer.move_to(cairo_context, Point(x=0, y=160))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 48",
-                "Tabula",
-                alignment=Alignment.CENTER,
-                width=screen_size.width,
-            )
+            cairo.move_to(Point(x=0, y=640))
+            with PangoLayout(pango=self.pango, width=self.screen_info.size.width, alignment=Alignment.CENTER, wrap=WrapMode.WORD) as layout:
+                layout.set_font(f"{SERIF} 12")
+                layout.set_content(self.message)
+                layout.render(cairo)
 
-            self.renderer.move_to(cairo_context, Point(x=0, y=640))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 12",
-                self.message,
-                alignment=Alignment.CENTER,
-                wrap=WrapMode.WORD,
-                width=screen_size.width,
-            )
+            self.button.paste_onto_cairo(cairo)
 
-            self.renderer.button(cairo_context, text="OK", font="B612 10", rect=self.button_rect)
-
-            buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size))
+            screen = cairo.get_rendered(origin=Point.zeroes())
+        return screen
 
 
 class YesNoDialog(Dialog):
-    def __init__(
-        self,
-        *,
-        renderer: "Renderer",
-        message: str,
-    ):
-        self.renderer = renderer
+    def __init__(self, *, screen_info: "ScreenInfo", message: str):
+        self.screen_info = screen_info
         self.message = message
         self.future = Future()
 
+        self.pango = Pango(dpi=screen_info.dpi)
         button_size = Size(width=400, height=100)
-        self.no_rect = Rect(origin=Point(x=100, y=960), spread=button_size)
-        self.yes_rect = Rect(
-            origin=Point(x=self.renderer.screen_info.size.width - 500, y=960),
-            spread=button_size,
+
+        self.no_button = Button(
+            self.pango,
+            button_text="No",
+            button_size=button_size,
+            corner_radius=50,
+            font="B612 10",
+            screen_location=Point(x=100, y=960),
+        )
+        self.yes_button = Button(
+            self.pango,
+            button_text="Yes",
+            button_size=button_size,
+            corner_radius=50,
+            font="B612 10",
+            screen_location=Point(x=screen_info.size.width - 500, y=960),
         )
 
     async def become_responder(self):
@@ -102,39 +108,30 @@ class YesNoDialog(Dialog):
 
     async def handle_tap_event(self, event: TapEvent):
         if event.phase is TapPhase.COMPLETED:
-            if event.location in self.no_rect:
+            if event.location in self.no_button:
                 self.future.finalize(outcome.Value(False))
-            if event.location in self.yes_rect:
+            if event.location in self.yes_button:
                 self.future.finalize(outcome.Value(True))
 
     def make_screen(self):
         # TODO: consider making it smaller and adding a border box?
-        screen_size = self.renderer.screen_info.size
-        with self.renderer.create_surface(screen_size) as surface, self.renderer.create_cairo_context(surface) as cairo_context:
-            self.renderer.prepare_background(cairo_context)
-            self.renderer.setup_drawing(cairo_context)
+        with Cairo(self.screen_info.size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            cairo.move_to(Point(x=0, y=160))
+            with PangoLayout(pango=self.pango, width=self.screen_info.size.width, alignment=Alignment.CENTER) as layout:
+                layout.set_font(f"{SERIF} 48")
+                layout.set_content("Tabula")
+                layout.render(cairo)
 
-            self.renderer.move_to(cairo_context, Point(x=0, y=160))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 48",
-                "Tabula",
-                alignment=Alignment.CENTER,
-                width=screen_size.width,
-            )
+            cairo.move_to(Point(x=0, y=640))
+            with PangoLayout(pango=self.pango, width=self.screen_info.size.width, alignment=Alignment.CENTER, wrap=WrapMode.WORD) as layout:
+                layout.set_font(f"{SERIF} 12")
+                layout.set_content(self.message)
+                layout.render(cairo)
 
-            self.renderer.move_to(cairo_context, Point(x=0, y=640))
-            self.renderer.simple_render(
-                cairo_context,
-                "Crimson Pro 12",
-                self.message,
-                alignment=Alignment.CENTER,
-                wrap=WrapMode.WORD,
-                width=screen_size.width,
-            )
+            self.no_button.paste_onto_cairo(cairo)
+            self.yes_button.paste_onto_cairo(cairo)
 
-            self.renderer.button(cairo_context, text="No", font="B612 10", rect=self.no_rect)
-            self.renderer.button(cairo_context, text="Yes", font="B612 10", rect=self.yes_rect)
-
-            buf = self.renderer.surface_to_bytes(surface, screen_size)
-        return Rendered(image=buf, extent=Rect(origin=Point.zeroes(), spread=screen_size))
+            screen = cairo.get_rendered(origin=Point.zeroes())
+        return screen

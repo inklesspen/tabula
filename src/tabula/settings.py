@@ -137,21 +137,6 @@ KEYMAPS = {
 COMPOSE_KEY = "KEY_RIGHTMETA"
 COMPOSE_KEY_DESCRIPTION = "the right-hand Meta key"
 
-DRAFTING_FONTS = {
-    "Tabula Quattro": ["6.9", "7.4", "8", "8.5", "9.1", "9.7", "10.2"],
-    "Comic Neue": ["8.9", "9.7", "10.4", "11.1", "11.8", "12.5", "13.2"],
-    "Special Elite": ["8.9", "9.7", "10.4", "11.1", "11.8", "12.5", "13.2"],
-    "Atkinson Hyperlegible": ["7.5", "8.1", "8.7", "9.3", "9.9", "10.5", "11.1"],
-}
-
-# TODO: redo these values; I wasn't using the proper font sizes yet when I determined these the first time.
-LINE_SPACING = {
-    "Tabula Quattro": 1.0,
-    "Comic Neue": 1.3,
-    "Special Elite": 1.4,
-    "Atkinson Hyperlegible": 1.1,
-}
-
 
 def timedelta_seconds(seconds: datetime.timedelta | int | str):
     if isinstance(seconds, datetime.timedelta):
@@ -183,9 +168,9 @@ settings_converter.register_structure_hook(Key, lambda v, _: Key[v])
 @dataclasses.dataclass(kw_only=True)
 class Settings:
     _path: pathlib.Path
-    drafting_fonts: dict[str, list[str]]
     current_font: str
-    current_font_size: int
+    current_font_size: float
+    current_line_spacing: float
     compose_key: Key
     compose_key_description: str
     compose_sequences: pygtrie.Trie
@@ -197,7 +182,7 @@ class Settings:
     max_editable_age: datetime.timedelta
     sprint_lengths: list[datetime.timedelta]
 
-    def set_current_font(self, new_current_font: str, new_size: int):
+    def set_current_font(self, new_current_font: str, new_size: float):
         self.current_font = new_current_font
         self.current_font_size = new_size
 
@@ -219,9 +204,9 @@ class Settings:
         return settings_converter.structure(
             {
                 "_path": "test.settings.json",
-                "drafting_fonts": DRAFTING_FONTS,
                 "current_font": "Tabula Quattro",
-                "current_font_size": 2,
+                "current_font_size": 8.0,
+                "current_line_spacing": 1.0,
                 "compose_key": COMPOSE_KEY,
                 "compose_key_description": COMPOSE_KEY_DESCRIPTION,
                 "compose_sequences": COMPOSE_SEQUENCES,

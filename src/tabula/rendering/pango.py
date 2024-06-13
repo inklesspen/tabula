@@ -12,6 +12,7 @@ from .rendertypes import (
     WrapMode,
     LayoutRects,
 )
+from ..util import golden_section_search
 
 from .fontconfig import NON_DRAFTING_FONTS
 
@@ -146,6 +147,19 @@ class Pango:
             ) as font_metrics,
         ):
             return clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
+
+    def calculate_ascent(self, font: str) -> float:
+        with (
+            self._make_font_description(font) as font_description,
+            ffi.gc(
+                clib.pango_context_get_metrics(self.context, font_description, ffi.NULL),
+                clib.pango_font_metrics_unref,
+            ) as font_metrics,
+        ):
+            return clib.pango_font_metrics_get_ascent(font_metrics) / clib.PANGO_SCALE
+
+    def find_size_for_desired_ascent(self, unsized_font: str, desired_ascent: float):
+        return round(golden_section_search(lambda x: abs(self.calculate_ascent(f"{unsized_font} {x}") - desired_ascent), 1, 100), 1)
 
     def list_available_fonts(self) -> list[str]:
         with ffi.new("int *") as size_p, ffi.new("PangoFontFamily***") as families_p:

@@ -89,7 +89,15 @@ class Tabula:
     async def show_dialog(self, target_dialog: TargetDialog, **additional_kwargs):
         dialog_cls = DIALOGS[target_dialog]
         dialog = cast(
-            Dialog, invoke(dialog_cls, settings=self.settings, screen_info=self.screen_info, renderer=self.renderer, **additional_kwargs)
+            Dialog,
+            invoke(
+                dialog_cls,
+                settings=self.settings,
+                screen_info=self.screen_info,
+                renderer=self.renderer,
+                document=self.document,
+                **additional_kwargs,
+            ),
         )
 
         if self.current_responder_metadata is not None and self.current_responder_metadata.responder is self.current_screen:
@@ -156,7 +164,6 @@ class Tabula:
             if self.current_screen is None:
                 raise Exception("no current screen, which shouldn't ever happen")
             if self.current_responder_metadata is None or self.current_screen is not self.current_responder_metadata.responder:
-                logger.debug("invoking current screen %r runloop", self.current_screen)
                 self.current_responder_metadata = cast(ResponderMetadata, await nursery.start(self.current_screen.run))
                 await invoke_if_present(self.current_screen, "become_responder")
 

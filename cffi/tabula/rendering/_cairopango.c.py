@@ -352,6 +352,9 @@ void cairo_restore(cairo_t *cr);
 
 void cairo_translate(cairo_t *cr, double tx, double ty);
 
+cairo_bool_t cairo_has_current_point (cairo_t *cr);
+void cairo_get_current_point (cairo_t *cr, double *x, double *y);
+
 void cairo_new_path(cairo_t *cr);
 
 void cairo_new_sub_path(cairo_t *cr);

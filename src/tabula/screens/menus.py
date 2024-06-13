@@ -9,8 +9,8 @@ import msgspec
 import trio
 
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase, Key
-from ..commontypes import Point, Size, Rect
-from ..rendering.rendertypes import Rendered, Alignment, CairoColor
+from ..commontypes import Point, Size
+from ..rendering.rendertypes import Alignment, CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 from ..editor.document import DocumentModel
@@ -22,8 +22,8 @@ from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
 from .base import Screen, TargetScreen, TargetDialog
 
 if typing.TYPE_CHECKING:
+    from ..rendering.rendertypes import Rendered
     from ..settings import Settings
-    from ..rendering.renderer import Renderer
     from ..db import TabulaDb
     from ..commontypes import ScreenInfo
 
@@ -43,11 +43,9 @@ class ButtonMenu(Screen):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         screen_info: "ScreenInfo",
     ):
         self.settings = settings
-        self.renderer = renderer
         self.screen_info = screen_info
         self.pango = Pango(dpi=screen_info.dpi)
 
@@ -89,7 +87,7 @@ class ButtonMenu(Screen):
     def make_buttons(self): ...
 
     @abc.abstractmethod
-    def render(self) -> Rendered: ...
+    def render(self) -> "Rendered": ...
 
 
 class SystemMenu(ButtonMenu):
@@ -97,14 +95,12 @@ class SystemMenu(ButtonMenu):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         screen_info: "ScreenInfo",
         db: "TabulaDb",
         document: "DocumentModel",
     ):
         super().__init__(
             settings=settings,
-            renderer=renderer,
             screen_info=screen_info,
         )
         self.db = db
@@ -184,16 +180,13 @@ class SystemMenu(ButtonMenu):
             for b in buttons
         ]
 
-    def render(self) -> Rendered:
+    def render(self):
         with Cairo(self.screen_info.size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
             for menu_button in self.menu_buttons:
                 menu_button.button.paste_onto_cairo(cairo)
-            rendered = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point.zeroes(), spread=cairo.size),
-            )
+            rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
 
     async def new_session(self):
@@ -237,13 +230,11 @@ class SessionList(ButtonMenu):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         screen_info: "ScreenInfo",
         db: "TabulaDb",
     ):
         super().__init__(
             settings=settings,
-            renderer=renderer,
             screen_info=screen_info,
         )
         self.db = db
@@ -343,17 +334,14 @@ class SessionList(ButtonMenu):
         )
         self.menu_buttons = menu_buttons
 
-    def render(self) -> Rendered:
+    def render(self):
         with Cairo(self.screen_info.size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
             for menu_button in self.menu_buttons:
                 menu_button.button.paste_onto_cairo(cairo)
 
-            rendered = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point.zeroes(), spread=cairo.size),
-            )
+            rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
 
     def refresh_sessions(self):
@@ -384,7 +372,6 @@ class SessionActions(ButtonMenu):
         self,
         *,
         settings: "Settings",
-        renderer: "Renderer",
         screen_info: "ScreenInfo",
         db: "TabulaDb",
         document: "DocumentModel",
@@ -392,7 +379,6 @@ class SessionActions(ButtonMenu):
     ):
         super().__init__(
             settings=settings,
-            renderer=renderer,
             screen_info=screen_info,
         )
         self.db = db
@@ -469,7 +455,7 @@ class SessionActions(ButtonMenu):
 
         self.menu_buttons = menu_buttons
 
-    def render(self) -> Rendered:
+    def render(self):
         with Cairo(self.screen_info.size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
@@ -498,10 +484,7 @@ class SessionActions(ButtonMenu):
                     layout.set_content("This session is now locked for editing", is_markup=False)
                     layout.render(cairo)
 
-            rendered = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point.zeroes(), spread=cairo.size),
-            )
+            rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
 
     def refresh_sessions(self):

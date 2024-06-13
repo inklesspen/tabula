@@ -121,7 +121,7 @@ class Drafting(Screen):
     async def render_document(self):
         app = TABULA.get()
         current_font = self.settings.current_font
-        font_size = self.settings.drafting_fonts[current_font][self.settings.current_font_size]
+        font_size = self.settings.current_font_size
         font_spec = f"{current_font} {font_size}"
         rendered = self.layout_manager.render_update(font_spec)
         app.hardware.display_rendered(rendered)

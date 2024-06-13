@@ -2,10 +2,11 @@ import logging
 import typing
 
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
-from ..commontypes import Point, Size, Rect
+from ..commontypes import Point, Size
+from ..rendering.fonts import SERIF
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
-from ..rendering.rendertypes import Rendered, Alignment, CairoColor
+from ..rendering.rendertypes import Alignment, CairoColor
 
 from .dialogs import Dialog
 from .widgets import ButtonState, Button
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class KeyboardDetectDialog(Dialog):
-    def __init__(self, settings: "Settings", screen_info: "ScreenInfo"):
+    def __init__(self, *, settings: "Settings", screen_info: "ScreenInfo"):
         self.settings = settings
         self.future = Future()
 
@@ -42,27 +43,24 @@ class KeyboardDetectDialog(Dialog):
             cairo.set_draw_color(CairoColor.BLACK)
             cairo.move_to(Point(x=0, y=160))
             with PangoLayout(pango=self.pango, width=screen_size.width, alignment=Alignment.CENTER) as layout:
-                layout.set_font("Crimson Pro 48")
+                layout.set_font(f"{SERIF} 48")
                 layout.set_content("Tabula")
                 layout.render(cairo)
 
             cairo.move_to(Point(x=50, y=640))
-            with PangoLayout(pango=self.pango, width=screen_size.width - 100) as layout:
-                layout.set_font("Crimson Pro 12")
+            with PangoLayout(pango=self.pango, width=screen_size.width - 100, alignment=Alignment.CENTER) as layout:
+                layout.set_font(f"{SERIF} 12")
                 layout.set_content("Connect a keyboard and press a key to continue, or tap the button to exit.")
                 layout.render(cairo)
 
             cairo.move_to(Point(x=0, y=1280))
             with PangoLayout(pango=self.pango, width=screen_size.width, alignment=Alignment.CENTER) as layout:
-                layout.set_font("Crimson Pro 8")
+                layout.set_font(f"{SERIF} 8")
                 layout.set_content("Presented by Straylight Labs")
                 layout.render(cairo)
 
             self.button.paste_onto_cairo(cairo)
-            self.initial_screen = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point.zeroes(), spread=screen_size),
-            )
+            self.initial_screen = cairo.get_rendered(origin=Point.zeroes())
 
     async def become_responder(self):
         app = TABULA.get()
@@ -71,7 +69,6 @@ class KeyboardDetectDialog(Dialog):
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
         self.future.finalize(None)
-        logger.debug("returning from handle_key_event")
 
     async def handle_tap_event(self, event: TapEvent):
         app = TABULA.get()

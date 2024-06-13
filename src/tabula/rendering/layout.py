@@ -4,10 +4,11 @@ import typing
 import msgspec
 
 from ..commontypes import Size, Rect, Point
-from ._cairopango import ffi, lib as clib
+from ._cairopango import ffi, lib as clib  # type: ignore
 from .rendertypes import Alignment, WrapMode, Rendered, CairoColor, LayoutRects
 from ..util import now
 from .cairo import Cairo
+from .fonts import SERIF
 
 if typing.TYPE_CHECKING:
     from .renderer import Renderer
@@ -187,7 +188,7 @@ def render_compose_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: 
     # scale 40 produces width=60, height=40; width is 1.5x scale
     clib.cairo_new_path(cairo.context)
     cairo.set_draw_color(CairoColor.BLACK)
-    clib.cairo_set_line_width(cairo.context, linewidth)
+    cairo.set_line_width(linewidth)
     clib.cairo_rectangle(
         cairo.context,
         origin.x + scale * 0.02,
@@ -212,7 +213,7 @@ def render_capslock_symbol(cairo: Cairo, origin: Point, scale: float, linewidth:
     # scale 40 produces width=32, height=40; width is .8x scale
     clib.cairo_new_path(cairo.context)
     cairo.set_draw_color(CairoColor.BLACK)
-    clib.cairo_set_line_width(cairo.context, linewidth)
+    cairo.set_line_width(linewidth)
     cairo.move_to(origin + Point(scale * 0.26, scale * 0.73))
     cairo.line_to(origin + Point(scale * 0.26, scale * 0.355))
     cairo.line_to(origin + Point(scale * 0.07, scale * 0.355))
@@ -234,7 +235,7 @@ def render_capslock_symbol(cairo: Cairo, origin: Point, scale: float, linewidth:
 
 
 class StatusLayout:
-    status_font = "Crimson Pro 12"
+    status_font = f"{SERIF} 12"
 
     def __init__(self, renderer: "Renderer", document: "DocumentModel"):
         self.renderer = renderer

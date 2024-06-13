@@ -5,7 +5,7 @@
 import typing
 
 from ..device.hwtypes import AnnotatedKeyEvent, Key
-from ..commontypes import Point, Rect
+from ..commontypes import Point
 from ..rendering.rendertypes import Rendered, CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
@@ -105,10 +105,7 @@ class Help(Dialog):
                 cairo.move_to(Point(x=10, y=10))
                 cairo.set_draw_color(CairoColor.BLACK)
                 layout.render(cairo)
-            rendered = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point.zeroes(), spread=self.screen_size),
-            )
+            rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
 
 
@@ -148,8 +145,5 @@ class ComposeHelp(Dialog):
                 cairo.move_to(Point(x=10, y=10))
                 cairo.set_draw_color(CairoColor.BLACK)
                 layout.render(cairo)
-            rendered = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point.zeroes(), spread=self.screen_size),
-            )
+            rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
