@@ -34,7 +34,7 @@ class OkDialog(Dialog):
         button_spread = Size(width=400, height=100)
         button_origin = Point(x=(screen_info.size.width - button_spread.width) / 2, y=960)
 
-        self.button = Button(
+        self.button = Button.create(
             self.pango,
             button_text="Exit",
             button_size=button_spread,
@@ -84,7 +84,7 @@ class YesNoDialog(Dialog):
         self.pango = Pango(dpi=screen_info.dpi)
         button_size = Size(width=400, height=100)
 
-        self.no_button = Button(
+        self.no_button = Button.create(
             self.pango,
             button_text="No",
             button_size=button_size,
@@ -92,7 +92,7 @@ class YesNoDialog(Dialog):
             font="B612 10",
             screen_location=Point(x=100, y=960),
         )
-        self.yes_button = Button(
+        self.yes_button = Button.create(
             self.pango,
             button_text="Yes",
             button_size=button_size,

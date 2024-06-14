@@ -29,7 +29,7 @@ class KeyboardDetectDialog(Dialog):
         screen_size = screen_info.size
 
         button_size = Size(width=400, height=100)
-        self.button = Button(
+        self.button = Button.create(
             self.pango,
             button_text="Exit",
             button_size=button_size,

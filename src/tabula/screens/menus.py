@@ -166,7 +166,7 @@ class SystemMenu(ButtonMenu):
 
         self.menu_buttons = [
             MenuButton(
-                button=Button(
+                button=Button.create(
                     pango=self.pango,
                     button_text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
                     font="B612 8",
@@ -265,7 +265,7 @@ class SessionList(ButtonMenu):
                 button_text += " \ue0a2"
             menu_buttons.append(
                 MenuButton(
-                    button=Button(
+                    button=Button.create(
                         pango=self.pango,
                         button_text=button_text,
                         button_size=self.session_button_size,
@@ -283,7 +283,7 @@ class SessionList(ButtonMenu):
             prev_page_offset = max(0, self.offset - num_session_buttons)
             menu_buttons.append(
                 MenuButton(
-                    button=Button(
+                    button=Button.create(
                         pango=self.pango,
                         button_text="\ue0a9 Prev",
                         button_size=self.page_button_size,
@@ -300,7 +300,7 @@ class SessionList(ButtonMenu):
             # next button
             menu_buttons.append(
                 MenuButton(
-                    button=Button(
+                    button=Button.create(
                         pango=self.pango,
                         button_text="Next \ue0a8",
                         button_size=self.page_button_size,
@@ -318,7 +318,7 @@ class SessionList(ButtonMenu):
         # return button
         menu_buttons.append(
             MenuButton(
-                button=Button(
+                button=Button.create(
                     pango=self.pango,
                     button_text="Back",
                     button_size=self.page_button_size,
@@ -400,7 +400,7 @@ class SessionActions(ButtonMenu):
         if self.can_resume_drafting:
             menu_buttons.append(
                 MenuButton(
-                    button=Button(
+                    button=Button.create(
                         pango=self.pango,
                         button_text="Load Session",
                         button_size=self.button_size,
@@ -414,7 +414,7 @@ class SessionActions(ButtonMenu):
         if self.selected_session.needs_export or True:
             menu_buttons.append(
                 MenuButton(
-                    button=Button(
+                    button=Button.create(
                         pango=self.pango,
                         button_text="Export Session",
                         button_size=self.button_size,
@@ -427,7 +427,7 @@ class SessionActions(ButtonMenu):
             )
         menu_buttons.append(
             MenuButton(
-                button=Button(
+                button=Button.create(
                     pango=self.pango,
                     button_text="Delete Session",
                     button_size=self.button_size,
@@ -441,7 +441,7 @@ class SessionActions(ButtonMenu):
 
         menu_buttons.append(
             MenuButton(
-                button=Button(
+                button=Button.create(
                     pango=self.pango,
                     button_text="Back",
                     button_size=self.button_size,

@@ -1,9 +1,10 @@
+from __future__ import annotations
+
+import dataclasses
 import enum
 import math
 
-from typing import Any, Optional, Protocol
-
-import attrs
+from typing import Any, Optional, Protocol, TypedDict, NotRequired, TYPE_CHECKING
 
 from ..commontypes import Size, Rect, Point
 from ..rendering.cairo import Cairo
@@ -16,6 +17,9 @@ from ..rendering.rendertypes import (
     Rendered,
 )
 
+if TYPE_CHECKING:
+    from numbers import Number
+
 
 class DrawCallback(Protocol):
     def __call__(self, cairo: Cairo): ...
@@ -27,7 +31,7 @@ class ButtonState(enum.Enum):
     SELECTED = enum.auto()
 
 
-@attrs.define(init=False)
+@dataclasses.dataclass
 class Button:
     normal: Cairo
     inverted: Cairo
@@ -37,8 +41,9 @@ class Button:
     state: ButtonState
     last_rendered_state: Optional[ButtonState]
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         pango: Pango,
         button_text: str,
         button_size: Size,
@@ -84,7 +89,7 @@ class Button:
             path_ops=(CairoPathOp(op=CairoOp.STROKE, color=CairoColor.WHITE),),
         )
         origin = screen_location if screen_location is not None else Point.zeroes()
-        self.__attrs_init__(
+        return cls(
             normal=normal,
             inverted=inverted,
             outlined=outlined,
@@ -173,3 +178,69 @@ class Button:
             draw_callback(cairo)
         cairo.set_draw_color(CairoColor.BLACK)
         return cairo
+
+
+class ButtonSpecs(TypedDict):
+    button_text: str
+    font: NotRequired[str]
+    button_value: NotRequired[Any]
+    draw_callback: NotRequired[DrawCallback]
+
+
+def make_button_row(
+    *button_spec_groups: tuple[ButtonSpecs],
+    button_size: Size,
+    corner_radius: int,
+    button_y: Number,
+    row_width: Number,
+    pango: Pango,
+    default_font: str = None,
+    align_baseline: bool = False,
+):
+    # big space between groups, small space between items within groups. maybe divide up the screen width by the number of groups?
+    # that doesn't play well when we haven't got even numbers though
+    pass
+
+    buffer = button_size.width * 2 / 3
+    group_widths: list[Number] = []
+    for group in button_spec_groups:
+        if len(group) == 0:
+            group_widths.append(0)
+            continue
+        group_widths.append(button_size.width * len(group) + buffer * (len(group) - 1))
+        for button_spec in group:
+            if button_spec.get("font") is None and default_font is None:
+                raise ValueError("Cannot omit button font if default_font is None")
+    total_button_widths = sum(group_widths)
+    min_inter_group_buffer = buffer * (len(button_spec_groups) - 1)
+    if total_button_widths + min_inter_group_buffer > row_width:
+        raise ValueError(f"Cannot fit this many buttons (total width {total_button_widths}) into row width {row_width}.")
+
+    # it's N rather than N-1 because we want half a buffer at the beginning and half a buffer at the end.
+    inter_group_buffer = (row_width - total_button_widths) / len(button_spec_groups)
+    buttons = []
+    button_x = inter_group_buffer / 2
+    for group in button_spec_groups:
+        if len(group) == 0:
+            continue
+        for button_spec in group:
+            buttons.append(
+                Button.create(
+                    pango=pango,
+                    button_text=button_spec["button_text"],
+                    button_size=button_size,
+                    corner_radius=corner_radius,
+                    font=button_spec.get("font", default_font),
+                    screen_location=Point(button_x, button_y),
+                    button_value=button_spec.get("button_value"),
+                    align_baseline=align_baseline,
+                    draw_callback=button_spec.get("draw_callback"),
+                )
+            )
+            button_x += button_size.width
+            button_x += buffer
+        # remove the buffer added after the last button in the group
+        button_x -= buffer
+        # but add the inter-group buffer
+        button_x += inter_group_buffer
+    return buttons

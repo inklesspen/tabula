@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import collections
 import collections.abc
+import dataclasses
 import logging
 import typing
 
@@ -8,7 +11,7 @@ from ..commontypes import Point, Size
 from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
-from .widgets import ButtonState, Button
+from .widgets import ButtonState, Button, make_button_row
 from ..util import TABULA
 
 from .base import Screen, TargetScreen
@@ -17,6 +20,7 @@ if typing.TYPE_CHECKING:
     from ..device.hardware import Hardware
     from ..settings import Settings
     from ..commontypes import ScreenInfo
+    from numbers import Number
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,23 @@ DEFAULT_ASCENT_SIZE = 36
 DEFAULT_LINE_SPACING = 1.0
 
 
+@dataclasses.dataclass
+class DrawLineSpacing:
+    ascent: Number
+    line_height: Number
+
+    def __call__(self, button_cairo: Cairo):
+        current_point = button_cairo.current_point
+        assert current_point is not None
+        baseline = current_point.y + self.ascent
+        button_cairo.move_to(Point(x=current_point.x + 20, y=baseline))
+        button_cairo.line_to(Point(x=current_point.x + 60, y=baseline))
+        button_cairo.draw_path()
+        button_cairo.move_to(Point(x=current_point.x + 20, y=baseline - self.line_height))
+        button_cairo.line_to(Point(x=current_point.x + 60, y=baseline - self.line_height))
+        button_cairo.draw_path()
+
+
 class Fonts(Screen):
     size_buttons: list[Button]
     font_buttons: list[Button]
@@ -43,9 +64,9 @@ class Fonts(Screen):
     def __init__(
         self,
         *,
-        settings: "Settings",
-        hardware: "Hardware",
-        screen_info: "ScreenInfo",
+        settings: Settings,
+        hardware: Hardware,
+        screen_info: ScreenInfo,
     ):
         self.settings = settings
         self.hardware = hardware
@@ -119,78 +140,42 @@ class Fonts(Screen):
                 await self.render_sample()
 
     def make_buttons(self):
-        button_size = Size(width=80, height=80)
-        between = 50
-        button_x = 106
-        button_origin = Point(x=button_x, y=650)
-        size_smaller = Button(
-            self.pango, "A", button_size, corner_radius=25, font="B612 6", screen_location=button_origin, button_value="size_smaller"
-        )
-        button_x += button_size.width + between
-        button_origin = Point(x=button_x, y=650)
-        size_larger = Button(
-            self.pango, "A", button_size, corner_radius=25, font="B612 10", screen_location=button_origin, button_value="size_larger"
-        )
-        button_x += button_size.width + between * 2
-        button_origin = Point(x=button_x, y=650)
         ascent = self.pango.calculate_ascent("B612 8")
         line_height = self.pango.calculate_line_height("B612 8")
         smaller_line_height = ascent
         larger_line_height = line_height
 
-        def draw_smaller_line_spacing(button_cairo: Cairo):
-            current_point = button_cairo.current_point
-            assert current_point is not None
-            baseline = current_point.y + ascent
-            button_cairo.move_to(Point(x=current_point.x + 20, y=baseline))
-            button_cairo.line_to(Point(x=current_point.x + 60, y=baseline))
-            button_cairo.draw_path()
-            button_cairo.move_to(Point(x=current_point.x + 20, y=baseline - smaller_line_height))
-            button_cairo.line_to(Point(x=current_point.x + 60, y=baseline - smaller_line_height))
-            button_cairo.draw_path()
-
-        def draw_larger_line_spacing(button_cairo: Cairo):
-            current_point = button_cairo.current_point
-            assert current_point is not None
-            baseline = current_point.y + ascent
-            button_cairo.move_to(Point(x=current_point.x + 20, y=baseline))
-            button_cairo.line_to(Point(x=current_point.x + 60, y=baseline))
-            button_cairo.draw_path()
-            button_cairo.move_to(Point(x=current_point.x + 20, y=baseline - larger_line_height))
-            button_cairo.line_to(Point(x=current_point.x + 60, y=baseline - larger_line_height))
-            button_cairo.draw_path()
-
-        decrease_line_spacing = Button(
-            self.pango,
-            "A",
-            button_size,
+        font_size_buttons = make_button_row(
+            (
+                {"button_text": "A", "font": "B612 6", "button_value": "size_smaller"},
+                {"button_text": "A", "font": "B612 10", "button_value": "size_larger"},
+            ),
+            (
+                {
+                    "button_text": "A",
+                    "button_value": "decrease_line_spacing",
+                    "draw_callback": DrawLineSpacing(ascent, smaller_line_height),
+                },
+                {"button_text": "A", "button_value": "increase_line_spacing", "draw_callback": DrawLineSpacing(ascent, larger_line_height)},
+            ),
+            button_size=Size(width=80, height=80),
             corner_radius=25,
-            font="B612 8",
-            screen_location=button_origin,
-            button_value="decrease_line_spacing",
-            draw_callback=draw_smaller_line_spacing,
+            button_y=650,
+            row_width=self.screen_size.width,
+            pango=self.pango,
+            default_font="B612 8",
         )
-        button_x += button_size.width + between
-        button_origin = Point(x=button_x, y=650)
-        increase_line_spacing = Button(
-            self.pango,
-            "A",
-            button_size,
-            corner_radius=25,
-            font="B612 8",
-            screen_location=button_origin,
-            button_value="increase_line_spacing",
-            draw_callback=draw_larger_line_spacing,
-        )
+
         button_size = Size(width=400, height=100)
         button_x = (self.screen_size.width - button_size.width) // 2
         button_y = 800
+        between = 50
         self.font_buttons = []
         for font in self.drafting_fonts:
             button_font_size = self.pango.find_size_for_desired_ascent(font, DEFAULT_ASCENT_SIZE)
             font_str = f"{font} {button_font_size}"
             button_origin = Point(x=button_x, y=button_y)
-            button = Button(
+            button = Button.create(
                 self.pango,
                 button_text=font,
                 button_size=button_size,
@@ -203,12 +188,8 @@ class Fonts(Screen):
             self.font_buttons.append(button)
         button_size = Size(width=100, height=100)
         action_button_font = "B612 Mono 8"
-        self.action_buttons = [
-            size_smaller,
-            size_larger,
-            decrease_line_spacing,
-            increase_line_spacing,
-            Button(
+        self.action_buttons = font_size_buttons + [
+            Button.create(
                 self.pango,
                 button_text=CONFIRM_GLYPH,
                 button_size=button_size,
@@ -217,7 +198,7 @@ class Fonts(Screen):
                 button_value="confirm",
                 screen_location=Point(x=800, y=1200),
             ),
-            Button(
+            Button.create(
                 self.pango,
                 button_text=ABORT_GLYPH,
                 button_size=button_size,
@@ -226,7 +207,7 @@ class Fonts(Screen):
                 button_value="abort",
                 screen_location=Point(x=200, y=1200),
             ),
-            Button(
+            Button.create(
                 self.pango,
                 button_text=NEXT_SAMPLE_GLYPH,
                 button_size=button_size,
