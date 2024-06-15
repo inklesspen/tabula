@@ -26,10 +26,11 @@ ROOT_CONFIG = """\
 
 NON_DRAFTING_FONTS = {
     # UI fonts
-    "B612 Mod",
-    "B612 Mod Mono",
+    "B612",
+    "B612 Mono",
     "Crimson Pro",
     "Ibarra Real Nova Straylight",
+    "Literata",
     # Generic families
     "Monospace",
     "Sans",
