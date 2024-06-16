@@ -73,7 +73,7 @@ class Tabula:
                 self.screen_info = self.hardware.get_screen_info()
                 self.renderer = Renderer(self.screen_info)
                 self.hardware.clear_screen()
-                nursery.start_soon(self.ticks, trio_util.periodic(15))
+                nursery.start_soon(self.ticks, trio_util.periodic(5))
 
                 await self.show_dialog(TargetDialog.KeyboardDetect)
                 self.screen_stack.value = (self.invoke_screen(TargetScreen.SystemMenu),)

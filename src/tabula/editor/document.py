@@ -1,19 +1,24 @@
 # SPDX-FileCopyrightText: 2023 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
+
 import logging
 import typing
 import unicodedata
 
 import timeflake
 
-from .doctypes import Paragraph
+from .doctypes import Paragraph, Sprint
 from . import wordcount
 from ..util import now
+from ..durations import format_duration
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Sequence
     from ..db import TabulaDb
     import pathlib
+    import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -41,6 +46,8 @@ class DocumentModel:
         self.session_id: timeflake.Timeflake = None
         self.sprint_id: timeflake.Timeflake = None
         self.currently: typing.Optional[Paragraph] = None
+        self.sprint: typing.Optional[Sprint] = None
+        self.sprint_start_para: typing.Optional[int] = None
         self.buffer: list[str] = []
         self._contents_by_id: dict[timeflake.Timeflake, Paragraph] = {}
         self._contents_by_index: dict[int, Paragraph] = {}
@@ -72,9 +79,19 @@ class DocumentModel:
             raise ValueError("The cursor para does not exist.")
         return self.currently.id
 
+    @staticmethod
+    def _wordcount_paras(paras: Sequence[Paragraph]):
+        return wordcount.count_plain_text(wordcount.make_plain_text("\n\n".join([p.markdown for p in paras])))
+
     @property
     def wordcount(self):
-        return wordcount.count_plain_text(wordcount.make_plain_text("\n\n".join([p.markdown for p in self.contents])))
+        return self._wordcount_paras(self.contents)
+
+    @property
+    def sprint_wordcount(self):
+        if not self.has_sprint:
+            return None
+        return self._wordcount_paras(list(self.contents)[self.sprint_start_para :])
 
     def __len__(self):
         return len(self._contents_by_id)
@@ -84,7 +101,7 @@ class DocumentModel:
             return self._contents_by_id[key]
         return self._contents_by_index[key]
 
-    def load_session(self, session_id: timeflake.Timeflake, db: "TabulaDb"):
+    def load_session(self, session_id: timeflake.Timeflake, db: TabulaDb):
         paras = db.load_session_paragraphs(session_id)
         new_para_needed = paras[-1].markdown != ""
         if new_para_needed:
@@ -102,14 +119,14 @@ class DocumentModel:
         self.sprint_id = None
         self.unsaved_changes = False
 
-    def save_session(self, db: "TabulaDb", called_from=None):
+    def save_session(self, db: TabulaDb, called_from=None):
         if not self.has_session or not self.unsaved_changes:
             return
         logger.debug("(called from %s) actually saving session", called_from)
         db.save_session(self.session_id, self.wordcount, self.contents)
         self.unsaved_changes = False
 
-    def delete_session(self, db: "TabulaDb"):
+    def delete_session(self, db: TabulaDb):
         db.delete_session(self.session_id)
         self.contents = []
         self.buffer = []
@@ -118,19 +135,46 @@ class DocumentModel:
         self.sprint_id = None
         self.unsaved_changes = None
 
+    def begin_sprint(self, db: TabulaDb, duration: datetime.timedelta):
+        assert self.has_session and not self.has_sprint
+        self.sprint_id = db.new_sprint(self.session_id, duration)
+        self.sprint = db.load_sprint_info(self.sprint_id)
+        self.new_para()
+        start_time = self.sprint.started_at.strftime("%H:%M")
+        sprint_info_text = f"# Started {format_duration(self.sprint.intended_duration)} sprint at {start_time}."
+        self.buffer.extend(sprint_info_text)
+        self._update_currently()
+        self.sprint_start_para = self.currently.index
+        self.new_para()
+
+    def end_sprint(self, db: TabulaDb):
+        assert self.has_session and self.has_sprint
+        db.update_sprint(self.sprint_id, wordcount=self.sprint_wordcount, ended=True)
+        self.sprint = db.load_sprint_info(self.sprint_id)
+        self.new_para()
+        sprint_info_text = (
+            f"# Sprint ended after {format_duration(self.sprint.actual_duration)} with {wordcount.format_wordcount(self.sprint.wordcount)}."
+        )
+        self.buffer.extend(sprint_info_text)
+        self._update_currently()
+        self.sprint_id = None
+        self.sprint = None
+        self.sprint_start_para = None
+        self.new_para()
+
     def _update_currently(self, evolve=True):
         if evolve:
             self.currently = self.currently.evolve("".join(self.buffer))
         self._contents_by_id[self.currently.id] = self.currently
         self._contents_by_index[self.currently.index] = self.currently
 
-    def keystroke(self, keystroke) -> tuple[timeflake.Timeflake, ...]:
+    def keystroke(self, keystroke):
         self.buffer.append(keystroke)
         self._update_currently()
 
         self.unsaved_changes = True
 
-    def backspace(self) -> tuple[timeflake.Timeflake, ...]:
+    def backspace(self):
         if len(self.buffer) == 0:
             # no going back
             return
@@ -139,7 +183,7 @@ class DocumentModel:
 
         self.unsaved_changes = True
 
-    def new_para(self) -> tuple[timeflake.Timeflake, ...]:
+    def new_para(self):
         if len(self.buffer) == 0:
             return
         self.buffer = []
@@ -163,7 +207,7 @@ class DocumentModel:
     def export_markdown(self):
         return "\n\n".join(p.markdown for p in self.contents)
 
-    def export_session(self, db: "TabulaDb", export_path: "pathlib.Path"):
+    def export_session(self, db: TabulaDb, export_path: pathlib.Path):
         export_path.mkdir(parents=True, exist_ok=True)
         timestamp = now()
         session_id = self.session_id

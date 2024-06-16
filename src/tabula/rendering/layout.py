@@ -9,6 +9,8 @@ from .rendertypes import Alignment, WrapMode, Rendered, CairoColor, LayoutRects
 from ..util import now
 from .cairo import Cairo
 from .fonts import SERIF
+from ..durations import timer_display
+from ..editor.wordcount import format_wordcount
 
 if typing.TYPE_CHECKING:
     from .renderer import Renderer
@@ -136,6 +138,7 @@ class LayoutManager:
             if cursor_para_id == para.id:
                 markup += CURSOR
             if markup not in self.rendered_markups:
+                # print(f"rendering image for {markup!r}")
                 self.render_to_image_surface(markup)
             rendered = self.rendered_markups[markup]
             used_rendereds[markup] = rendered
@@ -149,39 +152,18 @@ class LayoutManager:
         self.target_cairo.fill_with_color(CairoColor.WHITE)
 
         for laidout in laidouts:
-            # Can't use paste_other just yet because the laidouts don't have Cairo instances
-            # Now we can
-            clib.cairo_set_operator(self.target_cairo.context, clib.CAIRO_OPERATOR_SOURCE)
-            clib.cairo_set_source_surface(
-                self.target_cairo.context,
-                laidout.rendered.cairo.surface,
-                0,
-                laidout.y_top,
+            self.target_cairo.paste_other(
+                other=laidout.rendered.cairo,
+                location=Point(x=0, y=laidout.y_top),
+                other_rect=Rect(origin=Point.zeroes(), spread=laidout.rendered.cairo.size),
             )
-            clib.cairo_rectangle(
-                self.target_cairo.context,
-                0,
-                laidout.y_top,
-                laidout.rendered.cairo.size.width,
-                laidout.rendered.cairo.size.height,
-            )
-            clib.cairo_fill(self.target_cairo.context)
 
         if CURSOR in self.rendered_markups:
             # Worth keeping around
             used_rendereds[CURSOR] = self.rendered_markups[CURSOR]
         self.rendered_markups = used_rendereds
 
-        return Rendered(
-            image=self.target_cairo.get_image_bytes(),
-            # image=self.renderer.surface_to_bytes(
-            #     self.target_cairo.surface, self.render_size, skip_inversion=True
-            # ),
-            extent=Rect(
-                origin=Point.zeroes(),
-                spread=self.target_cairo.size,
-            ),
-        )
+        return self.target_cairo.get_rendered(origin=Point.zeroes())
 
 
 def render_compose_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: float):
@@ -276,15 +258,21 @@ class StatusLayout:
             )
 
     def render(self):
+        status_lines = []
+        inner_margin = 25
         # Line 1: Sprint status: timer, wordcount, hotkey reminder
         # Line 2: Session wordcount, current time
-        inner_margin = 25
         # Line 3: capslock, "Tabula", compose
         # Line 3 is drawn separately to work with the glyphs
-        wordcount = self.document.wordcount
-        wordcount_status = "1 word" if wordcount == 1 else "{:,} words".format(wordcount)
-        wordcount_time_line = " — ".join((wordcount_status, now().strftime("%H:%M")))
-        status_lines = [wordcount_time_line]
+        if self.document.has_sprint:
+            sprint_wordcount = self.document.sprint_wordcount
+            sprint_line = " — ".join(
+                (f"{format_wordcount(sprint_wordcount)} in sprint", f"Ends in {timer_display(self.document.sprint.remaining)}")
+            )
+            status_lines.append(sprint_line)
+
+        wordcount_time_line = " — ".join((format_wordcount(self.document.wordcount), now().strftime("%H:%M")))
+        status_lines.append(wordcount_time_line)
         status_line = "\n".join(status_lines)
         clib.pango_layout_set_markup(self.layout, status_line.encode("utf-8"), -1)
         status_rects = self.get_layout_rects()

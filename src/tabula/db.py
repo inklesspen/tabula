@@ -22,7 +22,7 @@ from sqlalchemy.engine import Engine, Connectable, URL as EngineURL, create_engi
 from sqlalchemy.sql import column, text
 import timeflake
 
-from .editor.doctypes import Paragraph, Session
+from .editor.doctypes import Paragraph, Session, Sprint
 from .util import now
 from .durations import format_duration, parse_duration
 
@@ -254,3 +254,24 @@ class TabulaDb:
             )
 
         return sprint_id
+
+    def load_sprint_info(self, sprint_id: timeflake.Timeflake):
+        s = select(sprint_table).where(sprint_table.c.id == sprint_id)
+        with self.engine.begin() as conn:
+            row = conn.execute(s).one()
+            return Sprint(
+                id=row.id,
+                session_id=row.session_id,
+                started_at=row.started_at,
+                intended_duration=row.duration,
+                ended_at=row.ended_at,
+                wordcount=row.wordcount,
+            )
+
+    def update_sprint(self, sprint_id: timeflake.Timeflake, wordcount: int, ended: bool = False):
+        timestamp = now()
+        update = {"wordcount": wordcount}
+        if ended:
+            update["ended_at"] = timestamp
+        with self.engine.begin() as conn:
+            conn.execute(sprint_table.update().where(sprint_table.c.id == sprint_id).values(**update))

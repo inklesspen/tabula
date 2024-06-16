@@ -39,6 +39,16 @@ class Sprint:
     def remaining(self):
         return self.intended_duration - self.elapsed
 
+    @property
+    def actual_duration(self):
+        if self.ended_at is None:
+            return self.elapsed
+        return self.ended_at - self.started_at
+
+    @property
+    def completed(self):
+        return self.elapsed >= self.intended_duration
+
 
 @define(kw_only=True, frozen=True)
 class Paragraph:

@@ -67,3 +67,7 @@ def make_plain_text(markdown: Text) -> Text:
 
 def count_plain_text(text: Text) -> int:
     return cardinality.count(WORD_CHARS.finditer(text))
+
+
+def format_wordcount(wordcount: int):
+    return "1 word" if wordcount == 1 else "{:,} words".format(wordcount)

@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import logging
 import typing
 
-
+from ..commontypes import Size, Rect, Point
 from ..device.hwtypes import AnnotatedKeyEvent, Key
 from ..util import TABULA
+from ..rendering.rendertypes import CairoColor
 from ..rendering.layout import LayoutManager, StatusLayout
+from ..rendering.cairo import Cairo
 
 from .base import Screen, TargetScreen, TargetDialog
 
@@ -19,19 +23,18 @@ logger = logging.getLogger(__name__)
 
 
 class Drafting(Screen):
-    status_font = "Crimson Pro 12"
-
     def __init__(
         self,
         *,
-        settings: "Settings",
-        renderer: "Renderer",
-        db: "TabulaDb",
-        document: "DocumentModel",
+        settings: Settings,
+        renderer: Renderer,
+        db: TabulaDb,
+        document: DocumentModel,
     ):
         self.settings = settings
         self.db = db
         self.document = document
+        self.screen_size = renderer.screen_info.size
         self.layout_manager = LayoutManager(renderer, self.document)
         self.status_layout = StatusLayout(renderer, self.document)
 
@@ -44,8 +47,8 @@ class Drafting(Screen):
             compose=False,
         )
         app.hardware.clear_screen()
-        await self.render_document()
-        await self.render_status()
+        self.render_document()
+        self.render_status()
         app.tick_receivers.append(self.tick)
 
     def resign_responder(self):
@@ -72,18 +75,22 @@ class Drafting(Screen):
             self.status_layout.capslock = event.annotation.capslock
             self.status_layout.compose = event.annotation.compose
         if self.document.graphical_char(event.character):
-            if self.document.whitespace_char(event.character):
-                pass  # TODO: check if we need to end a sprint
-            self.document.keystroke(event.character)
-            await self.render_document()
+            if self.document.whitespace_char(event.character) and self.document.has_sprint and self.document.sprint.completed:
+                self.document.end_sprint(self.db)
+                self.clear_status_area()
+            else:
+                self.document.keystroke(event.character)
+            self.render_document()
         elif event.key is Key.KEY_ENTER:
-            # TODO: check if we need to end a sprint
+            if self.document.has_sprint and self.document.sprint.completed:
+                self.document.end_sprint(self.db)
+                self.clear_status_area()
             self.document.new_para()
-            await self.render_document()
+            self.render_document()
             self.document.save_session(self.db, "KEY_ENTER")
         elif event.key is Key.KEY_BACKSPACE:
             self.document.backspace()
-            await self.render_document()
+            self.render_document()
         elif event.key is Key.KEY_F1:
             self.document.save_session(self.db, "KEY_F1")
             await self.show_help()
@@ -92,33 +99,56 @@ class Drafting(Screen):
             await self.show_compose_help()
         elif event.key is Key.KEY_F8:
             self.document.save_session(self.db, "KEY_F8")
-            # make this a dialog
-            # return ChangeScreen(
-            #     TargetScreen.SprintControl,
-            #     screen_stack_behavior=ScreenStackBehavior.APPEND,
-            # )
+            app = TABULA.get()
+            if self.document.has_sprint:
+                future = await app.show_dialog(TargetDialog.YesNo, message="End sprint early?")
+                result = await future.wait()
+                if result:
+                    self.document.end_sprint(self.db)
+                    self.clear_status_area()
+                    self.render_document()
+                    self.document.save_session(self.db, "sprint ended")
+            else:
+                future = await app.show_dialog(TargetDialog.SprintControl)
+                result = await future.wait()
+                if result:
+                    self.document.begin_sprint(self.db, duration=result)
+                    self.render_document()
+                    self.document.save_session(self.db, "new sprint")
+                logger.debug("sprint control result: %r", result)
 
         elif event.key is Key.KEY_F12:
             app = TABULA.get()
+            if self.document.has_sprint:
+                self.document.end_sprint(self.db)
             if self.document.wordcount == 0:
                 self.document.delete_session(self.db)
             else:
                 self.document.save_session(self.db, "KEY_F12")
             return await app.change_screen(TargetScreen.SystemMenu)
-        await self.render_status()
+        self.render_status()
 
     async def handle_keyboard_disconnect(self):
         self.document.save_session(self.db, "keyboard_disconnect")
 
     async def tick(self):
         self.document.save_session(self.db, "drafting tick")
-        await self.render_status()  # This is mainly to update the clock.
+        self.render_status()  # This is mainly to update the clock.
 
-    async def render_status(self):
+    def clear_status_area(self):
+        app = TABULA.get()
+        half_height = self.screen_size.height // 2
+        status_area = Rect(origin=Point(x=0, y=half_height), spread=Size(width=self.screen_size.width, height=half_height))
+        with Cairo(status_area.spread) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            rendered = cairo.get_rendered(status_area.origin)
+        app.hardware.display_rendered(rendered)
+
+    def render_status(self):
         app = TABULA.get()
         app.hardware.display_rendered(self.status_layout.render())
 
-    async def render_document(self):
+    def render_document(self):
         app = TABULA.get()
         current_font = self.settings.current_font
         font_size = self.settings.current_font_size
