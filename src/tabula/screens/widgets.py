@@ -4,7 +4,7 @@ import dataclasses
 import enum
 import math
 
-from typing import Any, Optional, Protocol, TypedDict, NotRequired, TYPE_CHECKING
+from typing import Protocol, TypedDict, NotRequired, TYPE_CHECKING
 
 from ..commontypes import Size, Rect, Point
 from ..rendering.cairo import Cairo
@@ -19,6 +19,8 @@ from ..rendering.rendertypes import (
 
 if TYPE_CHECKING:
     from numbers import Number
+    from typing import Any, Optional
+    from ..device.hwtypes import Key
 
 
 class DrawCallback(Protocol):
@@ -31,7 +33,7 @@ class ButtonState(enum.Enum):
     SELECTED = enum.auto()
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class Button:
     normal: Cairo
     inverted: Cairo
@@ -40,6 +42,7 @@ class Button:
     button_value: Any
     state: ButtonState
     last_rendered_state: Optional[ButtonState]
+    hotkey: Optional[Key]
 
     @classmethod
     def create(
@@ -54,6 +57,7 @@ class Button:
         button_value: Optional[Any] = None,
         align_baseline: bool = False,
         draw_callback: Optional[DrawCallback] = None,
+        hotkey: Optional[Key] = None,
     ):
         if button_value is None:
             button_value = button_text
@@ -97,6 +101,7 @@ class Button:
             button_value=button_value,
             state=state,
             last_rendered_state=None,
+            hotkey=hotkey,
         )
 
     def needs_render(self, override_state: Optional[ButtonState] = None):
@@ -185,6 +190,7 @@ class ButtonSpecs(TypedDict):
     font: NotRequired[str]
     button_value: NotRequired[Any]
     draw_callback: NotRequired[DrawCallback]
+    hotkey: NotRequired[Key]
 
 
 def make_button_row(
@@ -196,7 +202,7 @@ def make_button_row(
     pango: Pango,
     default_font: str = None,
     align_baseline: bool = False,
-):
+) -> list[Button]:
     # big space between groups, small space between items within groups. maybe divide up the screen width by the number of groups?
     # that doesn't play well when we haven't got even numbers though
     pass
@@ -235,6 +241,7 @@ def make_button_row(
                     button_value=button_spec.get("button_value"),
                     align_baseline=align_baseline,
                     draw_callback=button_spec.get("draw_callback"),
+                    hotkey=button_spec.get("hotkey"),
                 )
             )
             button_x += button_size.width

@@ -1,14 +1,12 @@
 import abc
-import collections
-import collections.abc
+from collections.abc import Callable, Awaitable
 import functools
 import math
 import typing
 
-import msgspec
 import trio
 
-from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase, Key
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..commontypes import Point, Size
 from ..rendering.rendertypes import Alignment, CairoColor
 from ..rendering.cairo import Cairo
@@ -27,11 +25,7 @@ if typing.TYPE_CHECKING:
     from ..db import TabulaDb
     from ..commontypes import ScreenInfo
 
-
-class MenuButton(msgspec.Struct):
-    button: Button
-    handler: collections.abc.Callable[[], collections.abc.Awaitable[None]]
-    key: typing.Optional[Key] = None
+Handler = Callable[[], Awaitable[None]]
 
 
 class ButtonMenu(Screen):
@@ -59,9 +53,9 @@ class ButtonMenu(Screen):
         handler = None
 
         for menu_button in self.menu_buttons:
-            if event.key == menu_button.key:
-                handler = menu_button.handler
-                app.hardware.display_rendered(menu_button.button.render(override_state=ButtonState.PRESSED))
+            if event.key == menu_button.hotkey:
+                handler = typing.cast(Handler, menu_button.button_value)
+                app.hardware.display_rendered(menu_button.render(override_state=ButtonState.PRESSED))
 
         if handler is not None:
             await handler()
@@ -71,9 +65,9 @@ class ButtonMenu(Screen):
         handler = None
         if event.phase is TapPhase.COMPLETED:
             for menu_button in self.menu_buttons:
-                if event.location in menu_button.button:
-                    handler = menu_button.handler
-                    app.hardware.display_rendered(menu_button.button.render(override_state=ButtonState.PRESSED))
+                if event.location in menu_button:
+                    handler = typing.cast(Handler, menu_button.button_value)
+                    app.hardware.display_rendered(menu_button.render(override_state=ButtonState.PRESSED))
         if handler is not None:
             await handler()
 
@@ -165,17 +159,15 @@ class SystemMenu(ButtonMenu):
             button_y += self.button_size.height + skip_height
 
         self.menu_buttons = [
-            MenuButton(
-                button=Button.create(
-                    pango=self.pango,
-                    button_text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
-                    font="B612 8",
-                    corner_radius=50,
-                    button_size=self.button_size,
-                    screen_location=b["point"],
-                ),
-                handler=b["handler"],
-                key=NUMBER_KEYS[b["number"]],
+            Button.create(
+                pango=self.pango,
+                button_text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
+                font="B612 8",
+                corner_radius=50,
+                button_size=self.button_size,
+                screen_location=b["point"],
+                button_value=b["handler"],
+                hotkey=NUMBER_KEYS[b["number"]],
             )
             for b in buttons
         ]
@@ -185,7 +177,7 @@ class SystemMenu(ButtonMenu):
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
             for menu_button in self.menu_buttons:
-                menu_button.button.paste_onto_cairo(cairo)
+                menu_button.paste_onto_cairo(cairo)
             rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
 
@@ -264,16 +256,14 @@ class SessionList(ButtonMenu):
             else:
                 button_text += " \ue0a2"
             menu_buttons.append(
-                MenuButton(
-                    button=Button.create(
-                        pango=self.pango,
-                        button_text=button_text,
-                        button_size=self.session_button_size,
-                        font="B612 8",
-                        corner_radius=50,
-                        screen_location=button_origin,
-                    ),
-                    handler=functools.partial(self.select_session, session),
+                Button.create(
+                    pango=self.pango,
+                    button_text=button_text,
+                    button_size=self.session_button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=button_origin,
+                    button_value=functools.partial(self.select_session, session),
                 )
             )
             button_y += self.button_size.height + skip_height
@@ -282,16 +272,14 @@ class SessionList(ButtonMenu):
             # back button
             prev_page_offset = max(0, self.offset - num_session_buttons)
             menu_buttons.append(
-                MenuButton(
-                    button=Button.create(
-                        pango=self.pango,
-                        button_text="\ue0a9 Prev",
-                        button_size=self.page_button_size,
-                        font="B612 8",
-                        corner_radius=50,
-                        screen_location=Point(x=50, y=1300),
-                    ),
-                    handler=functools.partial(self.change_page, prev_page_offset),
+                Button.create(
+                    pango=self.pango,
+                    button_text="\ue0a9 Prev",
+                    button_size=self.page_button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=Point(x=50, y=1300),
+                    button_value=functools.partial(self.change_page, prev_page_offset),
                 )
             )
 
@@ -299,37 +287,33 @@ class SessionList(ButtonMenu):
         if len(self.sessions[next_page_offset:]) > 0:
             # next button
             menu_buttons.append(
-                MenuButton(
-                    button=Button.create(
-                        pango=self.pango,
-                        button_text="Next \ue0a8",
-                        button_size=self.page_button_size,
-                        font="B612 8",
-                        corner_radius=50,
-                        screen_location=Point(
-                            x=screen_size.width - (50 + self.page_button_size.width),
-                            y=1300,
-                        ),
+                Button.create(
+                    pango=self.pango,
+                    button_text="Next \ue0a8",
+                    button_size=self.page_button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=Point(
+                        x=screen_size.width - (50 + self.page_button_size.width),
+                        y=1300,
                     ),
-                    handler=functools.partial(self.change_page, next_page_offset),
+                    button_value=functools.partial(self.change_page, next_page_offset),
                 )
             )
 
         # return button
         menu_buttons.append(
-            MenuButton(
-                button=Button.create(
-                    pango=self.pango,
-                    button_text="Back",
-                    button_size=self.page_button_size,
-                    font="B612 8",
-                    corner_radius=50,
-                    screen_location=Point(
-                        x=math.floor((screen_size.width - self.page_button_size.width) / 2),
-                        y=1300,
-                    ),
+            Button.create(
+                pango=self.pango,
+                button_text="Back",
+                button_size=self.page_button_size,
+                font="B612 8",
+                corner_radius=50,
+                screen_location=Point(
+                    x=math.floor((screen_size.width - self.page_button_size.width) / 2),
+                    y=1300,
                 ),
-                handler=self.close_menu,
+                button_value=self.close_menu,
             )
         )
         self.menu_buttons = menu_buttons
@@ -339,7 +323,7 @@ class SessionList(ButtonMenu):
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
             for menu_button in self.menu_buttons:
-                menu_button.button.paste_onto_cairo(cairo)
+                menu_button.paste_onto_cairo(cairo)
 
             rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered
@@ -399,57 +383,49 @@ class SessionActions(ButtonMenu):
         button_x = math.floor((screen_size.width - self.button_size.width) / 2)
         if self.can_resume_drafting:
             menu_buttons.append(
-                MenuButton(
-                    button=Button.create(
-                        pango=self.pango,
-                        button_text="Load Session",
-                        button_size=self.button_size,
-                        font="B612 8",
-                        corner_radius=50,
-                        screen_location=Point(x=button_x, y=150),
-                    ),
-                    handler=self.load_session,
+                Button.create(
+                    pango=self.pango,
+                    button_text="Load Session",
+                    button_size=self.button_size,
+                    font="B612 8",
+                    corner_radius=50,
+                    screen_location=Point(x=button_x, y=150),
+                    button_value=self.load_session,
                 )
             )
         if self.selected_session.needs_export or True:
             menu_buttons.append(
-                MenuButton(
-                    button=Button.create(
-                        pango=self.pango,
-                        button_text="Export Session",
-                        button_size=self.button_size,
-                        font="B612 8",
-                        corner_radius=50,
-                        screen_location=Point(x=button_x, y=450),
-                    ),
-                    handler=self.export_session,
-                )
-            )
-        menu_buttons.append(
-            MenuButton(
-                button=Button.create(
+                Button.create(
                     pango=self.pango,
-                    button_text="Delete Session",
+                    button_text="Export Session",
                     button_size=self.button_size,
                     font="B612 8",
                     corner_radius=50,
-                    screen_location=Point(x=button_x, y=650),
-                ),
-                handler=self.delete_session,
+                    screen_location=Point(x=button_x, y=450),
+                    button_value=self.export_session,
+                )
+            )
+        menu_buttons.append(
+            Button.create(
+                pango=self.pango,
+                button_text="Delete Session",
+                button_size=self.button_size,
+                font="B612 8",
+                corner_radius=50,
+                screen_location=Point(x=button_x, y=650),
+                button_value=self.delete_session,
             )
         )
 
         menu_buttons.append(
-            MenuButton(
-                button=Button.create(
-                    pango=self.pango,
-                    button_text="Back",
-                    button_size=self.button_size,
-                    font="B612 8",
-                    corner_radius=50,
-                    screen_location=Point(x=button_x, y=850),
-                ),
-                handler=self.back_to_session_list,
+            Button.create(
+                pango=self.pango,
+                button_text="Back",
+                button_size=self.button_size,
+                font="B612 8",
+                corner_radius=50,
+                screen_location=Point(x=button_x, y=850),
+                button_value=self.back_to_session_list,
             )
         )
 
@@ -460,7 +436,7 @@ class SessionActions(ButtonMenu):
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
             for menu_button in self.menu_buttons:
-                menu_button.button.paste_onto_cairo(cairo)
+                menu_button.paste_onto_cairo(cairo)
 
             header_text = f"Last edited {humanized_delta(self.session_delta)}\nWordcount: {self.selected_session.wordcount}"
             cairo.move_to(Point(x=0, y=10))
