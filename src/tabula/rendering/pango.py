@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from contextlib import AbstractContextManager
 import typing
 
@@ -24,7 +26,7 @@ class PangoLayout(AbstractContextManager):
     def __init__(
         self,
         *,
-        pango: "Pango",
+        pango: Pango,
         width: float,
         justify: bool = False,
         alignment: Alignment = Alignment.LEFT,

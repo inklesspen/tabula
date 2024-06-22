@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import collections.abc
 from contextlib import AbstractContextManager, contextmanager
 import math

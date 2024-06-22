@@ -31,6 +31,7 @@ NON_DRAFTING_FONTS = {
     "Crimson Pro",
     "Ibarra Real Nova Straylight",
     "Literata",
+    "Material Symbols",
     # Generic families
     "Monospace",
     "Sans",

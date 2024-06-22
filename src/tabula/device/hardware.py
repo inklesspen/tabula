@@ -13,7 +13,7 @@ from .hwtypes import (
     Led,
     TouchCoordinateTransform,
 )
-from ..commontypes import Rect, Size, ScreenInfo
+from ..commontypes import Rect, Size, ScreenInfo, ScreenRotation
 from .keystreams import make_keystream
 from .gestures import make_tapstream
 from ..settings import Settings
@@ -51,6 +51,9 @@ class Hardware(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_screen_info(self) -> ScreenInfo: ...
+
+    @abc.abstractmethod
+    def set_rotation(self, sr: ScreenRotation): ...
 
     @abc.abstractmethod
     def display_pixels(self, imagebytes: bytes, rect: Rect): ...
@@ -152,6 +155,9 @@ class KoboHardware(Hardware):
     def get_screen_info(self) -> ScreenInfo:
         info = self.fbink.get_screen_info()
         return info
+
+    def set_rotation(self, sr: ScreenRotation):
+        raise NotImplementedError()
 
     def display_pixels(self, imagebytes: bytes, rect: Rect):
         if self.fbink.active:

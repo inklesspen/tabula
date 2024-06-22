@@ -14,13 +14,58 @@ from ..rendering.rendertypes import (
     CairoOp,
     CairoColor,
     Alignment,
+    WrapMode,
     Rendered,
 )
 
 if TYPE_CHECKING:
-    from numbers import Number
     from typing import Any, Optional
     from ..device.hwtypes import Key
+
+
+@dataclasses.dataclass(kw_only=True)
+class Label:
+    bounds: Rect
+    cairo: Cairo
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        pango: Pango,
+        text: str,
+        font: str,
+        location: Point,
+        size: Size = None,
+        width: int = None,
+        alignment: Alignment = Alignment.CENTER,
+        wrap: WrapMode = WrapMode.WORD_CHAR,
+    ):
+        # if size is None:
+        #     if width is None:
+        #         raise ValueError("Must specify either size or width")
+        #     height = math.ceil(pango.calculate_line_height(font))
+        #     size = Size(width=width, height=height)
+        layout_width = size.width if size is not None else width
+        with PangoLayout(pango=pango, width=layout_width, alignment=alignment, wrap=wrap) as layout:
+            layout.set_font(font)
+            layout.set_content(text)
+            if size is None:
+                if width is None:
+                    raise ValueError("Must specify either size or width")
+                rects = layout.get_layout_rects()
+                height = rects.logical.spread.height
+                size = Size(width=width, height=height)
+            cairo = Cairo(size)
+            cairo.setup()
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.set_draw_color(CairoColor.BLACK)
+            cairo.move_to(Point.zeroes())
+            layout.render(cairo)
+        return cls(bounds=Rect(origin=location, spread=size), cairo=cairo)
+
+    def paste_onto_cairo(self, cairo: Cairo):
+        cairo.paste_other(self.cairo, self.bounds.origin, Rect(origin=Point.zeroes(), spread=self.bounds.spread))
 
 
 class DrawCallback(Protocol):
@@ -185,30 +230,29 @@ class Button:
         return cairo
 
 
-class ButtonSpecs(TypedDict):
+class ButtonSpec(TypedDict):
     button_text: str
     font: NotRequired[str]
     button_value: NotRequired[Any]
     draw_callback: NotRequired[DrawCallback]
     hotkey: NotRequired[Key]
+    state: NotRequired[ButtonState]
 
 
 def make_button_row(
-    *button_spec_groups: tuple[ButtonSpecs],
+    *button_spec_groups: tuple[ButtonSpec],
     button_size: Size,
     corner_radius: int,
-    button_y: Number,
-    row_width: Number,
+    button_y: int | float,
+    row_width: int | float,
     pango: Pango,
-    default_font: str = None,
+    default_font: Optional[str] = None,
     align_baseline: bool = False,
 ) -> list[Button]:
     # big space between groups, small space between items within groups. maybe divide up the screen width by the number of groups?
     # that doesn't play well when we haven't got even numbers though
-    pass
-
     buffer = button_size.width * 2 / 3
-    group_widths: list[Number] = []
+    group_widths: list[int | float] = []
     for group in button_spec_groups:
         if len(group) == 0:
             group_widths.append(0)
@@ -242,6 +286,7 @@ def make_button_row(
                     align_baseline=align_baseline,
                     draw_callback=button_spec.get("draw_callback"),
                     hotkey=button_spec.get("hotkey"),
+                    state=button_spec.get("state", ButtonState.NORMAL),
                 )
             )
             button_x += button_size.width
@@ -251,3 +296,154 @@ def make_button_row(
         # but add the inter-group buffer
         button_x += inter_group_buffer
     return buttons
+
+
+def _make_centered_button_stack_positions(
+    *specs: ButtonSpec,
+    button_size: Size,
+    available_space: Size,
+) -> list[Point]:
+    row_buffer = button_size.height * 2 / 3
+    height_needed = button_size.height * len(specs) + row_buffer * len(specs)
+    if height_needed > available_space.height:
+        raise ValueError("Not enough available height for a single centered stack")
+
+    # screen_size = self.screen_info.size
+    # button_x = math.floor((screen_size.width - self.button_size.width) / 2)
+    # button_total_height = self.button_size.height * len(buttons)
+    # whitespace_height = screen_size.height - button_total_height
+    # skip_height = math.floor(whitespace_height / (len(buttons) + 1))
+    # button_y = skip_height
+
+    # for button in buttons:
+    #     button["point"] = Point(x=button_x, y=button_y)
+    #     button_y += self.button_size.height + skip_height
+
+    button_x = available_space.width / 2 - button_size.width / 2
+    button_y = row_buffer / 2
+    button_positions = []
+    for _ in specs:
+        button_positions.append(Point(x=math.floor(button_x), y=math.floor(button_y)))
+        button_y += button_size.height + row_buffer
+    return button_positions
+
+
+def _make_centered_row_button_stack_positions(
+    *specs: ButtonSpec,
+    button_size: Size,
+    available_space: Size,
+) -> list[Point]:
+    col_buffer = button_size.width * 2 / 3
+    row_buffer = button_size.height * 2 / 3
+    buffer = min(col_buffer, row_buffer)
+    left_x = buffer / 2
+    rows = []
+    current_row = None
+    for spec in specs:
+        if current_row is None:
+            current_row = []
+            rows.append(current_row)
+            button_x = left_x
+        current_row.append(spec)
+        button_x += button_size.width
+        if (button_x + left_x) >= available_space.width:
+            current_row = None
+        else:
+            button_x += buffer
+    needed_height = (button_size.height + buffer) * len(rows)
+    if needed_height > available_space.height:
+        raise ValueError("Not enough available height for the necessary number of rows")
+
+    button_positions = []
+    button_y = buffer / 2
+    for current_row in rows:
+        needed_width = len(current_row) * (button_size.width + buffer) - buffer
+        button_x = (available_space.width - needed_width) // 2
+        for _ in current_row:
+            button_positions.append(Point(x=math.floor(button_x), y=math.floor(button_y)))
+            button_x += button_size.width + buffer
+        button_y += button_size.height + buffer
+    return button_positions
+
+
+def _make_columnular_button_stack_positions(
+    *specs: ButtonSpec,
+    button_size: Size,
+    available_space: Size,
+) -> list[Point]:
+    col_buffer = button_size.width * 2 / 3
+    row_buffer = button_size.height * 2 / 3
+    buffer = min(col_buffer, row_buffer)
+
+    top_y = buffer / 2
+    columns = []
+    current_column = None
+    for spec in specs:
+        if current_column is None:
+            current_column = []
+            columns.append(current_column)
+            button_y = top_y
+        current_column.append(spec)
+        button_y += button_size.height
+        if (button_y + top_y) >= available_space.height:
+            current_column = None
+        else:
+            button_y += buffer
+    needed_width = (button_size.width + buffer) * len(columns)
+    if needed_width > available_space.width:
+        raise ValueError("Not enough available width for the necessary number of columns")
+
+    button_positions = []
+    button_x = buffer / 2
+    for current_column in columns:
+        button_y = top_y
+        for _ in current_column:
+            button_positions.append(Point(x=math.floor(button_x), y=math.floor(button_y)))
+            button_y += button_size.height + buffer
+        button_x += button_size.width + buffer
+    return button_positions
+
+
+def make_button_stack(
+    *specs: ButtonSpec,
+    button_size: Size,
+    corner_radius: int,
+    screen_area: Rect,
+    pango: Pango,
+    default_font: Optional[str] = None,
+    align_baseline: bool = False,
+) -> list[Button]:
+    # col_buffer = button_size.width * 2 / 3
+    # row_buffer = button_size.height * 2 / 3
+    # try one centered stack first
+    positions = None
+    place_error = None
+    for placer in [
+        _make_centered_button_stack_positions,
+        _make_centered_row_button_stack_positions,
+        _make_columnular_button_stack_positions,
+    ]:
+        try:
+            positions = placer(*specs, button_size=button_size, available_space=screen_area.spread)
+            if positions is not None:
+                break
+        except ValueError as e:
+            place_error = e
+    if positions is None:
+        raise place_error
+    return [
+        Button.create(
+            pango=pango,
+            button_text=button_spec["button_text"],
+            button_size=button_size,
+            corner_radius=corner_radius,
+            font=button_spec.get("font", default_font),
+            screen_location=position + screen_area.origin,
+            button_value=button_spec.get("button_value"),
+            align_baseline=align_baseline,
+            draw_callback=button_spec.get("draw_callback"),
+            hotkey=button_spec.get("hotkey"),
+            state=button_spec.get("state", ButtonState.NORMAL),
+        )
+        for button_spec, position in zip(specs, positions)
+    ]

@@ -38,7 +38,7 @@ import outcome
 from .keycodes import KEYCODES, MODIFIER_MAP
 from ..app import parser, Tabula
 from ..settings import Settings
-from ..commontypes import Rect, Size, ScreenInfo, Point
+from ..commontypes import Rect, Size, ScreenInfo, Point, ScreenRotation
 from ..device.hwtypes import KeyEvent, AnnotatedKeyEvent, SetLed, TapEvent, TapPhase, KeyboardDisconnect
 from ..device.keystreams import make_keystream
 from ..device.keyboard_consts import Key, KeyPress
@@ -63,6 +63,10 @@ class ScreenGeometry(enum.Enum):
     @enum.property
     def ns_size(self):
         return NSMakeSize(self.value.width, self.value.height)
+
+    @enum.property
+    def rotation(self):
+        return ScreenRotation.PORTRAIT if self is ScreenGeometry.PORTRAIT else ScreenRotation.LANDSCAPE_PORT_RIGHT
 
 
 # https://trio.readthedocs.io/en/stable/reference-lowlevel.html#using-guest-mode-to-run-trio-on-top-of-other-event-loops
@@ -134,8 +138,17 @@ class CocoaHardware:
         self.event_channel.send_nowait(KeyboardDisconnect())
 
     def get_screen_info(self) -> ScreenInfo:
-        val = ScreenInfo(size=self.screen_geometry.value, dpi=300)
+        val = ScreenInfo(size=self.screen_geometry.value, dpi=300, rotation=self.screen_geometry.rotation)
         return val
+
+    def set_rotation(self, sr: ScreenRotation):
+        desired = (
+            ScreenGeometry.LANDSCAPE
+            if sr is ScreenRotation.LANDSCAPE_PORT_LEFT or sr is ScreenRotation.LANDSCAPE_PORT_RIGHT
+            else ScreenGeometry.PORTRAIT
+        )
+        self.screen_geometry = desired
+        self.appdelegate.geometryChanged()
 
     def display_pixels(self, imagebytes: bytes, rect: Rect):
         origin = northwest_to_southwest(rect, self.screen_geometry.value)
@@ -338,28 +351,38 @@ class TabulaAppDelegate(NSResponder, protocols=[NSApplicationDelegate]):
         return self
 
     def applicationDidFinishLaunching_(self, aNotification):
-        geometry = self.hardware.screen_geometry.value
+        geometry = self.hardware.screen_geometry
         styleMask = NSClosableWindowMask | NSTitledWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask
         self.mainWindow = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, geometry.width * 0.75, geometry.height * 0.75), styleMask, NSBackingStoreBuffered, False
+            NSMakeRect(0, 0, geometry.value.width * 0.75, geometry.value.height * 0.75), styleMask, NSBackingStoreBuffered, False
         )
         self.mainWindow.setTitle_("Tabula")
         self.mainWindowDelegate = KoboWindowDelegate.alloc().initWithCancelScope_(self.app_cancel_scope)
         self.mainWindow.setDelegate_(self.mainWindowDelegate)
 
         # TODO: if we add orientation flipping, remember to adjust this.
-        aspect_ratio = self.hardware.screen_geometry.ns_size
+        aspect_ratio = geometry.ns_size
         # logger.info("Setting window aspect ratio to %r", aspect_ratio)
         self.mainWindow.setAspectRatio_(aspect_ratio)
 
         self.view = KoboView.newWithHardware_(self.hardware)
-        self.view.setTabulaScreenSize(geometry)
+        self.view.setTabulaScreenSize(geometry.value)
         self.mainWindow.setContentView_(self.view)
 
         self.mainWindow.cascadeTopLeftFromPoint_(NSMakePoint(20, 20))
         self.mainWindow.makeKeyAndOrderFront_(self)
         self.mainWindow.makeFirstResponder_(self.view)
         # self.doDraw()
+
+    @objc.python_method
+    def geometryChanged(self):
+        geometry = self.hardware.screen_geometry
+        new_content_rect = NSMakeRect(0, 0, geometry.value.width * 0.75, geometry.value.height * 0.75)
+        new_frame_rect = self.mainWindow.frameRectForContentRect_(new_content_rect)
+        aspect_ratio = geometry.ns_size
+        self.mainWindow.setAspectRatio_(aspect_ratio)
+        self.view.setTabulaScreenSize(geometry.value)
+        self.mainWindow.setFrame_display_(new_frame_rect, True)
 
     def requestQuit_(self, param):
         # print(f"requestQuit:{param}")

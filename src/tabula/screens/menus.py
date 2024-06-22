@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 from collections.abc import Callable, Awaitable
 import functools
@@ -7,14 +9,15 @@ import typing
 import trio
 
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
-from ..commontypes import Point, Size
-from ..rendering.rendertypes import Alignment, CairoColor
+from ..commontypes import Point, Size, Rect
+from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo
-from ..rendering.pango import Pango, PangoLayout
+from ..rendering.fonts import SERIF
+from ..rendering.pango import Pango
 from ..editor.document import DocumentModel
 from ..editor.doctypes import Session
 from ..util import now, humanized_delta, TABULA
-from .widgets import ButtonState, Button
+from .widgets import Label, ButtonState, Button, ButtonSpec, make_button_stack
 
 from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
 from .base import Screen, TargetScreen, TargetDialog
@@ -33,12 +36,7 @@ class ButtonMenu(Screen):
     # Spread them as equally as possible along the screen height.
     button_size = Size(width=600, height=100)
 
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        screen_info: "ScreenInfo",
-    ):
+    def __init__(self, *, settings: Settings, screen_info: ScreenInfo):
         self.settings = settings
         self.screen_info = screen_info
         self.pango = Pango(dpi=screen_info.dpi)
@@ -46,6 +44,7 @@ class ButtonMenu(Screen):
     async def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream(enable_composes=False)
+        self.screen_info = app.screen_info
         self.render_screen()
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
@@ -81,18 +80,11 @@ class ButtonMenu(Screen):
     def make_buttons(self): ...
 
     @abc.abstractmethod
-    def render(self) -> "Rendered": ...
+    def render(self) -> Rendered: ...
 
 
 class SystemMenu(ButtonMenu):
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        screen_info: "ScreenInfo",
-        db: "TabulaDb",
-        document: "DocumentModel",
-    ):
+    def __init__(self, *, settings: Settings, screen_info: ScreenInfo, db: TabulaDb, document: DocumentModel):
         super().__init__(
             settings=settings,
             screen_info=screen_info,
@@ -101,76 +93,44 @@ class SystemMenu(ButtonMenu):
         self.document = document
 
     def make_buttons(self):
-        buttons = [
-            {
-                "handler": self.new_session,
-                "number": 1,
-                "title": "New Session",
-            },
-            {
-                "handler": self.previous_session,
-                "number": 2,
-                "title": "Previous Session",
-            },
+        specs = [
+            ButtonSpec(button_text=f"{B612_CIRCLED_DIGITS[1]} — New Session", button_value=self.new_session, hotkey=NUMBER_KEYS[1]),
+            ButtonSpec(
+                button_text=f"{B612_CIRCLED_DIGITS[2]} — Previous Session", button_value=self.previous_session, hotkey=NUMBER_KEYS[2]
+            ),
         ]
         next_number = 3
         if self.document.has_session:
-            buttons.append(
-                {
-                    "handler": self.export_current_session,
-                    "number": next_number,
-                    "title": "Export Current Session",
-                }
+            specs.append(
+                ButtonSpec(
+                    button_text=f"{B612_CIRCLED_DIGITS[next_number]} — Export Current Session",
+                    button_value=self.export_current_session,
+                    hotkey=NUMBER_KEYS[next_number],
+                )
             )
             next_number += 1
-        buttons.append(
-            {
-                "handler": self.set_font,
-                "number": next_number,
-                "title": "Fonts",
-            }
+        specs.append(
+            ButtonSpec(
+                button_text=f"{B612_CIRCLED_DIGITS[next_number]} — Fonts", button_value=self.set_font, hotkey=NUMBER_KEYS[next_number]
+            )
         )
         next_number += 1
         if self.document.has_session:
-            buttons.append(
-                {
-                    "handler": self.resume_drafting,
-                    "number": 9,
-                    "title": "Resume Drafting",
-                }
+            specs.append(
+                ButtonSpec(
+                    button_text=f"{B612_CIRCLED_DIGITS[9]} — Resume Drafting", button_value=self.resume_drafting, hotkey=NUMBER_KEYS[9]
+                )
             )
-        buttons.append(
-            {
-                "handler": self.shutdown,
-                "number": 0,
-                "title": "Shutdown",
-            }
+        specs.append(ButtonSpec(button_text=f"{B612_CIRCLED_DIGITS[0]} — Shutdown", button_value=self.shutdown, hotkey=NUMBER_KEYS[0]))
+
+        self.menu_buttons = make_button_stack(
+            *specs,
+            button_size=self.button_size,
+            corner_radius=50,
+            screen_area=Rect(origin=Point.zeroes(), spread=self.screen_info.size),
+            pango=self.pango,
+            default_font="B612 8",
         )
-
-        screen_size = self.screen_info.size
-        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
-        button_total_height = self.button_size.height * len(buttons)
-        whitespace_height = screen_size.height - button_total_height
-        skip_height = math.floor(whitespace_height / (len(buttons) + 1))
-        button_y = skip_height
-
-        for button in buttons:
-            button["point"] = Point(x=button_x, y=button_y)
-            button_y += self.button_size.height + skip_height
-
-        self.menu_buttons = [
-            Button.create(
-                pango=self.pango,
-                button_text=f"{B612_CIRCLED_DIGITS[b['number']]} — {b['title']}",
-                font="B612 8",
-                corner_radius=50,
-                button_size=self.button_size,
-                screen_location=b["point"],
-                button_value=b["handler"],
-                hotkey=NUMBER_KEYS[b["number"]],
-            )
-            for b in buttons
-        ]
 
     def render(self):
         with Cairo(self.screen_info.size) as cairo:
@@ -218,13 +178,7 @@ class SessionList(ButtonMenu):
     session_button_size = Size(width=800, height=100)
     page_button_size = Size(width=200, height=100)
 
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        screen_info: "ScreenInfo",
-        db: "TabulaDb",
-    ):
+    def __init__(self, *, settings: Settings, screen_info: ScreenInfo, db: TabulaDb):
         super().__init__(
             settings=settings,
             screen_info=screen_info,
@@ -278,7 +232,7 @@ class SessionList(ButtonMenu):
                     button_size=self.page_button_size,
                     font="B612 8",
                     corner_radius=50,
-                    screen_location=Point(x=50, y=1300),
+                    screen_location=Point(x=50, y=usable_height),
                     button_value=functools.partial(self.change_page, prev_page_offset),
                 )
             )
@@ -295,7 +249,7 @@ class SessionList(ButtonMenu):
                     corner_radius=50,
                     screen_location=Point(
                         x=screen_size.width - (50 + self.page_button_size.width),
-                        y=1300,
+                        y=usable_height,
                     ),
                     button_value=functools.partial(self.change_page, next_page_offset),
                 )
@@ -311,7 +265,7 @@ class SessionList(ButtonMenu):
                 corner_radius=50,
                 screen_location=Point(
                     x=math.floor((screen_size.width - self.page_button_size.width) / 2),
-                    y=1300,
+                    y=usable_height,
                 ),
                 button_value=self.close_menu,
             )
@@ -352,15 +306,7 @@ class SessionActions(ButtonMenu):
     session_button_size = Size(width=800, height=100)
     page_button_size = Size(width=200, height=100)
 
-    def __init__(
-        self,
-        *,
-        settings: "Settings",
-        screen_info: "ScreenInfo",
-        db: "TabulaDb",
-        document: "DocumentModel",
-        session: Session,
-    ):
+    def __init__(self, *, settings: Settings, screen_info: ScreenInfo, db: TabulaDb, document: DocumentModel, session: Session):
         super().__init__(
             settings=settings,
             screen_info=screen_info,
@@ -376,60 +322,46 @@ class SessionActions(ButtonMenu):
         self.session_delta = self.selected_session.updated_at - timestamp
 
     def make_buttons(self):
-        screen_size = self.screen_info.size
-
-        menu_buttons = []
-
-        button_x = math.floor((screen_size.width - self.button_size.width) / 2)
+        button_top = 150 if self.can_resume_drafting else 450
+        specs = []
         if self.can_resume_drafting:
-            menu_buttons.append(
-                Button.create(
-                    pango=self.pango,
+            specs.append(
+                ButtonSpec(
                     button_text="Load Session",
-                    button_size=self.button_size,
-                    font="B612 8",
-                    corner_radius=50,
-                    screen_location=Point(x=button_x, y=150),
                     button_value=self.load_session,
                 )
             )
-        if self.selected_session.needs_export or True:
-            menu_buttons.append(
-                Button.create(
-                    pango=self.pango,
+        if self.selected_session.needs_export:
+            specs.append(
+                ButtonSpec(
                     button_text="Export Session",
-                    button_size=self.button_size,
-                    font="B612 8",
-                    corner_radius=50,
-                    screen_location=Point(x=button_x, y=450),
                     button_value=self.export_session,
                 )
             )
-        menu_buttons.append(
-            Button.create(
-                pango=self.pango,
+        specs.append(
+            ButtonSpec(
                 button_text="Delete Session",
-                button_size=self.button_size,
-                font="B612 8",
-                corner_radius=50,
-                screen_location=Point(x=button_x, y=650),
                 button_value=self.delete_session,
             )
         )
-
-        menu_buttons.append(
-            Button.create(
-                pango=self.pango,
+        specs.append(
+            ButtonSpec(
                 button_text="Back",
-                button_size=self.button_size,
-                font="B612 8",
-                corner_radius=50,
-                screen_location=Point(x=button_x, y=850),
                 button_value=self.back_to_session_list,
             )
         )
 
-        self.menu_buttons = menu_buttons
+        self.menu_buttons = make_button_stack(
+            *specs,
+            button_size=self.button_size,
+            corner_radius=50,
+            screen_area=Rect(
+                origin=Point(x=0, y=button_top),
+                spread=Size(width=self.screen_info.size.width, height=self.screen_info.size.height - button_top),
+            ),
+            pango=self.pango,
+            default_font="B612 8",
+        )
 
     def render(self):
         with Cairo(self.screen_info.size) as cairo:
@@ -439,26 +371,18 @@ class SessionActions(ButtonMenu):
                 menu_button.paste_onto_cairo(cairo)
 
             header_text = f"Last edited {humanized_delta(self.session_delta)}\nWordcount: {self.selected_session.wordcount}"
-            cairo.move_to(Point(x=0, y=10))
-            with PangoLayout(
-                pango=self.pango,
-                width=cairo.size.width,
-                alignment=Alignment.CENTER,
-            ) as layout:
-                layout.set_font("Crimson Pro 12")
-                layout.set_content(header_text, is_markup=False)
-                layout.render(cairo)
+            Label.create(
+                pango=self.pango, text=header_text, font=f"{SERIF} 12", location=Point(x=0, y=10), width=self.screen_info.size.width
+            ).paste_onto_cairo(cairo)
 
             if not self.can_resume_drafting:
-                cairo.move_to(Point(x=0, y=150))
-                with PangoLayout(
+                Label.create(
                     pango=self.pango,
-                    width=cairo.size.width,
-                    alignment=Alignment.CENTER,
-                ) as layout:
-                    layout.set_font("B612 8")
-                    layout.set_content("This session is now locked for editing", is_markup=False)
-                    layout.render(cairo)
+                    text="This session is now locked for editing",
+                    font="B612 8",
+                    location=Point(x=0, y=180),
+                    width=self.screen_info.size.width,
+                ).paste_onto_cairo(cairo)
 
             rendered = cairo.get_rendered(origin=Point.zeroes())
         return rendered

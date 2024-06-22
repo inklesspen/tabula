@@ -10,6 +10,7 @@ import pygtrie
 
 from .device.keyboard_consts import Key
 from .durations import format_duration, parse_duration
+from .commontypes import ScreenRotation
 
 COMPOSE_SEQUENCES = {
     "< <": "«",
@@ -165,6 +166,25 @@ settings_converter.register_unstructure_hook(Key, operator.attrgetter("name"))
 settings_converter.register_structure_hook(Key, lambda v, _: Key[v])
 
 
+def unstructure_screen_rotation(sr: ScreenRotation):
+    return {
+        ScreenRotation.PORTRAIT: "PORTRAIT",
+        ScreenRotation.INVERTED_PORTRAIT: "PORTRAIT",
+        ScreenRotation.LANDSCAPE_PORT_LEFT: "LANDSCAPE",
+        ScreenRotation.LANDSCAPE_PORT_RIGHT: "LANDSCAPE",
+    }[sr]
+
+
+def structure_screen_rotation(v: str, typ: type[ScreenRotation]):
+    if v != "PORTRAIT" and v != "LANDSCAPE":
+        raise ValueError(f"Unexpected value {v}")
+    return ScreenRotation.PORTRAIT if v == "PORTRAIT" else ScreenRotation.LANDSCAPE_PORT_RIGHT
+
+
+settings_converter.register_unstructure_hook(ScreenRotation, unstructure_screen_rotation)
+settings_converter.register_structure_hook(ScreenRotation, structure_screen_rotation)
+
+
 @dataclasses.dataclass(kw_only=True)
 class Settings:
     _path: pathlib.Path
@@ -181,6 +201,7 @@ class Settings:
     font_path: pathlib.Path
     max_editable_age: datetime.timedelta
     sprint_lengths: list[datetime.timedelta]
+    default_screen_rotation: ScreenRotation
 
     def set_current_font(self, new_current_font: str, new_size: float):
         self.current_font = new_current_font
@@ -216,6 +237,7 @@ class Settings:
                 "font_path": "bogus_font_path",
                 "max_editable_age": "1h",
                 "sprint_lengths": ["5m", "10m", "15m", "30m"],
+                "default_screen_rotation": "PORTRAIT",
             },
             cls,
         )

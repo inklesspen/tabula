@@ -14,7 +14,7 @@ from .base import Screen, TargetScreen, TargetDialog
 
 if typing.TYPE_CHECKING:
     from ..settings import Settings
-    from ..rendering.renderer import Renderer
+    from ..commontypes import ScreenInfo
     from ..db import TabulaDb
     from ..editor.document import DocumentModel
 
@@ -27,20 +27,25 @@ class Drafting(Screen):
         self,
         *,
         settings: Settings,
-        renderer: Renderer,
+        screen_info: ScreenInfo,
         db: TabulaDb,
         document: DocumentModel,
     ):
         self.settings = settings
         self.db = db
         self.document = document
-        self.screen_size = renderer.screen_info.size
-        self.layout_manager = LayoutManager(renderer, self.document)
-        self.status_layout = StatusLayout(renderer, self.document)
+        self.screen_info = screen_info
+        self.layout_manager = LayoutManager(self.screen_info, self.document)
+        self.status_layout = StatusLayout(self.screen_info, self.document)
 
     async def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream(enable_composes=True)
+        if app.screen_info != self.screen_info:
+            self.screen_info = app.screen_info
+            self.layout_manager = LayoutManager(self.screen_info, self.document)
+            self.status_layout = StatusLayout(self.screen_info, self.document)
+
         # TODO: figure out how to make this work more better
         self.status_layout.set_leds(
             capslock=False,
@@ -137,8 +142,8 @@ class Drafting(Screen):
 
     def clear_status_area(self):
         app = TABULA.get()
-        half_height = self.screen_size.height // 2
-        status_area = Rect(origin=Point(x=0, y=half_height), spread=Size(width=self.screen_size.width, height=half_height))
+        half_height = self.screen_info.size.height // 2
+        status_area = Rect(origin=Point(x=0, y=half_height), spread=Size(width=self.screen_info.size.width, height=half_height))
         with Cairo(status_area.spread) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
             rendered = cairo.get_rendered(status_area.origin)

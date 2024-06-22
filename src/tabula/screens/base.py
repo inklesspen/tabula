@@ -67,7 +67,6 @@ class ResponderMetadata:
 
 class Responder:
     async def run(self, *, task_status: trio.TaskStatus):
-        # await invoke_if_present(self, "become_responder")
         event_send_channel, event_receive_channel = trio.open_memory_channel[TabulaEvent](0)
         with trio.CancelScope() as cancel_scope:
             task_status.started(ResponderMetadata(responder=self, event_channel=event_send_channel, cancel=cancel_scope.cancel))
@@ -81,9 +80,6 @@ class Responder:
                             await invoke_if_present(self, "handle_tap_event", event=event)
                         case KeyboardDisconnect():
                             await invoke_if_present(self, "handle_keyboard_disconnect")
-        # await invoke_if_present(self, "resign_responder")
-        # event_send_channel.close()
-        # event_receive_channel.close()
 
 
 class Screen(Responder):

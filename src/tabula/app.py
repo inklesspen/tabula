@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import pathlib
@@ -11,7 +13,6 @@ from .device.hardware import Hardware, KoboHardware
 from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TapEvent, TabulaEvent
 from .settings import Settings
 from .rendering.fontconfig import setup_fontconfig
-from .rendering.renderer import Renderer
 from .screens.base import Screen, Responder, ResponderMetadata, TargetScreen, TargetDialog
 from .screens.dialogs import Dialog
 from .screens import SCREENS, DIALOGS
@@ -24,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 class Tabula:
     hardware: Hardware
-    renderer: Renderer
     screen_stack: trio_util.AsyncValue[tuple[Screen]]
     tick_receivers: list[AwaitableCallback]
     modal_stack: trio_util.AsyncValue[tuple[Dialog]]
@@ -54,7 +54,6 @@ class Tabula:
         screen_obj = invoke(
             screen_type,
             settings=self.settings,
-            renderer=self.renderer,
             hardware=self.hardware,
             db=self.db,
             document=self.document,
@@ -63,15 +62,22 @@ class Tabula:
         )
         return screen_obj
 
+    def rotate(self):
+        self.hardware.set_rotation(self.screen_info.rotation.next)
+        self.screen_info = self.hardware.get_screen_info()
+        self.hardware.clear_screen()
+
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         TABULA.set(self)
+        starting_rotation = self.hardware.get_screen_info().rotation
+        if starting_rotation != self.settings.default_screen_rotation:
+            self.hardware.set_rotation(self.settings.default_screen_rotation)
         with setup_fontconfig(self.settings.font_path):
             async with trio.open_nursery() as nursery:
                 self._nursery = nursery
                 nursery.start_soon(self.dispatch_events, self.hardware.event_receive_channel, nursery)
                 await nursery.start(self.hardware.run)
                 self.screen_info = self.hardware.get_screen_info()
-                self.renderer = Renderer(self.screen_info)
                 self.hardware.clear_screen()
                 nursery.start_soon(self.ticks, trio_util.periodic(5))
 
@@ -94,7 +100,6 @@ class Tabula:
                 dialog_cls,
                 settings=self.settings,
                 screen_info=self.screen_info,
-                renderer=self.renderer,
                 document=self.document,
                 **additional_kwargs,
             ),

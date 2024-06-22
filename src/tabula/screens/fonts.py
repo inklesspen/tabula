@@ -4,14 +4,15 @@ import collections
 import collections.abc
 import dataclasses
 import logging
+import math
 import typing
 
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase, Key
-from ..commontypes import Point, Size
+from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
-from .widgets import ButtonState, Button, make_button_row
+from .widgets import ButtonState, Button, ButtonSpec, make_button_row, make_button_stack
 from ..util import TABULA
 
 from .base import Screen, TargetScreen
@@ -30,9 +31,10 @@ HUCK_FINN = """You don’t know about me without you have read a book by the nam
 TI = """Squire Trelawney, Doctor Livesey, and the rest of these gentlemen having asked me to write down the whole particulars about Treasure Island, from the beginning to the end, keeping nothing back but the bearings of the island, and that only because there is still treasure not yet lifted, I take up my pen in the year of grace 17⁠—, and go back to the time when my father kept the Admiral Benbow Inn, and the brown old seaman, with the saber cut, first took up his lodging under our roof."""  # noqa: E501
 DRACULA = """<i>_3 May. Bistritz._</i>⁠—Left Munich at 8:35 p.m., on 1st May, arriving at Vienna early next morning; should have arrived at 6:46, but train was an hour late. Buda-Pesth seems a wonderful place, from the glimpse which I got of it from the train and the little I could walk through the streets. I feared to go very far from the station, as we had arrived late and would start as near the correct time as possible. The impression I had was that we were leaving the West and entering the East; the most western of splendid bridges over the Danube, which is here of noble width and depth, took us among the traditions of Turkish rule."""  # noqa: E501
 
-CONFIRM_GLYPH = "\u2713"
-ABORT_GLYPH = "\u2169"
-NEXT_SAMPLE_GLYPH = "\ue0b2"
+ACTION_BUTTON_FONT = "Material Symbols 12"
+CONFIRM_GLYPH = "\ue5ca"
+ABORT_GLYPH = "\ue5cd"
+NEXT_SAMPLE_GLYPH = "\uf587"
 
 DEFAULT_FONT = "Tabula Quattro"
 DEFAULT_ASCENT_SIZE = 36
@@ -92,7 +94,9 @@ class Fonts(Screen):
     async def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream(enable_composes=False)
-        await self.render_screen()
+        self.pango = Pango(dpi=app.screen_info.dpi)
+        self.screen_size = app.screen_info.size
+        self.render_screen()
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
         app = TABULA.get()
@@ -137,9 +141,9 @@ class Fonts(Screen):
                             font_changed = True
             await self.update_button_state()
             if font_changed:
-                await self.render_sample()
+                app.hardware.display_rendered(self.render_sample())
 
-    def make_buttons(self):
+    def make_buttons(self, sample_extent: Rect):
         ascent = self.pango.calculate_ascent("B612 8")
         line_height = self.pango.calculate_line_height("B612 8")
         smaller_line_height = ascent
@@ -160,61 +164,69 @@ class Fonts(Screen):
             ),
             button_size=Size(width=80, height=80),
             corner_radius=25,
-            button_y=650,
+            button_y=sample_extent.bottom + 50,
             row_width=self.screen_size.width,
             pango=self.pango,
             default_font="B612 8",
         )
 
-        button_size = Size(width=400, height=100)
-        button_x = (self.screen_size.width - button_size.width) // 2
-        button_y = 800
-        between = 50
+        font_button_y = font_size_buttons[0].bounds.bottom + 50
+
         self.font_buttons = []
+        font_button_specs = []
+        font_buttons_space = Rect(
+            origin=Point(x=300, y=font_button_y),
+            spread=Size(width=self.screen_size.width - 600, height=self.screen_size.height - (font_button_y + 100)),
+        )
         for font in self.drafting_fonts:
             button_font_size = self.pango.find_size_for_desired_ascent(font, DEFAULT_ASCENT_SIZE)
             font_str = f"{font} {button_font_size}"
-            button_origin = Point(x=button_x, y=button_y)
-            button = Button.create(
-                self.pango,
-                button_text=font,
-                button_size=button_size,
-                corner_radius=50,
-                font=font_str,
-                screen_location=button_origin,
-                state=ButtonState.SELECTED if self.current_font == font else ButtonState.NORMAL,
+            font_button_specs.append(
+                ButtonSpec(
+                    button_text=font,
+                    font=font_str,
+                    state=ButtonState.SELECTED if self.current_font == font else ButtonState.NORMAL,
+                )
             )
-            button_y += button_size.height + between
-            self.font_buttons.append(button)
-        button_size = Size(width=100, height=100)
-        action_button_font = "B612 Mono 8"
+        self.font_buttons = make_button_stack(
+            *font_button_specs, button_size=Size(width=400, height=100), corner_radius=50, pango=self.pango, screen_area=font_buttons_space
+        )
+        button_size = Size(width=80, height=80)
+        space_next_to_sample = self.screen_size.width - sample_extent.right
+        rotate_glyph_position = Point(
+            x=math.floor(sample_extent.right + (space_next_to_sample - button_size.width) / 2),
+            y=math.floor(sample_extent.origin.y + (sample_extent.spread.height - button_size.height) / 2),
+        )
+        confirm_abort_y = self.screen_size.height - 160
+        confirm_x = math.ceil(self.screen_size.width * 0.8 - button_size.width)
+        abort_x = math.floor(self.screen_size.width * 0.2)
         self.action_buttons = font_size_buttons + [
             Button.create(
                 self.pango,
                 button_text=CONFIRM_GLYPH,
                 button_size=button_size,
-                corner_radius=50,
-                font=action_button_font,
+                corner_radius=25,
+                font=ACTION_BUTTON_FONT,
                 button_value="confirm",
-                screen_location=Point(x=800, y=1200),
+                screen_location=Point(x=confirm_x, y=confirm_abort_y),
             ),
             Button.create(
                 self.pango,
                 button_text=ABORT_GLYPH,
                 button_size=button_size,
-                corner_radius=50,
-                font=action_button_font,
+                corner_radius=25,
+                font=ACTION_BUTTON_FONT,
                 button_value="abort",
-                screen_location=Point(x=200, y=1200),
+                screen_location=Point(x=abort_x, y=confirm_abort_y),
             ),
             Button.create(
                 self.pango,
                 button_text=NEXT_SAMPLE_GLYPH,
                 button_size=button_size,
-                corner_radius=50,
-                font=action_button_font,
+                corner_radius=25,
+                font=ACTION_BUTTON_FONT,
                 button_value="next_sample",
-                screen_location=Point(x=800, y=800),
+                screen_location=rotate_glyph_position,
             ),
         ]
 
@@ -230,8 +242,14 @@ class Fonts(Screen):
             if action_button.needs_render():
                 app.hardware.display_rendered(action_button.render())
 
-    async def render_sample(self):
-        sample_size = Size(width=900, height=400)
+    def render_sample(self):
+        desired_area = 360000  # 900 x 400
+        available_width = self.screen_size.width - 200
+        approx_sample_width = min(math.floor(self.screen_size.width * 0.85), available_width)
+        # ensure sample_width is a multiple of 8
+        sample_width = math.ceil(approx_sample_width / 8) * 8
+        sample_height = max(math.ceil(desired_area / sample_width), 256)
+        sample_size = Size(width=sample_width, height=sample_height)
         with Cairo(sample_size) as smaller_cairo:
             smaller_cairo.fill_with_color(CairoColor.WHITE)
 
@@ -248,13 +266,13 @@ class Fonts(Screen):
 
             smaller_x = (self.screen_size.width - smaller_cairo.size.width) // 2
             rendered = smaller_cairo.get_rendered(origin=Point(x=smaller_x, y=100))
-        app = TABULA.get()
-        app.hardware.display_rendered(rendered)
+            return rendered
 
-    async def render_screen(self):
+    def render_screen(self):
         app = TABULA.get()
         app.hardware.clear_screen()
-        self.make_buttons()
-        await self.render_sample()
+        sample = self.render_sample()
+        app.hardware.display_rendered(sample)
+        self.make_buttons(sample.extent)
         for button in self.font_buttons + self.action_buttons:
             app.hardware.display_rendered(button.render())

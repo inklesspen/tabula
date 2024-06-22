@@ -1,3 +1,4 @@
+import enum
 import msgspec
 
 
@@ -89,6 +90,14 @@ class Rect(msgspec.Struct, frozen=True):
     def pillow_origin(self):
         return (self.origin.x, self.origin.y)
 
+    @property
+    def bottom(self):
+        return self.origin.y + self.spread.height
+
+    @property
+    def right(self):
+        return self.origin.x + self.spread.width
+
     def __contains__(self, item):
         if not isinstance(item, Point):
             return NotImplemented
@@ -96,6 +105,26 @@ class Rect(msgspec.Struct, frozen=True):
         return item.x >= min_x and item.x <= max_x and item.y >= min_y and item.y <= max_y
 
 
+class ScreenRotation(enum.Enum):
+    PORTRAIT = enum.auto()
+    LANDSCAPE_PORT_RIGHT = enum.auto()
+    INVERTED_PORTRAIT = enum.auto()
+    LANDSCAPE_PORT_LEFT = enum.auto()
+
+    @enum.property
+    def next(self):
+        match self:
+            case ScreenRotation.PORTRAIT:
+                return ScreenRotation.LANDSCAPE_PORT_RIGHT
+            case ScreenRotation.LANDSCAPE_PORT_RIGHT:
+                return ScreenRotation.INVERTED_PORTRAIT
+            case ScreenRotation.INVERTED_PORTRAIT:
+                return ScreenRotation.LANDSCAPE_PORT_LEFT
+            case ScreenRotation.LANDSCAPE_PORT_LEFT:
+                return ScreenRotation.PORTRAIT
+
+
 class ScreenInfo(msgspec.Struct, frozen=True):
     size: Size
     dpi: float
+    rotation: ScreenRotation

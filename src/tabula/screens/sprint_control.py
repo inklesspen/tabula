@@ -5,11 +5,11 @@ import typing
 
 from ..device.hwtypes import AnnotatedKeyEvent, Key, TapEvent, TapPhase
 from ..commontypes import Point, Size
-from ..rendering.rendertypes import CairoColor, Alignment
+from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo
-from ..rendering.pango import Pango, PangoLayout
+from ..rendering.pango import Pango
 from ..rendering.fonts import SERIF
-from .widgets import ButtonState, Button, make_button_row
+from .widgets import Label, ButtonState, Button, make_button_row
 
 from .dialogs import Dialog
 from ..durations import format_duration
@@ -55,6 +55,8 @@ class SprintControl(Dialog):
     async def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream(enable_composes=False)
+        self.pango = Pango(dpi=app.screen_info.dpi)
+        self.screen_size = app.screen_info.size
         self.render_screen()
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
@@ -72,9 +74,9 @@ class SprintControl(Dialog):
                 if event.location in button:
                     app.hardware.display_rendered(button.render(override_state=ButtonState.PRESSED))
                     match button.button_value:
-                        case 'cancel':
+                        case "cancel":
                             return self.future.finalize(False)
-                        case 'begin':
+                        case "begin":
                             if self.sprint_length is not None:
                                 return self.future.finalize(self.sprint_length)
 
@@ -86,9 +88,9 @@ class SprintControl(Dialog):
         self.length_buttons = make_button_row(
             button_size=Size(width=80, height=80),
             corner_radius=25,
-            button_y=650,
             default_font="B612 8",
             pango=self.pango,
+            button_y=650,
             row_width=self.screen_size.width,
             *sprint_specs,
         )
@@ -124,9 +126,7 @@ class SprintControl(Dialog):
     def update_button_state(self):
         app = TABULA.get()
         for index, length_button in enumerate(self.length_buttons):
-            render_needed = length_button.update_state(
-                ButtonState.SELECTED if self.selected_index == index else ButtonState.NORMAL
-            )
+            render_needed = length_button.update_state(ButtonState.SELECTED if self.selected_index == index else ButtonState.NORMAL)
             if render_needed:
                 app.hardware.display_rendered(length_button.render())
         for action_button in self.action_buttons:
@@ -142,14 +142,10 @@ class SprintControl(Dialog):
 
         with Cairo(Size(width=self.screen_size.width - 100, height=200)) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
-
-            with PangoLayout(pango=self.pango, width=cairo.size.width, alignment=Alignment.CENTER) as layout:
-                layout.set_font(f"{SERIF} 12")
-                layout.set_content(time_info, is_markup=False)
-                cairo.move_to(Point.zeroes())
-                cairo.set_draw_color(CairoColor.BLACK)
-                layout.render(cairo)
-
+            cairo.set_draw_color(CairoColor.BLACK)
+            Label.create(
+                pango=self.pango, width=cairo.size.width, font=f"{SERIF} 12", text=time_info, location=Point.zeroes()
+            ).paste_onto_cairo(cairo)
             rendered = cairo.get_rendered(origin=Point(x=50, y=100))
         app.hardware.display_rendered(rendered)
 

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later OR CC-BY-SA-4.0
+from __future__ import annotations
 
 import typing
 
@@ -19,12 +20,6 @@ if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo
 
 ROMAN_FACE = "B612 8"
-# Pango Markup has the attribute <tt>, which has the effect of setting font-family to Monospace.
-# So we can just do `<span face="Some Monospace Family">Something</span>`
-TT_FACE = "B612 Mono"
-# There's a compose key symbol in unicode (U+2384) but most fonts don't have a glyph for it.
-# One such font is Noto Sans Symbols; alpine package 'font-noto'
-SYMBOL_FACE = "Noto Sans Symbols"
 
 HELP_TEMPLATE = """\
 Tabula is a portable prose-oriented distraction-free drafting tool.
@@ -73,18 +68,15 @@ class Help(Dialog):
     def __init__(
         self,
         *,
-        settings: "Settings",
-        screen_info: "ScreenInfo",
+        settings: Settings,
     ):
         self.settings = settings
-        self.pango = Pango(dpi=screen_info.dpi)
-        self.screen_size = screen_info.size
         self.future = Future()
 
     async def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream(enable_composes=False)
-        screen = self.render()
+        screen = self.render(app.screen_info)
         app.hardware.display_rendered(screen)
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
@@ -93,13 +85,14 @@ class Help(Dialog):
         if event.key is Key.KEY_F2 or event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
             self.future.finalize(TargetDialog.ComposeHelp)
 
-    def render(self) -> Rendered:
+    def render(self, screen_info: ScreenInfo) -> Rendered:
         # TODO: render an X in the corner or something
+        pango = Pango(dpi=screen_info.dpi)
         text = HELP_TEMPLATE.format(composekey=self.settings.compose_key_description)
-        with Cairo(self.screen_size) as cairo:
+        with Cairo(screen_info.size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
-            text_width = self.screen_size.width - 20
-            with PangoLayout(pango=self.pango, width=text_width) as layout:
+            text_width = screen_info.size.width - 20
+            with PangoLayout(pango=pango, width=text_width) as layout:
                 layout.set_font(ROMAN_FACE)
                 layout.set_content(text, is_markup=True)
                 cairo.move_to(Point(x=10, y=10))
@@ -113,18 +106,15 @@ class ComposeHelp(Dialog):
     def __init__(
         self,
         *,
-        settings: "Settings",
-        screen_info: "ScreenInfo",
+        settings: Settings,
     ):
         self.settings = settings
-        self.pango = Pango(dpi=screen_info.dpi)
-        self.screen_size = screen_info.size
         self.future = Future()
 
     async def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream(enable_composes=False)
-        screen = self.render()
+        screen = self.render(app.screen_info)
         app.hardware.display_rendered(screen)
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
@@ -133,13 +123,14 @@ class ComposeHelp(Dialog):
         if event.key is Key.KEY_F1:
             self.future.finalize(TargetDialog.Help)
 
-    def render(self) -> Rendered:
+    def render(self, screen_info: ScreenInfo) -> Rendered:
         # TODO: render an X in the corner or something
+        pango = Pango(dpi=screen_info.dpi)
         text = COMPOSES_TEMPLATE.format(composekey=self.settings.compose_key_description)
-        with Cairo(self.screen_size) as cairo:
+        with Cairo(screen_info.size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
-            text_width = self.screen_size.width - 20
-            with PangoLayout(pango=self.pango, width=text_width) as layout:
+            text_width = screen_info.size.width - 20
+            with PangoLayout(pango=pango, width=text_width) as layout:
                 layout.set_font(ROMAN_FACE)
                 layout.set_content(text, is_markup=True)
                 cairo.move_to(Point(x=10, y=10))

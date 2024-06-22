@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import typing
 
@@ -8,12 +10,13 @@ from ._cairopango import ffi, lib as clib  # type: ignore
 from .rendertypes import Alignment, WrapMode, Rendered, CairoColor, LayoutRects
 from ..util import now
 from .cairo import Cairo
+from .pango import Pango
 from .fonts import SERIF
 from ..durations import timer_display
 from ..editor.wordcount import format_wordcount
 
 if typing.TYPE_CHECKING:
-    from .renderer import Renderer
+    from ..commontypes import ScreenInfo
     from ..editor.document import DocumentModel
 
 
@@ -46,19 +49,19 @@ class LayoutManager:
 
     def __init__(
         self,
-        renderer: "Renderer",
-        document: "DocumentModel",
+        screen_info: ScreenInfo,
+        document: DocumentModel,
         full_height=False,
     ):
-        self.renderer = renderer
+        self.screen_info = screen_info
+        self.pango = Pango(dpi=screen_info.dpi)
         self.document = document
-        self.render_width = renderer.screen_info.size.width
-        self.cursor_y = renderer.screen_info.size.height // 2
-        self.render_height = renderer.screen_info.size.height if full_height else self.cursor_y
-        self.layout = ffi.gc(clib.pango_layout_new(renderer.context), clib.g_object_unref)
+        self.render_width = self.screen_info.size.width
+        self.cursor_y = self.screen_info.size.height // 2
+        self.render_height = self.screen_info.size.height if full_height else self.cursor_y
+        self.layout = ffi.gc(clib.pango_layout_new(self.pango.context), clib.g_object_unref)
         self.setup_layout()
         self.rendered_markups = {}
-        self.renderer.set_fontmap_resolution(self.renderer.screen_info.dpi)
         self.rendered_font = None
         self.skip_height = 0
         self.render_size = Size(self.render_width, self.render_height)
@@ -84,11 +87,11 @@ class LayoutManager:
                 clib.pango_font_description_free,
             ) as font_description,
             ffi.gc(
-                clib.pango_font_map_load_font(self.renderer.fontmap, self.renderer.context, font_description),
+                clib.pango_font_map_load_font(self.pango.fontmap, self.pango.context, font_description),
                 clib.g_object_unref,
             ) as loaded_font,
             ffi.gc(
-                clib.pango_font_get_metrics(loaded_font, self.renderer.language),
+                clib.pango_font_get_metrics(loaded_font, self.pango.language),
                 clib.pango_font_metrics_unref,
             ) as font_metrics,
         ):
@@ -219,13 +222,14 @@ def render_capslock_symbol(cairo: Cairo, origin: Point, scale: float, linewidth:
 class StatusLayout:
     status_font = f"{SERIF} 12"
 
-    def __init__(self, renderer: "Renderer", document: "DocumentModel"):
-        self.renderer = renderer
+    def __init__(self, screen_info: ScreenInfo, document: DocumentModel):
+        self.screen_info = screen_info
+        self.pango = Pango(dpi=screen_info.dpi)
         self.document = document
-        self.render_width = renderer.screen_info.size.width
-        screen_size = self.renderer.screen_info.size
+        self.render_width = self.screen_info.size.width
+        screen_size = self.screen_info.size
         self.status_y_bottom = screen_size.height - 50
-        self.layout = ffi.gc(clib.pango_layout_new(renderer.context), clib.g_object_unref)
+        self.layout = ffi.gc(clib.pango_layout_new(self.pango.context), clib.g_object_unref)
         self.setup_layout()
         self.capslock = False
         self.compose = False
@@ -246,7 +250,7 @@ class StatusLayout:
         )
         clib.pango_layout_set_alignment(self.layout, Alignment.CENTER)
 
-        with self.renderer._make_font_description(self.status_font) as font_description:
+        with self.pango._make_font_description(self.status_font) as font_description:
             clib.pango_layout_set_font_description(self.layout, font_description)
 
     def get_layout_rects(self):
