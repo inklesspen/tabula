@@ -1,19 +1,14 @@
 import pathlib
-import typing
 
 import PIL.Image
 import pytest
 import timeflake
 
-from tabula.commontypes import Size, Rect
+from tabula.commontypes import Size
 from tabula.editor.doctypes import Paragraph
 from tabula.editor.document import DocumentModel
 from tabula.rendering.layout import LayoutManager
 from tabula.rendering.rendertypes import ScreenInfo
-from tabula.rendering.renderer import Renderer
-
-if typing.TYPE_CHECKING:
-    from pytest_benchmark.fixture import BenchmarkFixture
 
 CLARA_SCREEN = ScreenInfo(size=Size(width=1072, height=1448), dpi=300)
 FONT = "Tabula Quattro 6"
@@ -49,27 +44,21 @@ IMAGE_SAVE_DIR = pathlib.Path(__file__).parent / "renders"
 IMAGE_SAVE_DIR.mkdir(exist_ok=True)
 
 
-def with_layout_manager(renderer: Renderer, document: DocumentModel):
-    lm = LayoutManager(renderer=renderer, document=document, full_height=True)
+def with_layout_manager(screen_info: ScreenInfo, document: DocumentModel):
+    lm = LayoutManager(screen_info=screen_info, document=document, full_height=True)
     rendered = lm.render_update(FONT)
     target_im = PIL.Image.new("L", CLARA_SCREEN.size.as_tuple(), "white")
-    framelet_im = PIL.Image.frombytes(
-        "L", rendered.rect.pillow_size, rendered.image, "raw", "L", 0, 1
-    )
+    framelet_im = PIL.Image.frombytes("L", rendered.rect.pillow_size, rendered.image, "raw", "L", 0, 1)
     target_im.paste(framelet_im, rendered.rect.pillow_origin)
     target_im.save(str(IMAGE_SAVE_DIR / "layout-manager.png"))
 
 
 @pytest.mark.skip("Disabled")
 def test_with_layout_manager():
-    renderer = Renderer(CLARA_SCREEN)
     session_id = timeflake.random()
     document = DocumentModel()
     document.session_id = session_id
-    paras = [
-        Paragraph(id=timeflake.random(), session_id=session_id, index=i, markdown=z)
-        for i, z in enumerate(ZENDA[:-1])
-    ]
+    paras = [Paragraph(id=timeflake.random(), session_id=session_id, index=i, markdown=z) for i, z in enumerate(ZENDA[:-1])]
     document.contents = paras
     document.currently = paras[-1]
-    with_layout_manager(renderer, document)
+    with_layout_manager(CLARA_SCREEN, document)
