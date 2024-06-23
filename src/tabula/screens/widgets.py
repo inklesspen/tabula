@@ -41,11 +41,6 @@ class Label:
         alignment: Alignment = Alignment.CENTER,
         wrap: WrapMode = WrapMode.WORD_CHAR,
     ):
-        # if size is None:
-        #     if width is None:
-        #         raise ValueError("Must specify either size or width")
-        #     height = math.ceil(pango.calculate_line_height(font))
-        #     size = Size(width=width, height=height)
         layout_width = size.width if size is not None else width
         with PangoLayout(pango=pango, width=layout_width, alignment=alignment, wrap=wrap) as layout:
             layout.set_font(font)

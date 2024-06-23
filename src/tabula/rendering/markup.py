@@ -4,7 +4,11 @@
 
 import markdown_it
 
-from ._cairopango import ffi, lib as clib
+from ._cairopango import ffi, lib as clib  # type: ignore
+
+# https://en.wikipedia.org/wiki/Macron_below
+# https://en.wikipedia.org/wiki/Underscore
+CURSOR = '<span alpha="50%">_</span>'
 
 run_splitter = markdown_it.MarkdownIt("zero").enable("emphasis")
 
@@ -29,12 +33,12 @@ def make_markup(markdown):
             collect.append("</b>")
             collect.append(token.markup)
         elif token.type == "text":
-            collect.append(_escape_for_markup(token.content))
+            collect.append(escape_for_markup(token.content))
         else:
             raise TypeError("Unexpected token type %r" % token)
     return "".join(collect)
 
 
-def _escape_for_markup(text):
+def escape_for_markup(text):
     with ffi.gc(clib.g_markup_escape_text(text.encode("utf-8"), -1), clib.g_free) as result:
         return ffi.string(result).decode("utf-8")

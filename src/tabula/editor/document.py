@@ -168,7 +168,7 @@ class DocumentModel:
         self._contents_by_id[self.currently.id] = self.currently
         self._contents_by_index[self.currently.index] = self.currently
 
-    def keystroke(self, keystroke):
+    def keystroke(self, keystroke: str):
         self.buffer.append(keystroke)
         self._update_currently()
 

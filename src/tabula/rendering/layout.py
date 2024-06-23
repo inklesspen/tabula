@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import typing
 
@@ -7,29 +8,25 @@ import msgspec
 
 from ..commontypes import Size, Rect, Point
 from ._cairopango import ffi, lib as clib  # type: ignore
-from .rendertypes import Alignment, WrapMode, Rendered, CairoColor, LayoutRects
+from .rendertypes import Alignment, WrapMode, Rendered, CairoColor
 from ..util import now
 from .cairo import Cairo
-from .pango import Pango
+from .pango import Pango, PangoLayout
 from .fonts import SERIF
 from ..durations import timer_display
 from ..editor.wordcount import format_wordcount
+from .markup import CURSOR
 
 if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo
     from ..editor.document import DocumentModel
 
-
-# https://en.wikipedia.org/wiki/Macron_below
-# https://en.wikipedia.org/wiki/Underscore
-CURSOR = '<span alpha="50%">_</span>'
+logger = logging.getLogger(__name__)
 
 
 class RenderedMarkup(msgspec.Struct, frozen=True):
     markup: str
     cairo: Cairo
-    # size: Size
-    # image_surface: ffi.CData
 
 
 class Chunk(msgspec.Struct, frozen=True):
@@ -41,6 +38,9 @@ class LaidOut(msgspec.Struct):
     rendered: RenderedMarkup
     y_top: int
     y_bottom: int
+
+    def paste_onto_cairo(self, cairo: Cairo):
+        cairo.paste_other(self.rendered.cairo, Point(x=0, y=self.y_top), Rect(origin=Point.zeroes(), spread=self.rendered.cairo.size))
 
 
 class LayoutManager:
@@ -63,6 +63,7 @@ class LayoutManager:
         self.setup_layout()
         self.rendered_markups = {}
         self.rendered_font = None
+        self.rendered_line_spacing = None
         self.skip_height = 0
         self.render_size = Size(self.render_width, self.render_height)
         self.target_cairo = Cairo(self.render_size)
@@ -104,6 +105,11 @@ class LayoutManager:
         self.setup_layout_font(font)
         self.rendered_font = font
 
+    def set_line_spacing(self, line_spacing: float):
+        self.rendered_markups = {}
+        clib.pango_layout_set_line_spacing(self.layout, line_spacing)
+        self.rendered_line_spacing = line_spacing
+
     def render_to_image_surface(self, markup: str):
         clib.pango_layout_set_markup(self.layout, markup.encode("utf-8"), -1)
         with ffi.new("PangoRectangle *") as logical_rect:
@@ -126,9 +132,13 @@ class LayoutManager:
         rendered = RenderedMarkup(markup=markup, cairo=markup_cairo)
         self.rendered_markups[markup] = rendered
 
-    def render_update(self, font: str):
+    def render_update(self, font: str, line_spacing: float, replace_cursor_with: typing.Optional[str] = None):
         if font != self.rendered_font:
             self.set_font(font)
+        if line_spacing != self.rendered_line_spacing:
+            self.set_line_spacing(line_spacing)
+
+        at_end = CURSOR if replace_cursor_with is None else replace_cursor_with
 
         laidouts: list[LaidOut] = []
         used_rendereds = {}
@@ -139,7 +149,7 @@ class LayoutManager:
             para = self.document[current_i]
             markup = para.markup
             if cursor_para_id == para.id:
-                markup += CURSOR
+                markup += at_end
             if markup not in self.rendered_markups:
                 # print(f"rendering image for {markup!r}")
                 self.render_to_image_surface(markup)
@@ -155,11 +165,7 @@ class LayoutManager:
         self.target_cairo.fill_with_color(CairoColor.WHITE)
 
         for laidout in laidouts:
-            self.target_cairo.paste_other(
-                other=laidout.rendered.cairo,
-                location=Point(x=0, y=laidout.y_top),
-                other_rect=Rect(origin=Point.zeroes(), spread=laidout.rendered.cairo.size),
-            )
+            laidout.paste_onto_cairo(self.target_cairo)
 
         if CURSOR in self.rendered_markups:
             # Worth keeping around
@@ -229,37 +235,12 @@ class StatusLayout:
         self.render_width = self.screen_info.size.width
         screen_size = self.screen_info.size
         self.status_y_bottom = screen_size.height - 50
-        self.layout = ffi.gc(clib.pango_layout_new(self.pango.context), clib.g_object_unref)
-        self.setup_layout()
         self.capslock = False
         self.compose = False
 
     def set_leds(self, capslock: bool, compose: bool):
         self.capslock = capslock
         self.compose = compose
-
-    def setup_layout(self):
-        clib.pango_layout_set_auto_dir(self.layout, False)
-        clib.pango_layout_set_ellipsize(self.layout, clib.PANGO_ELLIPSIZE_NONE)
-        clib.pango_layout_set_justify(self.layout, False)
-        clib.pango_layout_set_single_paragraph_mode(self.layout, False)
-        clib.pango_layout_set_wrap(self.layout, WrapMode.WORD_CHAR)
-        clib.pango_layout_set_width(
-            self.layout,
-            self.render_width * clib.PANGO_SCALE,
-        )
-        clib.pango_layout_set_alignment(self.layout, Alignment.CENTER)
-
-        with self.pango._make_font_description(self.status_font) as font_description:
-            clib.pango_layout_set_font_description(self.layout, font_description)
-
-    def get_layout_rects(self):
-        with ffi.new("PangoRectangle *") as ink, ffi.new("PangoRectangle *") as logical:
-            clib.pango_layout_get_pixel_extents(self.layout, ink, logical)
-            return LayoutRects(
-                ink=Rect.from_pango_rect(ink),
-                logical=Rect.from_pango_rect(logical),
-            )
 
     def render(self):
         status_lines = []
@@ -278,48 +259,52 @@ class StatusLayout:
         wordcount_time_line = " — ".join((format_wordcount(self.document.wordcount), now().strftime("%H:%M")))
         status_lines.append(wordcount_time_line)
         status_line = "\n".join(status_lines)
-        clib.pango_layout_set_markup(self.layout, status_line.encode("utf-8"), -1)
-        status_rects = self.get_layout_rects()
+        with PangoLayout(pango=self.pango, width=self.render_width, alignment=Alignment.CENTER) as layout:
+            layout.set_font(self.status_font)
+            layout.set_content(status_line)
+            status_rects = layout.get_layout_rects()
 
-        clib.pango_layout_set_text(self.layout, "Tabula".encode("utf-8"), -1)
-        line_3_rects = self.get_layout_rects()
+            # TODO: Use a Label for this one.
+            layout.set_content("Tabula")
+            line_3_rects = layout.get_layout_rects()
 
-        line_3_top = status_rects.logical.spread.height + inner_margin
-        full_status_height = line_3_top + line_3_rects.logical.spread.height
-        symbol_y_top = line_3_top + line_3_rects.ink.origin.y
-        symbol_scale = line_3_rects.ink.spread.height
+            line_3_top = status_rects.logical.spread.height + inner_margin
+            full_status_height = line_3_top + line_3_rects.logical.spread.height
+            symbol_y_top = line_3_top + line_3_rects.ink.origin.y
+            symbol_scale = line_3_rects.ink.spread.height
 
-        status_y_top = self.status_y_bottom - full_status_height
-        markup_size = Size(width=self.render_width, height=full_status_height)
+            status_y_top = self.status_y_bottom - full_status_height
+            markup_size = Size(width=self.render_width, height=full_status_height)
 
-        with Cairo(markup_size) as cairo:
-            cairo.fill_with_color(CairoColor.WHITE)
-            cairo.set_draw_color(CairoColor.BLACK)
+            with Cairo(markup_size) as cairo:
+                cairo.fill_with_color(CairoColor.WHITE)
+                cairo.set_draw_color(CairoColor.BLACK)
 
-            clib.pango_layout_set_markup(self.layout, status_line.encode("utf-8"), -1)
-            clib.pango_cairo_show_layout(cairo.context, self.layout)
+                layout.set_content(status_line)
+                layout.render(cairo)
 
-            cairo.move_to(Point(x=0, y=line_3_top))
-            clib.pango_layout_set_text(self.layout, "Tabula".encode("utf-8"), -1)
-            clib.pango_cairo_show_layout(cairo.context, self.layout)
-            if self.capslock:
-                render_capslock_symbol(
-                    cairo,
-                    origin=Point(x=200, y=symbol_y_top),
-                    scale=symbol_scale,
-                    linewidth=2,
+                cairo.move_to(Point(x=0, y=line_3_top))
+                layout.set_content("Tabula")
+                layout.render(cairo)
+
+                if self.capslock:
+                    render_capslock_symbol(
+                        cairo,
+                        origin=Point(x=200, y=symbol_y_top),
+                        scale=symbol_scale,
+                        linewidth=2,
+                    )
+                if self.compose:
+                    compose_x = self.render_width - (200 + 1.5 * symbol_scale)
+                    render_compose_symbol(
+                        cairo,
+                        origin=Point(x=compose_x, y=symbol_y_top),
+                        scale=symbol_scale,
+                        linewidth=2,
+                    )
+
+                rendered = Rendered(
+                    image=cairo.get_image_bytes(),
+                    extent=Rect(origin=Point(x=0, y=status_y_top), spread=cairo.size),
                 )
-            if self.compose:
-                compose_x = self.render_width - (200 + 1.5 * symbol_scale)
-                render_compose_symbol(
-                    cairo,
-                    origin=Point(x=compose_x, y=symbol_y_top),
-                    scale=symbol_scale,
-                    linewidth=2,
-                )
-
-            rendered = Rendered(
-                image=cairo.get_image_bytes(),
-                extent=Rect(origin=Point(x=0, y=status_y_top), spread=cairo.size),
-            )
         return rendered

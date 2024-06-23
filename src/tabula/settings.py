@@ -203,9 +203,10 @@ class Settings:
     sprint_lengths: list[datetime.timedelta]
     default_screen_rotation: ScreenRotation
 
-    def set_current_font(self, new_current_font: str, new_size: float):
+    def set_current_font(self, new_current_font: str, new_size: float, new_line_spacing: float):
         self.current_font = new_current_font
         self.current_font_size = new_size
+        self.current_line_spacing = new_line_spacing
 
     def save(self, dest: typing.Optional[pathlib.Path] = None):
         if dest is None:

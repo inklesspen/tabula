@@ -5,7 +5,7 @@ from attrs import define, field
 import attrs
 import timeflake
 
-from ..rendering.markdown import make_markup
+from ..rendering.markup import make_markup
 from ..util import now
 
 

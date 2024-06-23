@@ -132,7 +132,7 @@ class Fonts(Screen):
                             self.current_line_spacing += 0.1
                             font_changed = True
                         case "confirm":
-                            self.settings.set_current_font(self.current_font, self.current_font_size)
+                            self.settings.set_current_font(self.current_font, self.current_font_size, self.current_line_spacing)
                             return await app.change_screen(TargetScreen.SystemMenu)
                         case "abort":
                             return await app.change_screen(TargetScreen.SystemMenu)

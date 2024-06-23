@@ -261,9 +261,9 @@ async def make_keystream(
         OnlyPresses(),
         MakeCharacter(settings.keymaps),
         ComposeKey(settings.compose_key),
-        SynthesizeKeys(),
     ]
     if enable_composes:
+        sections.append(SynthesizeKeys())
         sections.append(ComposeCharacters(settings.compose_sequences))
 
     async with pump_all(key_event_channel, *sections) as keystream:

@@ -9,6 +9,7 @@ from ..util import TABULA
 from ..rendering.rendertypes import CairoColor
 from ..rendering.layout import LayoutManager, StatusLayout
 from ..rendering.cairo import Cairo
+from ..editor.composes import ComposeState, ComposeFailed, ComposeSucceeded, ComposeOther
 
 from .base import Screen, TargetScreen, TargetDialog
 
@@ -37,10 +38,11 @@ class Drafting(Screen):
         self.screen_info = screen_info
         self.layout_manager = LayoutManager(self.screen_info, self.document)
         self.status_layout = StatusLayout(self.screen_info, self.document)
+        self.compose_state = ComposeState(self.settings.compose_sequences)
 
     async def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=True)
+        app.hardware.reset_keystream(enable_composes=False)
         if app.screen_info != self.screen_info:
             self.screen_info = app.screen_info
             self.layout_manager = LayoutManager(self.screen_info, self.document)
@@ -78,7 +80,31 @@ class Drafting(Screen):
     async def handle_key_event(self, event: AnnotatedKeyEvent):
         if event.is_led_able:
             self.status_layout.capslock = event.annotation.capslock
-            self.status_layout.compose = event.annotation.compose
+
+        compose_result = self.compose_state.handle_key_event(event)
+        if isinstance(compose_result, ComposeOther):
+            if compose_result.active_changed:
+                self.status_layout.compose = self.compose_state.active
+                self.render_status()
+            if compose_result.show_help:
+                self.document.save_session(self.db, "COMPOSE_HELP")
+                return await self.show_compose_help()
+            if not self.compose_state.active:
+                return await self.handle_non_compose_key_event(event)
+            self.render_document()
+        elif isinstance(compose_result, ComposeFailed):
+            self.status_layout.compose = False
+            for key_event in compose_result.key_events:
+                await self.handle_non_compose_key_event(key_event)
+        elif isinstance(compose_result, ComposeSucceeded):
+            self.status_layout.compose = False
+            self.render_status()
+            self.document.keystroke(compose_result.result)
+            self.render_document()
+        else:
+            typing.assert_never()
+
+    async def handle_non_compose_key_event(self, event: AnnotatedKeyEvent):
         if self.document.graphical_char(event.character):
             if self.document.whitespace_char(event.character) and self.document.has_sprint and self.document.sprint.completed:
                 self.document.end_sprint(self.db)
@@ -158,5 +184,7 @@ class Drafting(Screen):
         current_font = self.settings.current_font
         font_size = self.settings.current_font_size
         font_spec = f"{current_font} {font_size}"
-        rendered = self.layout_manager.render_update(font_spec)
+        rendered = self.layout_manager.render_update(
+            font_spec, self.settings.current_line_spacing, replace_cursor_with=self.compose_state.markup
+        )
         app.hardware.display_rendered(rendered)
