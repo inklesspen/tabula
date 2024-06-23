@@ -6,7 +6,7 @@ from AppKit import (
     NSEventModifierFlagCommand,
 )
 
-from ..device.keyboard_consts import Key
+from tabula.device.keyboard_consts import Key
 
 # Values taken from
 # /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.sdk/

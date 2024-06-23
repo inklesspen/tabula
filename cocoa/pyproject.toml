@@ -1,0 +1,28 @@
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
+
+[project]
+authors = [{name = "Rose Davidson", email = "rose@metaclassical.com"}]
+classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
+dependencies = [
+  'trio',
+  'pyobjc-core',
+  'pyobjc-framework-cocoa',
+]
+dynamic = ["version", "description"]
+license = {file = "LICENSE"}
+name = "cocoatabula"
+requires-python = '>=3.12'
+
+[project.scripts]
+cocoa-tabula = "cocoatabula.triococoa:start"
+
+[tool.black]
+line-length = 140
+target-version = ['py312']
+
+[tool.flake8]
+exclude = [".tox", ".eggs", "ci/templates", "build", "dist"]
+ignore = ["E203", "E704"]
+max-line-length = 140

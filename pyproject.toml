@@ -52,11 +52,7 @@ requires-python = '>=3.12'
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
 # to require these on mac os: platform_system=="Darwin"
 devel = ['black', 'flake8', 'Flake8-pyproject']
-macos = ['Pillow', 'pyobjc-core', 'pyobjc-framework-cocoa']
 test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
-
-[project.scripts]
-cocoa-tabula = "tabula.cocoa.triococoa:start"
 
 [tool.black]
 line-length = 140

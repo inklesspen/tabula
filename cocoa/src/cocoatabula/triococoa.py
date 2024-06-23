@@ -36,15 +36,15 @@ import trio
 import outcome
 
 from .keycodes import KEYCODES, MODIFIER_MAP
-from ..app import parser, Tabula
-from ..settings import Settings
-from ..commontypes import Rect, Size, ScreenInfo, Point, ScreenRotation
-from ..device.hwtypes import KeyEvent, AnnotatedKeyEvent, SetLed, TapEvent, TapPhase, KeyboardDisconnect
-from ..device.keystreams import make_keystream
-from ..device.keyboard_consts import Key, KeyPress
+from tabula.app import parser, Tabula
+from tabula.settings import Settings
+from tabula.commontypes import Rect, Size, ScreenInfo, Point, ScreenRotation
+from tabula.device.hwtypes import KeyEvent, AnnotatedKeyEvent, SetLed, TapEvent, TapPhase, KeyboardDisconnect
+from tabula.device.keystreams import make_keystream
+from tabula.device.keyboard_consts import Key, KeyPress
 
 if typing.TYPE_CHECKING:
-    from ..rendering.rendertypes import Rendered
+    from tabula.rendering.rendertypes import Rendered
 
 logger = logging.getLogger(__name__)
 
