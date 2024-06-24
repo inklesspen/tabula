@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import typing
 
-from ..device.hwtypes import AnnotatedKeyEvent, Key, TapEvent, TapPhase
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
+from ..device.keyboard_consts import Key
 from ..commontypes import Point, Size
 from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo

@@ -1,4 +1,4 @@
-from ..device.hwtypes import Key
+from ..device.keyboard_consts import Key
 
 # https://en.wikipedia.org/wiki/Enclosed_Alphanumerics
 # U+24EA is zero; it's out of order from the rest

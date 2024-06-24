@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import typing
 
-from ..device.hwtypes import AnnotatedKeyEvent, Key
+from ..device.hwtypes import AnnotatedKeyEvent
+from ..device.keyboard_consts import Key
 from ..commontypes import Point
 from ..rendering.rendertypes import Rendered, CairoColor
 from ..rendering.cairo import Cairo

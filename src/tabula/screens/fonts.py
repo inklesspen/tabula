@@ -7,7 +7,8 @@ import logging
 import math
 import typing
 
-from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase, Key
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
+from ..device.keyboard_consts import Key
 from ..commontypes import Point, Size, Rect
 from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo

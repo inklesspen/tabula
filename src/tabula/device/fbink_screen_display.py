@@ -5,8 +5,7 @@ import contextlib
 import enum
 
 from ._fbink import ffi, lib as clib  # type: ignore
-from .hwtypes import ScreenRect, TouchCoordinateTransform, TouchScreenInfo
-from ..commontypes import Size, ScreenInfo
+from ..commontypes import Size, Rect, ScreenInfo, TouchCoordinateTransform, ScreenRotation
 from ..util import check_c_enum
 
 
@@ -66,6 +65,14 @@ class WaveformMode(enum.IntEnum):
     MAX = 255
 
 
+TOUCH_COORDINATE_TRANSFORMS = (
+    TouchCoordinateTransform.IDENTITY,
+    TouchCoordinateTransform.SWAP_AND_MIRROR_Y,
+    TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y,
+    TouchCoordinateTransform.SWAP_AND_MIRROR_X,
+)
+
+
 class FbInk(contextlib.AbstractContextManager):
     def __init__(self):
         self.fbink_cfg = ffi.new("FBInkConfig *")
@@ -85,31 +92,29 @@ class FbInk(contextlib.AbstractContextManager):
     def active(self):
         return self.fbfd is not None
 
-    def get_screen_info(self) -> TouchScreenInfo:
+    def get_screen_info(self) -> ScreenInfo:
         with ffi.new("FBInkState *") as state:
             clib.fbink_get_state(self.fbink_cfg, state)
-            touch_coordinate_transform = TouchCoordinateTransform(state.current_rota)
-            screen_info = ScreenInfo(
+            touch_coordinate_transform = TOUCH_COORDINATE_TRANSFORMS[state.current_rota]
+            return ScreenInfo(
                 size=Size(width=state.view_width, height=state.view_height),
                 dpi=state.screen_dpi,
+                rotation=ScreenRotation.PORTRAIT,
+                touch_coordinate_transform=touch_coordinate_transform,
             )
-        return TouchScreenInfo(
-            screen_info=screen_info,
-            touch_coordinate_transform=touch_coordinate_transform,
-        )
 
     def clear(self):
         clib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL, False)
 
-    def display_pixels(self, imagebytes: bytes, rect: ScreenRect):
+    def display_pixels(self, imagebytes: bytes, rect: Rect):
         clib.fbink_print_raw_data(
             self.fbfd,
             imagebytes,
-            rect.width,
-            rect.height,
+            rect.spread.width,
+            rect.spread.height,
             len(imagebytes),
-            rect.x,
-            rect.y,
+            rect.origin.x,
+            rect.origin.y,
             self.fbink_cfg,
         )
 

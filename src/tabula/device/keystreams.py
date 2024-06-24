@@ -11,7 +11,8 @@ import msgspec
 import pygtrie
 import trio
 
-from .hwtypes import KeyEvent, Key, KeyPress, ModifierAnnotation, AnnotatedKeyEvent
+from .hwtypes import KeyEvent, KeyPress, ModifierAnnotation, AnnotatedKeyEvent
+from .keyboard_consts import Key
 from ..settings import Settings
 
 

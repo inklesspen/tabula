@@ -124,7 +124,15 @@ class ScreenRotation(enum.Enum):
                 return ScreenRotation.PORTRAIT
 
 
+class TouchCoordinateTransform(enum.Enum):
+    IDENTITY = enum.auto()
+    SWAP_AND_MIRROR_Y = enum.auto()
+    MIRROR_X_AND_MIRROR_Y = enum.auto()
+    SWAP_AND_MIRROR_X = enum.auto()
+
+
 class ScreenInfo(msgspec.Struct, frozen=True):
     size: Size
     dpi: float
     rotation: ScreenRotation
+    touch_coordinate_transform: TouchCoordinateTransform

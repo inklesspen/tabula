@@ -1,29 +1,18 @@
-import collections.abc
+from __future__ import annotations
+
 import datetime
 import enum
 import typing
 
 import msgspec
 
-from tabula.device.keyboard_consts import Key, KeyPress, Led
-from ..commontypes import Point, Size, Rect, ScreenInfo
+from tabula.device.keyboard_consts import KeyPress
+from ..commontypes import Point
 
-
-class ScreenRect(msgspec.Struct, frozen=True):
-    # TODO: unify with Rect
-    x: int
-    y: int
-    width: int
-    height: int
-
-    @classmethod
-    def from_rect(cls, rect: Rect):
-        return cls(
-            x=rect.origin.x,
-            y=rect.origin.y,
-            width=rect.spread.width,
-            height=rect.spread.height,
-        )
+if typing.TYPE_CHECKING:
+    import collections.abc
+    from .keyboard_consts import Key, Led
+    from ..commontypes import Size, TouchCoordinateTransform
 
 
 class KeyboardDisconnect(msgspec.Struct, frozen=True):
@@ -71,6 +60,32 @@ class TouchEvent(msgspec.Struct, frozen=True):
     def point(self):
         return Point(x=self.x, y=self.y)
 
+    def apply_transform(self, transform: TouchCoordinateTransform, screen_size: Size):
+        match transform:
+            case TouchCoordinateTransform.IDENTITY:
+                return self
+            case TouchCoordinateTransform.SWAP_AND_MIRROR_Y:
+                return TouchEvent(
+                    x=self.y,
+                    y=screen_size.height - self.x,
+                    pressure=self.pressure,
+                    slot=self.slot,
+                )
+            case TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y:
+                return TouchEvent(
+                    x=screen_size.width - self.x,
+                    y=screen_size.height - self.y,
+                    pressure=self.pressure,
+                    slot=self.slot,
+                )
+            case TouchCoordinateTransform.SWAP_AND_MIRROR_X:
+                return TouchEvent(
+                    x=screen_size.width - self.y,
+                    y=self.x,
+                    pressure=self.pressure,
+                    slot=self.slot,
+                )
+
 
 class TouchReport(msgspec.Struct, frozen=True):
     touches: typing.List[TouchEvent]
@@ -90,39 +105,6 @@ class EventType(enum.Enum):
 class SetLed(msgspec.Struct, frozen=True):
     led: Led
     state: bool
-
-
-class TouchCoordinateTransform(enum.IntEnum):
-    IDENTITY = 0
-    SWAP_AND_MIRROR_Y = 1
-    MIRROR_X_AND_MIRROR_Y = 2
-    SWAP_AND_MIRROR_X = 3
-
-    def apply(self, event: TouchEvent, screen_size: Size):
-        match self:
-            case TouchCoordinateTransform.IDENTITY:
-                return event
-            case TouchCoordinateTransform.SWAP_AND_MIRROR_Y:
-                return TouchEvent(
-                    x=event.y,
-                    y=screen_size.height - event.x,
-                    pressure=event.pressure,
-                    slot=event.slot,
-                )
-            case TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y:
-                return TouchEvent(
-                    x=screen_size.width - event.x,
-                    y=screen_size.height - event.y,
-                    pressure=event.pressure,
-                    slot=event.slot,
-                )
-            case TouchCoordinateTransform.SWAP_AND_MIRROR_X:
-                return TouchEvent(
-                    x=screen_size.width - event.y,
-                    y=event.x,
-                    pressure=event.pressure,
-                    slot=event.slot,
-                )
 
 
 class TouchPhase(enum.Enum):
@@ -156,11 +138,6 @@ class TapPhase(enum.Enum):
 class TapEvent(msgspec.Struct, frozen=True):
     location: Point
     phase: TapPhase
-
-
-class TouchScreenInfo(msgspec.Struct, frozen=True):
-    screen_info: ScreenInfo
-    touch_coordinate_transform: TouchCoordinateTransform
 
 
 TabulaEvent = AnnotatedKeyEvent | TapEvent | KeyboardDisconnect

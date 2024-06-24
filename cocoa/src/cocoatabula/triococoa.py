@@ -38,7 +38,7 @@ import outcome
 from .keycodes import KEYCODES, MODIFIER_MAP
 from tabula.app import parser, Tabula
 from tabula.settings import Settings
-from tabula.commontypes import Rect, Size, ScreenInfo, Point, ScreenRotation
+from tabula.commontypes import Rect, Size, ScreenInfo, Point, ScreenRotation, TouchCoordinateTransform
 from tabula.device.hwtypes import KeyEvent, AnnotatedKeyEvent, SetLed, TapEvent, TapPhase, KeyboardDisconnect
 from tabula.device.keystreams import make_keystream
 from tabula.device.keyboard_consts import Key, KeyPress
@@ -138,7 +138,12 @@ class CocoaHardware:
         self.event_channel.send_nowait(KeyboardDisconnect())
 
     def get_screen_info(self) -> ScreenInfo:
-        val = ScreenInfo(size=self.screen_geometry.value, dpi=300, rotation=self.screen_geometry.rotation)
+        val = ScreenInfo(
+            size=self.screen_geometry.value,
+            dpi=300,
+            rotation=self.screen_geometry.rotation,
+            touch_coordinate_transform=TouchCoordinateTransform.IDENTITY,  # handled in handle_mouseclick
+        )
         return val
 
     def set_rotation(self, sr: ScreenRotation):

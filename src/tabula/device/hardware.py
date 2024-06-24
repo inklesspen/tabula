@@ -10,10 +10,9 @@ from .hwtypes import (
     TouchReport,
     TouchEvent,
     SetLed,
-    Led,
-    TouchCoordinateTransform,
 )
-from ..commontypes import Rect, Size, ScreenInfo, ScreenRotation
+from .keyboard_consts import Led
+from ..commontypes import Rect, Size, ScreenInfo, ScreenRotation, TouchCoordinateTransform
 from .keystreams import make_keystream
 from .gestures import make_tapstream
 from ..settings import Settings
@@ -138,7 +137,7 @@ class Hardware(metaclass=abc.ABCMeta):
         self.touchstream_cancel_scope.cancel()
 
     def _transform_touch_event(self, event: TouchEvent):
-        return self.touch_coordinate_transform.apply(event, self.screen_size)
+        return event.apply_transform(self.touch_coordinate_transform, self.screen_size)
 
 
 class KoboHardware(Hardware):

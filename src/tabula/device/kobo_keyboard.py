@@ -6,7 +6,7 @@ import libevdev
 import trio
 
 from .keyboard_consts import Key, KeyPress, Led
-from .rpctypes import KeyEvent, KeyboardDisconnect
+from .hwtypes import KeyEvent, KeyboardDisconnect
 from .deviceutil import open_device
 
 # Evdev keyboard class should represent the concept of an evdev keyboard, not a specific

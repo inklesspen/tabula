@@ -9,7 +9,7 @@ import msgspec
 import libevdev
 import trio
 
-from .rpctypes import TouchReport, TouchEvent
+from .hwtypes import TouchReport, TouchEvent
 from .deviceutil import open_device
 
 # Kobo Clara HD uses what koreader calls a "snow protocol"; ABS_MT_TRACKING_ID is used

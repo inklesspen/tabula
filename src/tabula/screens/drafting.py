@@ -4,7 +4,8 @@ import logging
 import typing
 
 from ..commontypes import Size, Rect, Point
-from ..device.hwtypes import AnnotatedKeyEvent, Key
+from ..device.hwtypes import AnnotatedKeyEvent
+from ..device.keyboard_consts import Key
 from ..util import TABULA
 from ..rendering.rendertypes import CairoColor
 from ..rendering.layout import LayoutManager, StatusLayout
