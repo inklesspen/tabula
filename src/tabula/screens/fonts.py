@@ -41,6 +41,9 @@ DEFAULT_FONT = "Tabula Quattro"
 DEFAULT_ASCENT_SIZE = 36
 DEFAULT_LINE_SPACING = 1.0
 
+# TODO: add pagination so we can remove this limit
+FONT_LIMIT = 4
+
 
 @dataclasses.dataclass
 class DrawLineSpacing:
@@ -74,7 +77,7 @@ class Fonts(Screen):
         self.settings = settings
         self.hardware = hardware
         self.pango = Pango(dpi=screen_info.dpi)
-        self.drafting_fonts = self.pango.list_drafting_fonts()
+        self.drafting_fonts = self.pango.list_drafting_fonts()[:FONT_LIMIT]
         if self.settings.current_font in self.drafting_fonts:
             self.current_font = self.settings.current_font
             self.current_font_size = self.settings.current_font_size
