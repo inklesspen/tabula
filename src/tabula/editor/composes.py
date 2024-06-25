@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import typing
 
 from ..device.keyboard_consts import Key
@@ -32,6 +33,9 @@ class ComposeOther:
 
 ComposeResult = ComposeFailed | ComposeSucceeded | ComposeOther
 
+CODEPOINT_MATCHER = re.compile(r"^\+((?:[0-9A-Fa-f]){4})$")
+PAD_FORMATTER = "{:0<5}".format
+
 
 class ComposeState:
     active: bool
@@ -49,6 +53,8 @@ class ComposeState:
                 logging.debug("Restarting compose collecting")
                 self.devoured = []
                 self.devoured_characters = []
+                self.can_be_codepoint = False
+                self.can_be_compose_sequence = False
                 return ComposeOther()
             else:
                 self.active = False
@@ -60,7 +66,9 @@ class ComposeState:
         still_matching = False
         if event.character is not None:
             self.devoured_characters.append(event.character)
-            still_matching = bool(self.sequences.has_node(self.devoured_characters))
+            self.can_be_compose_sequence = bool(self.sequences.has_node(self.devoured_characters))
+            self.can_be_codepoint = bool(CODEPOINT_MATCHER.match(PAD_FORMATTER("".join(self.devoured_characters))))
+            still_matching = self.can_be_compose_sequence or self.can_be_codepoint
         if not (still_matching or event.is_modifier):
             # not a match
             self.active = False
@@ -70,6 +78,11 @@ class ComposeState:
                 # end of sequence
                 self.active = False
                 return ComposeSucceeded(result=self.sequences[self.devoured_characters])
+            if codepoint_match := CODEPOINT_MATCHER.match("".join(self.devoured_characters)):
+                self.active = False
+                codepoint_str = codepoint_match.group(1)
+                codepoint = int(codepoint_str, base=16)
+                return ComposeSucceeded(result=chr(codepoint))
         return ComposeOther()
 
     def handle_key_event(self, event: AnnotatedKeyEvent) -> ComposeResult:
@@ -79,6 +92,8 @@ class ComposeState:
             self.active = True
             self.devoured = []
             self.devoured_characters = []
+            self.can_be_codepoint = False
+            self.can_be_compose_sequence = False
             return ComposeOther(active_changed=True)
         return ComposeOther()
 
@@ -86,5 +101,10 @@ class ComposeState:
     def markup(self):
         if self.active is False:
             return None
-        escaped = escape_for_markup("".join(self.devoured_characters))
+        escaped = ""
+        devoured_string = "".join(self.devoured_characters)
+        if self.can_be_compose_sequence:
+            escaped = escape_for_markup(devoured_string)
+        elif self.can_be_codepoint:
+            escaped = escape_for_markup("U+" + devoured_string[1:])
         return f'<span underline="single">{escaped}{CURSOR}</span>'
