@@ -30,7 +30,6 @@ classifiers = [
 dependencies = [
   'attrs',
   'cffi',
-  'cardinality',
   'pygtrie',
   'markdown-it-py',
   'python-dateutil',

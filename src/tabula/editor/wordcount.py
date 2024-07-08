@@ -2,15 +2,19 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from collections import deque
+from itertools import count
 from typing import Any, MutableMapping, Sequence, Text
 
-import cardinality
 import markdown_it
 import markdown_it.renderer
 from markdown_it.token import Token
 from markdown_it.utils import OptionsDict
 
 from ._wordchars import WORD_CHARS
+
+# Avoid constructing a deque each time
+consumeall = deque(maxlen=0).extend
 
 
 class PlainRenderer(markdown_it.renderer.RendererProtocol):
@@ -65,8 +69,11 @@ def make_plain_text(markdown: Text) -> Text:
     return markdown_it.MarkdownIt("commonmark", renderer_cls=PlainRenderer).render(markdown).rstrip("\n")
 
 
+# based on a solution from https://stackoverflow.com/a/34404546
 def count_plain_text(text: Text) -> int:
-    return cardinality.count(WORD_CHARS.finditer(text))
+    cnt = count()
+    consumeall(zip(WORD_CHARS.finditer(text), cnt))
+    return next(cnt)
 
 
 def format_wordcount(wordcount: int):
