@@ -33,12 +33,7 @@ py.extension_module(
     dependencies: [glib, gobject, cairo, pango, pangocairo, fontconfig, py.dependency()],
 )
 
-if host_machine.system() == 'linux'
-    fbink = dependency('fbink')
-else
-    fbink = disabler()
-endif
-
+fbink = dependency('fbink', required: host_machine.system() == 'linux')
 if fbink.found()
     py.extension_module(
         '_fbink',
