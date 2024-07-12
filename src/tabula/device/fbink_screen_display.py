@@ -3,10 +3,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import contextlib
 import enum
+import errno
+import logging
 
 from ._fbink import ffi, lib as clib  # type: ignore
 from ..commontypes import Size, Rect, ScreenInfo, TouchCoordinateTransform, ScreenRotation
 from ..util import check_c_enum
+
+logger = logging.getLogger(__name__)
 
 
 # https://www.waveshare.net/w/upload/c/c4/E-paper-mode-declaration.pdf
@@ -65,11 +69,52 @@ class WaveformMode(enum.IntEnum):
     MAX = 255
 
 
+class KoboRota(enum.IntEnum):
+    PORTRAIT_UPRIGHT = clib.FORCE_ROTA_UR  # native_rota: 3, canonical_rota: 0
+    LANDSCAPE_CCW = clib.FORCE_ROTA_CCW  # native_rota: 0, canonical_rota: 3
+    PORTRAIT_UPSIDE_DOWN = clib.FORCE_ROTA_UD  # native_rota: 1, canonical_rota: 2
+    LANDSCAPE_CW = clib.FORCE_ROTA_CW  # native_rota: 2, canonical_rota: 1
+
+    @classmethod
+    def from_screen_rotation(cls, sr: ScreenRotation):
+        match sr:
+            case ScreenRotation.PORTRAIT:
+                return cls.PORTRAIT_UPRIGHT
+            case ScreenRotation.INVERTED_PORTRAIT:
+                return cls.PORTRAIT_UPSIDE_DOWN
+            case ScreenRotation.LANDSCAPE_PORT_LEFT:
+                return cls.LANDSCAPE_CW
+            case ScreenRotation.LANDSCAPE_PORT_RIGHT:
+                return cls.LANDSCAPE_CCW
+
+    def to_screen_rotation(self):
+        match self:
+            case KoboRota.PORTRAIT_UPRIGHT:
+                return ScreenRotation.PORTRAIT
+            case KoboRota.LANDSCAPE_CCW:
+                return ScreenRotation.LANDSCAPE_PORT_RIGHT
+            case KoboRota.PORTRAIT_UPSIDE_DOWN:
+                return ScreenRotation.INVERTED_PORTRAIT
+            case KoboRota.LANDSCAPE_CW:
+                return ScreenRotation.LANDSCAPE_PORT_LEFT
+
+    def touch_coordinate_transform(self):
+        match self:
+            case KoboRota.PORTRAIT_UPRIGHT:
+                return TouchCoordinateTransform.SWAP_AND_MIRROR_X
+            case KoboRota.LANDSCAPE_CCW:
+                return TouchCoordinateTransform.IDENTITY
+            case KoboRota.PORTRAIT_UPSIDE_DOWN:
+                return TouchCoordinateTransform.SWAP_AND_MIRROR_Y
+            case KoboRota.LANDSCAPE_CW:
+                return TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y
+
+
 TOUCH_COORDINATE_TRANSFORMS = (
-    TouchCoordinateTransform.IDENTITY,
-    TouchCoordinateTransform.SWAP_AND_MIRROR_Y,
-    TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y,
-    TouchCoordinateTransform.SWAP_AND_MIRROR_X,
+    TouchCoordinateTransform.IDENTITY,  # native_rota 0
+    TouchCoordinateTransform.SWAP_AND_MIRROR_Y,  # native_rota 1
+    TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y,  # native_rota 2
+    TouchCoordinateTransform.SWAP_AND_MIRROR_X,  # native_rota 3
 )
 
 
@@ -95,13 +140,53 @@ class FbInk(contextlib.AbstractContextManager):
     def get_screen_info(self) -> ScreenInfo:
         with ffi.new("FBInkState *") as state:
             clib.fbink_get_state(self.fbink_cfg, state)
+            canonical_rota = KoboRota(clib.fbink_rota_native_to_canonical(state.current_rota))
+            # https://github.com/NiLuJe/FBInk/blob/master/utils/finger_trace.c#L502-L534
             touch_coordinate_transform = TOUCH_COORDINATE_TRANSFORMS[state.current_rota]
+            if touch_coordinate_transform != canonical_rota.touch_coordinate_transform():
+                raise Exception("something's gone wrong with tcts")
+
+            logger.debug("Screen rotation: %r", canonical_rota)
+            logger.debug("Touch Coordinate Transform: %r", touch_coordinate_transform)
+
+            # These are in FBInk master branch but not in release 1.25.0
+            # swap_axes = state.touch_swap_axes
+            # mirror_x = state.touch_mirror_x
+            # mirror_y = state.touch_mirror_y
+            # logger.debug("before adjustment: touch_swap_axes: %r", swap_axes)
+            # logger.debug("before adjustment: touch_mirror_x: %r", mirror_x)
+            # logger.debug("before adjustment: touch_mirror_y: %r", mirror_y)
+            # match canonical_rota:
+            #     case KoboRota.LANDSCAPE_CW:
+            #         swap_axes = not swap_axes
+            #         mirror_y = not mirror_y
+            #     case KoboRota.PORTRAIT_UPSIDE_DOWN:
+            #         mirror_x = not mirror_x
+            #         mirror_y = not mirror_y
+            #     case KoboRota.LANDSCAPE_CCW:
+            #         swap_axes = not swap_axes
+            #         mirror_x = not mirror_x
+
+            # logger.debug("after adjustment: touch_swap_axes: %r", swap_axes)
+            # logger.debug("after adjustment: touch_mirror_x: %r", mirror_x)
+            # logger.debug("after adjustment: touch_mirror_y: %r", mirror_y)
+
             return ScreenInfo(
                 size=Size(width=state.view_width, height=state.view_height),
                 dpi=state.screen_dpi,
-                rotation=ScreenRotation.PORTRAIT,
+                rotation=canonical_rota.to_screen_rotation(),
                 touch_coordinate_transform=touch_coordinate_transform,
             )
+
+    def set_rotation(self, sr: ScreenRotation):
+        native_rota = clib.fbink_rota_canonical_to_native(KoboRota.from_screen_rotation(sr))
+        code = clib.fbink_set_fb_info(self.fbfd, native_rota, clib.KEEP_CURRENT_BITDEPTH, clib.KEEP_CURRENT_GRAYSCALE, self.fbink_cfg)
+        if code == errno.ENODEV:
+            raise Exception("device not initialized; this should never happen")
+        if code == errno.EINVAL:
+            raise ValueError("invalid argument")
+        if code == errno.ECANCELED:
+            raise Exception("ioctl failure; re-init recommended")
 
     def clear(self):
         clib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL, False)
