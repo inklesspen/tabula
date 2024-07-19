@@ -40,6 +40,8 @@ dependencies = [
   'sqlalchemy',
   'msgspec',
   'cattrs',
+  'jeepney',
+  'outcome',
   'libevdev; platform_system=="Linux"',
 ]
 description = 'cool as hecc'
