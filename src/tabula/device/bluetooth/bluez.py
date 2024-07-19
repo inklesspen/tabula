@@ -614,14 +614,13 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
     objects_by_path: dict[ObjectPath, DBusObject]
     waiting_predicates: list[tuple[collections.abc.Callable, trio.Event]]
 
-    def __init__(self, desired_well_known_name: WellKnownName):
+    def __init__(self):
         self.conn = None
         self.expected_replies = {}
         self.name_owners = {}
         self.signal_watchers = []
         self.objects_by_path = {}
         self.waiting_predicates = []
-        self.desired_well_known_name = desired_well_known_name
         self.exported_object_manager = ExportedObjectManager(self)
 
     async def _receiver(self, *, task_status=trio.TASK_STATUS_IGNORED):
@@ -894,12 +893,6 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
                     )
                 )
             )
-            # declare ourselves
-            # reply = await self.send_and_get_reply(
-            #     message_bus.RequestName(self.desired_well_known_name, DBusNameFlags.do_not_queue | DBusNameFlags.replace_existing)
-            # )
-            # if reply == 3:
-            #     logger.warning("Unable to claim well-known name %s.", self.desired_well_known_name)
             # kick things off by requesting the objects
             await self.get_managed_objects(DBusAddress(object_path="/", bus_name=BLUEZ_WNK))
             yield
