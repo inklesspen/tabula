@@ -3,45 +3,45 @@ import logging
 import typing
 
 import objc
+import outcome
+import trio
 from AppKit import (
     NSApplication,
-    NSResponder,
-    NSWindow,
-    NSMenu,
-    NSMenuItem,
-    NSClosableWindowMask,
-    NSTitledWindowMask,
-    NSMiniaturizableWindowMask,
-    NSResizableWindowMask,
     NSApplicationActivationPolicyRegular,
     NSBackingStoreBuffered,
-    NSViewFrameDidChangeNotification,
-    NSImage,
-    NSImageView,
-    NSImageRep,
     NSBitmapImageRep,
+    NSClosableWindowMask,
     NSDeviceWhiteColorSpace,
     NSGraphicsContext,
+    NSImage,
+    NSImageRep,
+    NSImageView,
+    NSMenu,
+    NSMenuItem,
+    NSMiniaturizableWindowMask,
+    NSResizableWindowMask,
+    NSResponder,
+    NSTitledWindowMask,
+    NSViewFrameDidChangeNotification,
+    NSWindow,
 )
 from Foundation import (
-    NSNotificationCenter,
-    NSMakeSize,
     NSMakePoint,
     NSMakeRect,
+    NSMakeSize,
+    NSNotificationCenter,
     NSPoint,
     NSSize,
 )
 from PyObjCTools import AppHelper
-import trio
-import outcome
+from tabula.app import Tabula, parser
+from tabula.commontypes import Point, Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
+from tabula.device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, KeyEvent, SetLed, TapEvent, TapPhase
+from tabula.device.keyboard_consts import Key, KeyPress
+from tabula.device.keystreams import make_keystream
+from tabula.settings import Settings
 
 from .keycodes import KEYCODES, MODIFIER_MAP
-from tabula.app import parser, Tabula
-from tabula.settings import Settings
-from tabula.commontypes import Rect, Size, ScreenInfo, Point, ScreenRotation, TouchCoordinateTransform
-from tabula.device.hwtypes import KeyEvent, AnnotatedKeyEvent, SetLed, TapEvent, TapPhase, KeyboardDisconnect
-from tabula.device.keystreams import make_keystream
-from tabula.device.keyboard_consts import Key, KeyPress
 
 if typing.TYPE_CHECKING:
     from tabula.rendering.rendertypes import Rendered

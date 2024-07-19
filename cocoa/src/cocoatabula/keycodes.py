@@ -1,11 +1,10 @@
 from AppKit import (
     NSEventModifierFlagCapsLock,
-    NSEventModifierFlagShift,
+    NSEventModifierFlagCommand,
     NSEventModifierFlagControl,
     NSEventModifierFlagOption,
-    NSEventModifierFlagCommand,
+    NSEventModifierFlagShift,
 )
-
 from tabula.device.keyboard_consts import Key
 
 # Values taken from

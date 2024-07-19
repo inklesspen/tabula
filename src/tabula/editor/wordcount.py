@@ -30,7 +30,6 @@ class PlainRenderer(markdown_it.renderer.RendererProtocol):
 
         skip = False
         for i, token in enumerate(tokens):
-
             if token.type == "heading_open":
                 skip = True
             elif token.type == "heading_close":
@@ -72,7 +71,7 @@ def make_plain_text(markdown: Text) -> Text:
 # based on a solution from https://stackoverflow.com/a/34404546
 def count_plain_text(text: Text) -> int:
     cnt = count()
-    consumeall(zip(WORD_CHARS.finditer(text), cnt))
+    consumeall(zip(WORD_CHARS.finditer(text), cnt, strict=False))
     return next(cnt)
 
 

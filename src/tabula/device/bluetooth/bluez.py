@@ -11,15 +11,15 @@ import typing
 import weakref
 
 import outcome
-import trio
-import trio.lowlevel
-import trio._repl
 import tricycle
+import trio
+import trio._repl
+import trio.lowlevel
 from jeepney.bus_messages import MatchRule, message_bus
-from jeepney.low_level import Message, MessageFlag, MessageType, HeaderFields
-from jeepney.wrappers import new_method_call, new_method_return, new_error, new_signal, DBusAddress, DBusErrorResponse
 from jeepney.io.common import RouterClosed, check_replyable
-from jeepney.io.trio import open_dbus_connection, DBusConnection
+from jeepney.io.trio import DBusConnection, open_dbus_connection
+from jeepney.low_level import HeaderFields, Message, MessageFlag, MessageType
+from jeepney.wrappers import DBusAddress, DBusErrorResponse, new_error, new_method_call, new_method_return, new_signal
 
 logger = logging.getLogger(__name__)
 

@@ -1,21 +1,23 @@
+from __future__ import annotations
+
 import abc
 import typing
 
-import trio
 import tricycle
+import trio
 
+from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
+from ..settings import Settings
+from .gestures import make_tapstream
 from .hwtypes import (
-    KeyEvent,
     AnnotatedKeyEvent,
-    TouchReport,
-    TouchEvent,
+    KeyEvent,
     SetLed,
+    TouchEvent,
+    TouchReport,
 )
 from .keyboard_consts import Led
-from ..commontypes import Rect, Size, ScreenInfo, ScreenRotation, TouchCoordinateTransform
 from .keystreams import make_keystream
-from .gestures import make_tapstream
-from ..settings import Settings
 
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered

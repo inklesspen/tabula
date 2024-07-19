@@ -5,20 +5,19 @@ from __future__ import annotations
 
 import typing
 
+from ..commontypes import Point
 from ..device.hwtypes import AnnotatedKeyEvent
 from ..device.keyboard_consts import Key
-from ..commontypes import Point
-from ..rendering.rendertypes import Rendered, CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
-
+from ..rendering.rendertypes import CairoColor, Rendered
+from ..util import TABULA, Future
 from .base import TargetDialog
 from .dialogs import Dialog
-from ..util import TABULA, Future
 
 if typing.TYPE_CHECKING:
-    from ..settings import Settings
     from ..commontypes import ScreenInfo
+    from ..settings import Settings
 
 ROMAN_FACE = "B612 8"
 
@@ -55,10 +54,10 @@ Here are some commonly used compose sequences:
 
 <tt>\u2384 &#60; '</tt> → \u2018 (can be given in either order)
 <tt>\u2384 &#62; '</tt> → \u2019
-<tt>\u2384 &#60; "</tt> → \u201C (can be given in either order)
-<tt>\u2384 &#62; "</tt> → \u201D
-<tt>\u2384 &#60; &#60;</tt> → \u00AB
-<tt>\u2384 &#62; &#62;</tt> → \u00BB
+<tt>\u2384 &#60; "</tt> → \u201c (can be given in either order)
+<tt>\u2384 &#62; "</tt> → \u201d
+<tt>\u2384 &#60; &#60;</tt> → \u00ab
+<tt>\u2384 &#62; &#62;</tt> → \u00bb
 """
 
 # We now use U+02BC by default for the apostrophe key, since we want to always use it.

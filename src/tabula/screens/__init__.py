@@ -1,11 +1,11 @@
-from .base import TargetScreen, TargetDialog, Screen
-from .menus import SystemMenu, SessionList, SessionActions
-from .fonts import Fonts
-from .drafting import Drafting
-from .help import Help, ComposeHelp
-from .keyboard_detect import KeyboardDetectDialog
-from .sprint_control import SprintControl
+from .base import Screen, TargetDialog, TargetScreen
 from .dialogs import Dialog, OkDialog, YesNoDialog
+from .drafting import Drafting
+from .fonts import Fonts
+from .help import ComposeHelp, Help
+from .keyboard_detect import KeyboardDetectDialog
+from .menus import SessionActions, SessionList, SystemMenu
+from .sprint_control import SprintControl
 
 SCREENS: dict[TargetScreen, type[Screen]] = {
     TargetScreen.SystemMenu: SystemMenu,

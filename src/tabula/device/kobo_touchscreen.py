@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: 2022 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
+
 import collections
 import collections.abc
 import typing
 
-import msgspec
 import libevdev
+import msgspec
 import trio
 
-from .hwtypes import TouchReport, TouchEvent
 from .deviceutil import open_device
+from .hwtypes import TouchEvent, TouchReport
 
 # Kobo Clara HD uses what koreader calls a "snow protocol"; ABS_MT_TRACKING_ID is used
 # to convey a slot-type value (instead of using ABS_MT_SLOT properly)

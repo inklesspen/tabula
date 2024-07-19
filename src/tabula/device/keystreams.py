@@ -1,19 +1,21 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
+
 import abc
-from contextlib import asynccontextmanager, aclosing
 import enum
 import unicodedata
+from contextlib import aclosing, asynccontextmanager
 from typing import Any, AsyncIterable, cast
 
 import msgspec
 import pygtrie
 import trio
 
-from .hwtypes import KeyEvent, KeyPress, ModifierAnnotation, AnnotatedKeyEvent
-from .keyboard_consts import Key
 from ..settings import Settings
+from .hwtypes import AnnotatedKeyEvent, KeyEvent, KeyPress, ModifierAnnotation
+from .keyboard_consts import Key
 
 
 class Section(abc.ABC):

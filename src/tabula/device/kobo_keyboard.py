@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import pathlib
 import typing
 
-import msgspec
 import libevdev
+import msgspec
 import trio
 
-from .keyboard_consts import Key, KeyPress, Led
-from .hwtypes import KeyEvent, KeyboardDisconnect
 from .deviceutil import open_device
+from .hwtypes import KeyboardDisconnect, KeyEvent
+from .keyboard_consts import Key, KeyPress, Led
 
 # Evdev keyboard class should represent the concept of an evdev keyboard, not a specific
 # input path. Same class can handle enumerating keyboards and delivering input from chosen

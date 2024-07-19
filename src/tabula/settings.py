@@ -8,9 +8,9 @@ import typing
 import cattrs
 import pygtrie
 
+from .commontypes import ScreenRotation
 from .device.keyboard_consts import Key
 from .durations import format_duration, parse_duration
-from .commontypes import ScreenRotation
 
 COMPOSE_SEQUENCES = {
     "< <": "«",

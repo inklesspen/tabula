@@ -1,17 +1,18 @@
-import enum
 import collections.abc
 import datetime
+import enum
 import inspect
 import math
 import typing
 from os.path import commonprefix
 
-from dateutil.tz import tzlocal
 import outcome
 import trio
+from dateutil.tz import tzlocal
 
 if typing.TYPE_CHECKING:
     from _cffi_backend import FFI as FFIType
+
     from .app import Tabula
 
 

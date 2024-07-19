@@ -4,27 +4,28 @@
 import datetime
 import pathlib
 
+import timeflake
 from dateutil.tz import tzlocal
 from sqlalchemy import (
-    event,
-    MetaData,
-    Table,
     Column,
     ForeignKey,
+    MetaData,
+    Table,
     UniqueConstraint,
-    select,
-    or_,
+    event,
     null,
+    or_,
+    select,
 )
-from sqlalchemy.types import Integer, UnicodeText, String, TypeDecorator
 from sqlalchemy.dialects.sqlite import CHAR, DATE, DATETIME, insert
-from sqlalchemy.engine import Engine, Connectable, URL as EngineURL, create_engine
+from sqlalchemy.engine import URL as EngineURL
+from sqlalchemy.engine import Connectable, Engine, create_engine
 from sqlalchemy.sql import column, text
-import timeflake
+from sqlalchemy.types import Integer, String, TypeDecorator, UnicodeText
 
+from .durations import format_duration, parse_duration
 from .editor.doctypes import Paragraph, Session, Sprint
 from .util import now
-from .durations import format_duration, parse_duration
 
 
 @event.listens_for(Engine, "connect")

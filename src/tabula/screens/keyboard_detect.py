@@ -4,20 +4,19 @@ import logging
 import math
 import typing
 
-from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..commontypes import Point, Size
-from ..rendering.fonts import SERIF
+from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..rendering.cairo import Cairo
+from ..rendering.fonts import SERIF
 from ..rendering.pango import Pango
 from ..rendering.rendertypes import CairoColor
-
-from .dialogs import Dialog
-from .widgets import ButtonState, Button, Label
 from ..util import TABULA, Future
+from .dialogs import Dialog
+from .widgets import Button, ButtonState, Label
 
 if typing.TYPE_CHECKING:
-    from ..settings import Settings
     from ..commontypes import ScreenInfo
+    from ..settings import Settings
 
 
 logger = logging.getLogger(__name__)

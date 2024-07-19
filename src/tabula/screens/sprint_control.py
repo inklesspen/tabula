@@ -3,22 +3,21 @@ from __future__ import annotations
 import logging
 import typing
 
+from ..commontypes import Point, Size
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..device.keyboard_consts import Key
-from ..commontypes import Point, Size
-from ..rendering.rendertypes import CairoColor
-from ..rendering.cairo import Cairo
-from ..rendering.pango import Pango
-from ..rendering.fonts import SERIF
-from .widgets import Label, ButtonState, Button, make_button_row
-
-from .dialogs import Dialog
 from ..durations import format_duration
-from ..util import now, TABULA, Future
+from ..rendering.cairo import Cairo
+from ..rendering.fonts import SERIF
+from ..rendering.pango import Pango
+from ..rendering.rendertypes import CairoColor
+from ..util import TABULA, Future, now
+from .dialogs import Dialog
+from .widgets import Button, ButtonState, Label, make_button_row
 
 if typing.TYPE_CHECKING:
-    from ..settings import Settings
     from ..commontypes import ScreenInfo
+    from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +86,13 @@ class SprintControl(Dialog):
     def make_buttons(self):
         sprint_specs = [({"button_text": format_duration(length)},) for length in self.lengths]
         self.length_buttons = make_button_row(
+            *sprint_specs,
             button_size=Size(width=80, height=80),
             corner_radius=25,
             default_font="B612 8",
             pango=self.pango,
             button_y=650,
             row_width=self.screen_size.width,
-            *sprint_specs,
         )
         if self.selected_index is not None:
             self.length_buttons[self.selected_index].update_state(ButtonState.SELECTED)

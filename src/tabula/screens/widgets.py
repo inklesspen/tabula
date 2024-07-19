@@ -3,23 +3,23 @@ from __future__ import annotations
 import dataclasses
 import enum
 import math
+from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
 
-from typing import Protocol, TypedDict, NotRequired, TYPE_CHECKING
-
-from ..commontypes import Size, Rect, Point
+from ..commontypes import Point, Rect, Size
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 from ..rendering.rendertypes import (
-    CairoPathOp,
-    CairoOp,
-    CairoColor,
     Alignment,
-    WrapMode,
+    CairoColor,
+    CairoOp,
+    CairoPathOp,
     Rendered,
+    WrapMode,
 )
 
 if TYPE_CHECKING:
     from typing import Any, Optional
+
     from ..device.hwtypes import Key
 
 
@@ -440,5 +440,5 @@ def make_button_stack(
             hotkey=button_spec.get("hotkey"),
             state=button_spec.get("state", ButtonState.NORMAL),
         )
-        for button_spec, position in zip(specs, positions)
+        for button_spec, position in zip(specs, positions, strict=True)
     ]

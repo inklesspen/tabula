@@ -10,6 +10,7 @@ from ..rendering.markup import CURSOR, escape_for_markup
 
 if typing.TYPE_CHECKING:
     import pygtrie
+
     from ..device.hwtypes import AnnotatedKeyEvent
 
 logger = logging.getLogger(__name__)

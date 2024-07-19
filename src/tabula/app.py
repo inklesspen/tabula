@@ -9,16 +9,16 @@ from typing import Optional, cast
 import trio
 import trio_util
 
-from .device.hardware import Hardware, KoboHardware
-from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TapEvent, TabulaEvent
-from .settings import Settings
-from .rendering.fontconfig import setup_fontconfig
-from .screens.base import Screen, Responder, ResponderMetadata, TargetScreen, TargetDialog
-from .screens.dialogs import Dialog
-from .screens import SCREENS, DIALOGS
-from .util import invoke, invoke_if_present, TABULA, AwaitableCallback, Future, removing, replacing_last
 from .db import make_db
+from .device.hardware import Hardware, KoboHardware
+from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TabulaEvent, TapEvent
 from .editor.document import DocumentModel
+from .rendering.fontconfig import setup_fontconfig
+from .screens import DIALOGS, SCREENS
+from .screens.base import Responder, ResponderMetadata, Screen, TargetDialog, TargetScreen
+from .screens.dialogs import Dialog
+from .settings import Settings
+from .util import TABULA, AwaitableCallback, Future, invoke, invoke_if_present, removing, replacing_last
 
 logger = logging.getLogger(__name__)
 

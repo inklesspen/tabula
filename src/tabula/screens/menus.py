@@ -1,32 +1,31 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Callable, Awaitable
 import functools
 import math
 import typing
+from collections.abc import Awaitable, Callable
 
 import trio
 
+from ..commontypes import Point, Rect, Size
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
-from ..commontypes import Point, Size, Rect
-from ..rendering.rendertypes import CairoColor
+from ..editor.doctypes import Session
+from ..editor.document import DocumentModel
 from ..rendering.cairo import Cairo
 from ..rendering.fonts import SERIF
 from ..rendering.pango import Pango
-from ..editor.document import DocumentModel
-from ..editor.doctypes import Session
-from ..util import now, humanized_delta, TABULA
-from .widgets import Label, ButtonState, Button, ButtonSpec, make_button_stack
-
-from .numbers import NUMBER_KEYS, B612_CIRCLED_DIGITS
-from .base import Screen, TargetScreen, TargetDialog
+from ..rendering.rendertypes import CairoColor
+from ..util import TABULA, humanized_delta, now
+from .base import Screen, TargetDialog, TargetScreen
+from .numbers import B612_CIRCLED_DIGITS, NUMBER_KEYS
+from .widgets import Button, ButtonSpec, ButtonState, Label, make_button_stack
 
 if typing.TYPE_CHECKING:
+    from ..commontypes import ScreenInfo
+    from ..db import TabulaDb
     from ..rendering.rendertypes import Rendered
     from ..settings import Settings
-    from ..db import TabulaDb
-    from ..commontypes import ScreenInfo
 
 Handler = Callable[[], Awaitable[None]]
 

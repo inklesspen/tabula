@@ -3,9 +3,8 @@ import importlib.resources
 import pathlib
 import tempfile
 
-from ._cairopango import lib as clib, ffi  # type: ignore
+from ._cairopango import ffi, lib  # type: ignore
 from .fonts import FILES
-
 
 ROOT_CONFIG = """\
 <?xml version="1.0"?>
@@ -53,8 +52,8 @@ def setup_fontconfig(user_font_path: pathlib.Path):
         .replace("[USERFONTS_PATH]", str(user_font_path))
         .replace("[CACHE_PATH]", cache_path)
     )
-    fc_conf = ffi.gc(clib.FcConfigCreate(), clib.FcConfigDestroy)
+    fc_conf = ffi.gc(lib.FcConfigCreate(), lib.FcConfigDestroy)
     root_config_bytes = root_config.encode()
-    clib.FcConfigParseAndLoadFromMemory(fc_conf, root_config_bytes, True)
-    clib.FcConfigSetCurrent(fc_conf)
+    lib.FcConfigParseAndLoadFromMemory(fc_conf, root_config_bytes, True)
+    lib.FcConfigSetCurrent(fc_conf)
     return resource_manager

@@ -6,16 +6,16 @@ import typing
 
 import msgspec
 
-from ..commontypes import Size, Rect, Point
-from ._cairopango import ffi, lib as clib  # type: ignore
-from .rendertypes import Alignment, WrapMode, Rendered, CairoColor
-from ..util import now
-from .cairo import Cairo
-from .pango import Pango, PangoLayout
-from .fonts import SERIF
+from ..commontypes import Point, Rect, Size
 from ..durations import timer_display
 from ..editor.wordcount import format_wordcount
+from ..util import now
+from ._cairopango import ffi, lib  # type: ignore
+from .cairo import Cairo
+from .fonts import SERIF
 from .markup import CURSOR
+from .pango import Pango, PangoLayout
+from .rendertypes import Alignment, CairoColor, Rendered, WrapMode
 
 if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo
@@ -59,7 +59,7 @@ class LayoutManager:
         self.render_width = self.screen_info.size.width
         self.cursor_y = self.screen_info.size.height // 2
         self.render_height = self.screen_info.size.height if full_height else self.cursor_y
-        self.layout = ffi.gc(clib.pango_layout_new(self.pango.context), clib.g_object_unref)
+        self.layout = ffi.gc(lib.pango_layout_new(self.pango.context), lib.g_object_unref)
         self.setup_layout()
         self.rendered_markups = {}
         self.rendered_font = None
@@ -70,34 +70,34 @@ class LayoutManager:
         self.target_cairo.setup()
 
     def setup_layout(self):
-        clib.pango_layout_set_auto_dir(self.layout, False)
-        clib.pango_layout_set_ellipsize(self.layout, clib.PANGO_ELLIPSIZE_NONE)
-        clib.pango_layout_set_justify(self.layout, False)
-        clib.pango_layout_set_single_paragraph_mode(self.layout, False)
-        clib.pango_layout_set_wrap(self.layout, WrapMode.WORD_CHAR)
-        clib.pango_layout_set_width(
+        lib.pango_layout_set_auto_dir(self.layout, False)
+        lib.pango_layout_set_ellipsize(self.layout, lib.PANGO_ELLIPSIZE_NONE)
+        lib.pango_layout_set_justify(self.layout, False)
+        lib.pango_layout_set_single_paragraph_mode(self.layout, False)
+        lib.pango_layout_set_wrap(self.layout, WrapMode.WORD_CHAR)
+        lib.pango_layout_set_width(
             self.layout,
-            self.render_width * clib.PANGO_SCALE,
+            self.render_width * lib.PANGO_SCALE,
         )
-        clib.pango_layout_set_alignment(self.layout, Alignment.LEFT)
+        lib.pango_layout_set_alignment(self.layout, Alignment.LEFT)
 
     def setup_layout_font(self, font: str):
         with (
             ffi.gc(
-                clib.pango_font_description_from_string(font.encode("utf-8")),
-                clib.pango_font_description_free,
+                lib.pango_font_description_from_string(font.encode("utf-8")),
+                lib.pango_font_description_free,
             ) as font_description,
             ffi.gc(
-                clib.pango_font_map_load_font(self.pango.fontmap, self.pango.context, font_description),
-                clib.g_object_unref,
+                lib.pango_font_map_load_font(self.pango.fontmap, self.pango.context, font_description),
+                lib.g_object_unref,
             ) as loaded_font,
             ffi.gc(
-                clib.pango_font_get_metrics(loaded_font, self.pango.language),
-                clib.pango_font_metrics_unref,
+                lib.pango_font_get_metrics(loaded_font, self.pango.language),
+                lib.pango_font_metrics_unref,
             ) as font_metrics,
         ):
-            clib.pango_layout_set_font_description(self.layout, font_description)
-            font_height = clib.pango_font_metrics_get_height(font_metrics) / clib.PANGO_SCALE
+            lib.pango_layout_set_font_description(self.layout, font_description)
+            font_height = lib.pango_font_metrics_get_height(font_metrics) / lib.PANGO_SCALE
             self.skip_height = math.floor(font_height)
 
     def set_font(self, font: str):
@@ -107,28 +107,28 @@ class LayoutManager:
 
     def set_line_spacing(self, line_spacing: float):
         self.rendered_markups = {}
-        clib.pango_layout_set_line_spacing(self.layout, line_spacing)
+        lib.pango_layout_set_line_spacing(self.layout, line_spacing)
         self.rendered_line_spacing = line_spacing
 
     def render_to_image_surface(self, markup: str):
-        clib.pango_layout_set_markup(self.layout, markup.encode("utf-8"), -1)
+        lib.pango_layout_set_markup(self.layout, markup.encode("utf-8"), -1)
         with ffi.new("PangoRectangle *") as logical_rect:
-            clib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, logical_rect)
+            lib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, logical_rect)
             markup_size = Size(width=self.render_width, height=logical_rect.height)
         markup_cairo = Cairo(markup_size)
         markup_cairo.setup()
         markup_cairo.fill_with_color(CairoColor.WHITE)
         markup_cairo.set_draw_color(CairoColor.BLACK)
         markup_cairo.move_to(Point.zeroes())
-        clib.pango_cairo_show_layout(markup_cairo.context, self.layout)
+        lib.pango_cairo_show_layout(markup_cairo.context, self.layout)
         # markup_surface = self.renderer.create_surface(markup_size)
         # with self.renderer.create_cairo_context(markup_surface) as markup_context:
-        #     clib.cairo_set_operator(markup_context, clib.CAIRO_OPERATOR_SOURCE)
-        #     clib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
-        #     clib.cairo_paint(markup_context)
-        #     clib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
-        #     clib.pango_cairo_show_layout(markup_context, self.layout)
-        # clib.cairo_surface_flush(markup_surface)
+        #     lib.cairo_set_operator(markup_context, lib.CAIRO_OPERATOR_SOURCE)
+        #     lib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
+        #     lib.cairo_paint(markup_context)
+        #     lib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
+        #     lib.pango_cairo_show_layout(markup_context, self.layout)
+        # lib.cairo_surface_flush(markup_surface)
         rendered = RenderedMarkup(markup=markup, cairo=markup_cairo)
         self.rendered_markups[markup] = rendered
 
@@ -177,18 +177,18 @@ class LayoutManager:
 
 def render_compose_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: float):
     # scale 40 produces width=60, height=40; width is 1.5x scale
-    clib.cairo_new_path(cairo.context)
+    lib.cairo_new_path(cairo.context)
     cairo.set_draw_color(CairoColor.BLACK)
     cairo.set_line_width(linewidth)
-    clib.cairo_rectangle(
+    lib.cairo_rectangle(
         cairo.context,
         origin.x + scale * 0.02,
         origin.y + scale * 0.02,
         scale * 0.75,
         scale * 0.96,
     )
-    clib.cairo_stroke(cairo.context)
-    clib.cairo_arc(
+    lib.cairo_stroke(cairo.context)
+    lib.cairo_arc(
         cairo.context,
         origin.x + scale * 0.75,
         origin.y + scale * 0.5,
@@ -196,13 +196,13 @@ def render_compose_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: 
         math.radians(0),
         math.radians(360),
     )
-    clib.cairo_stroke(cairo.context)
+    lib.cairo_stroke(cairo.context)
     return Rect(origin=origin, spread=Size(width=scale * 1.5, height=scale))
 
 
 def render_capslock_symbol(cairo: Cairo, origin: Point, scale: float, linewidth: float):
     # scale 40 produces width=32, height=40; width is .8x scale
-    clib.cairo_new_path(cairo.context)
+    lib.cairo_new_path(cairo.context)
     cairo.set_draw_color(CairoColor.BLACK)
     cairo.set_line_width(linewidth)
     cairo.move_to(origin + Point(scale * 0.26, scale * 0.73))
@@ -212,16 +212,16 @@ def render_capslock_symbol(cairo: Cairo, origin: Point, scale: float, linewidth:
     cairo.line_to(origin + Point(scale * 0.76, scale * 0.355))
     cairo.line_to(origin + Point(scale * 0.57, scale * 0.355))
     cairo.line_to(origin + Point(scale * 0.57, scale * 0.73))
-    clib.cairo_close_path(cairo.context)
-    clib.cairo_stroke(cairo.context)
-    clib.cairo_rectangle(
+    lib.cairo_close_path(cairo.context)
+    lib.cairo_stroke(cairo.context)
+    lib.cairo_rectangle(
         cairo.context,
         origin.x + scale * 0.26,
         origin.y + scale * 0.82,
         scale * 0.31,
         scale * 0.18,
     )
-    clib.cairo_stroke(cairo.context)
+    lib.cairo_stroke(cairo.context)
     return Rect(origin=origin, spread=Size(width=scale * 0.8, height=scale))
 
 

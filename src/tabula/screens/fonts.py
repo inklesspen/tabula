@@ -7,22 +7,22 @@ import logging
 import math
 import typing
 
+from ..commontypes import Point, Rect, Size
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..device.keyboard_consts import Key
-from ..commontypes import Point, Size, Rect
-from ..rendering.rendertypes import CairoColor
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
-from .widgets import ButtonState, Button, ButtonSpec, make_button_row, make_button_stack
+from ..rendering.rendertypes import CairoColor
 from ..util import TABULA
-
 from .base import Screen, TargetScreen
+from .widgets import Button, ButtonSpec, ButtonState, make_button_row, make_button_stack
 
 if typing.TYPE_CHECKING:
+    from numbers import Number
+
+    from ..commontypes import ScreenInfo
     from ..device.hardware import Hardware
     from ..settings import Settings
-    from ..commontypes import ScreenInfo
-    from numbers import Number
 
 logger = logging.getLogger(__name__)
 

@@ -3,22 +3,21 @@ from __future__ import annotations
 import logging
 import typing
 
-from ..commontypes import Size, Rect, Point
+from ..commontypes import Point, Rect, Size
 from ..device.hwtypes import AnnotatedKeyEvent
 from ..device.keyboard_consts import Key
-from ..util import TABULA
-from ..rendering.rendertypes import CairoColor
-from ..rendering.layout import LayoutManager, StatusLayout
+from ..editor.composes import ComposeFailed, ComposeOther, ComposeState, ComposeSucceeded
 from ..rendering.cairo import Cairo
-from ..editor.composes import ComposeState, ComposeFailed, ComposeSucceeded, ComposeOther
-
-from .base import Screen, TargetScreen, TargetDialog
+from ..rendering.layout import LayoutManager, StatusLayout
+from ..rendering.rendertypes import CairoColor
+from ..util import TABULA
+from .base import Screen, TargetDialog, TargetScreen
 
 if typing.TYPE_CHECKING:
-    from ..settings import Settings
     from ..commontypes import ScreenInfo
     from ..db import TabulaDb
     from ..editor.document import DocumentModel
+    from ..settings import Settings
 
 
 logger = logging.getLogger(__name__)

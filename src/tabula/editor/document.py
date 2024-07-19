@@ -9,16 +9,17 @@ import unicodedata
 
 import timeflake
 
-from .doctypes import Paragraph, Sprint
-from . import wordcount
-from ..util import now
 from ..durations import format_duration
+from ..util import now
+from . import wordcount
+from .doctypes import Paragraph, Sprint
 
 if typing.TYPE_CHECKING:
-    from collections.abc import Sequence
-    from ..db import TabulaDb
-    import pathlib
     import datetime
+    import pathlib
+    from collections.abc import Sequence
+
+    from ..db import TabulaDb
 
 
 logger = logging.getLogger(__name__)

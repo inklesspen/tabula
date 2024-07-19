@@ -1,22 +1,22 @@
 # noot noot
 # inspired by https://github.com/mikaelho/pythonista-gestures/blob/master/pygestures.py (public domain)
 import collections.abc
-from contextlib import asynccontextmanager, aclosing
 import datetime
 import enum
+from contextlib import aclosing, asynccontextmanager
 from typing import cast
 
 import trio
 
 from ..commontypes import Point
 from .hwtypes import (
-    TouchEvent,
-    TouchReport,
     PersistentTouch,
-    TouchPhase,
     PersistentTouchReport,
-    TapPhase,
     TapEvent,
+    TapPhase,
+    TouchEvent,
+    TouchPhase,
+    TouchReport,
 )
 from .keystreams import Section, pump_all
 

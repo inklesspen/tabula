@@ -1,6 +1,6 @@
-from contextlib import contextmanager
 import fcntl
 import os
+from contextlib import contextmanager
 
 import libevdev
 

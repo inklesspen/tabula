@@ -7,12 +7,14 @@ import typing
 import msgspec
 
 from tabula.device.keyboard_consts import KeyPress
+
 from ..commontypes import Point
 
 if typing.TYPE_CHECKING:
     import collections.abc
-    from .keyboard_consts import Key, Led
+
     from ..commontypes import Size, TouchCoordinateTransform
+    from .keyboard_consts import Key, Led
 
 
 class KeyboardDisconnect(msgspec.Struct, frozen=True):

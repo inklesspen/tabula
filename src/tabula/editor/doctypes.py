@@ -1,9 +1,9 @@
 import datetime
 import typing
 
-from attrs import define, field
 import attrs
 import timeflake
+from attrs import define, field
 
 from ..rendering.markup import make_markup
 from ..util import now

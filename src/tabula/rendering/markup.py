@@ -4,7 +4,7 @@
 
 import markdown_it
 
-from ._cairopango import ffi, lib as clib  # type: ignore
+from ._cairopango import ffi, lib  # type: ignore
 
 # https://en.wikipedia.org/wiki/Macron_below
 # https://en.wikipedia.org/wiki/Underscore
@@ -40,5 +40,5 @@ def make_markup(markdown):
 
 
 def escape_for_markup(text):
-    with ffi.gc(clib.g_markup_escape_text(text.encode("utf-8"), -1), clib.g_free) as result:
+    with ffi.gc(lib.g_markup_escape_text(text.encode("utf-8"), -1), lib.g_free) as result:
         return ffi.string(result).decode("utf-8")

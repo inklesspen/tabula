@@ -7,9 +7,8 @@ import typing
 import msgspec
 import trio
 
-from ..device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TapEvent, TabulaEvent
+from ..device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TabulaEvent, TapEvent
 from ..util import invoke_if_present
-
 
 logger = logging.getLogger(__name__)
 

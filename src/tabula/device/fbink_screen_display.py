@@ -6,9 +6,9 @@ import enum
 import errno
 import logging
 
-from ._fbink import ffi, lib as clib  # type: ignore
-from ..commontypes import Size, Rect, ScreenInfo, TouchCoordinateTransform, ScreenRotation
+from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from ..util import check_c_enum
+from ._fbink import ffi, lib  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +70,10 @@ class WaveformMode(enum.IntEnum):
 
 
 class KoboRota(enum.IntEnum):
-    PORTRAIT_UPRIGHT = clib.FORCE_ROTA_UR  # native_rota: 3, canonical_rota: 0
-    LANDSCAPE_CCW = clib.FORCE_ROTA_CCW  # native_rota: 0, canonical_rota: 3
-    PORTRAIT_UPSIDE_DOWN = clib.FORCE_ROTA_UD  # native_rota: 1, canonical_rota: 2
-    LANDSCAPE_CW = clib.FORCE_ROTA_CW  # native_rota: 2, canonical_rota: 1
+    PORTRAIT_UPRIGHT = lib.FORCE_ROTA_UR  # native_rota: 3, canonical_rota: 0
+    LANDSCAPE_CCW = lib.FORCE_ROTA_CCW  # native_rota: 0, canonical_rota: 3
+    PORTRAIT_UPSIDE_DOWN = lib.FORCE_ROTA_UD  # native_rota: 1, canonical_rota: 2
+    LANDSCAPE_CW = lib.FORCE_ROTA_CW  # native_rota: 2, canonical_rota: 1
 
     @classmethod
     def from_screen_rotation(cls, sr: ScreenRotation):
@@ -125,12 +125,12 @@ class FbInk(contextlib.AbstractContextManager):
         self.screendump = None
 
     def __enter__(self):
-        self.fbfd = clib.fbink_open()
-        clib.fbink_init(self.fbfd, self.fbink_cfg)
+        self.fbfd = lib.fbink_open()
+        lib.fbink_init(self.fbfd, self.fbink_cfg)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        clib.fbink_close(self.fbfd)
+        lib.fbink_close(self.fbfd)
         self.fbfb = None
 
     @property
@@ -139,8 +139,8 @@ class FbInk(contextlib.AbstractContextManager):
 
     def get_screen_info(self) -> ScreenInfo:
         with ffi.new("FBInkState *") as state:
-            clib.fbink_get_state(self.fbink_cfg, state)
-            canonical_rota = KoboRota(clib.fbink_rota_native_to_canonical(state.current_rota))
+            lib.fbink_get_state(self.fbink_cfg, state)
+            canonical_rota = KoboRota(lib.fbink_rota_native_to_canonical(state.current_rota))
             # https://github.com/NiLuJe/FBInk/blob/master/utils/finger_trace.c#L502-L534
             touch_coordinate_transform = TOUCH_COORDINATE_TRANSFORMS[state.current_rota]
             if touch_coordinate_transform != canonical_rota.touch_coordinate_transform():
@@ -179,8 +179,8 @@ class FbInk(contextlib.AbstractContextManager):
             )
 
     def set_rotation(self, sr: ScreenRotation):
-        native_rota = clib.fbink_rota_canonical_to_native(KoboRota.from_screen_rotation(sr))
-        code = clib.fbink_set_fb_info(self.fbfd, native_rota, clib.KEEP_CURRENT_BITDEPTH, clib.KEEP_CURRENT_GRAYSCALE, self.fbink_cfg)
+        native_rota = lib.fbink_rota_canonical_to_native(KoboRota.from_screen_rotation(sr))
+        code = lib.fbink_set_fb_info(self.fbfd, native_rota, lib.KEEP_CURRENT_BITDEPTH, lib.KEEP_CURRENT_GRAYSCALE, self.fbink_cfg)
         if code == errno.ENODEV:
             raise Exception("device not initialized; this should never happen")
         if code == errno.EINVAL:
@@ -189,10 +189,10 @@ class FbInk(contextlib.AbstractContextManager):
             raise Exception("ioctl failure; re-init recommended")
 
     def clear(self):
-        clib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL, False)
+        lib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL, False)
 
     def display_pixels(self, imagebytes: bytes, rect: Rect):
-        clib.fbink_print_raw_data(
+        lib.fbink_print_raw_data(
             self.fbfd,
             imagebytes,
             rect.spread.width,
@@ -205,14 +205,14 @@ class FbInk(contextlib.AbstractContextManager):
 
     def save_screen(self) -> None:
         self.screendump = ffi.new("FBInkDump *")
-        clib.fbink_dump(self.fbfd, self.screendump)
+        lib.fbink_dump(self.fbfd, self.screendump)
 
     def restore_screen(self) -> None:
         if self.screendump is None:
             raise ValueError("Cannot restore screen; nothing saved.")
         with self.screendump:
-            clib.fbink_restore(self.fbfd, self.fbink_cfg, self.screendump)
-            clib.fbink_free_dump_data(self.screendump)
+            lib.fbink_restore(self.fbfd, self.fbink_cfg, self.screendump)
+            lib.fbink_free_dump_data(self.screendump)
         self.screendump = None
 
     def set_waveform_mode(self, wfm_mode: str):

@@ -6,15 +6,15 @@ import typing
 
 import outcome
 
-from ..device.hwtypes import TapEvent, TapPhase
 from ..commontypes import Point, Size
-from ..rendering.fonts import SERIF
+from ..device.hwtypes import TapEvent, TapPhase
 from ..rendering.cairo import Cairo
+from ..rendering.fonts import SERIF
 from ..rendering.pango import Pango
-from ..rendering.rendertypes import WrapMode, CairoColor
+from ..rendering.rendertypes import CairoColor, WrapMode
 from ..util import TABULA, Future
 from .base import Responder
-from .widgets import Button, Label, ButtonSpec, make_button_row
+from .widgets import Button, ButtonSpec, Label, make_button_row
 
 if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo

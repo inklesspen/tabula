@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import contextlib
 import functools
 import pty
 
+import tricycle
 import trio
 import trio.lowlevel
-import tricycle
 
 
 @contextlib.asynccontextmanager
