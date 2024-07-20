@@ -143,3 +143,9 @@ class TapEvent(msgspec.Struct, frozen=True):
 
 
 TabulaEvent = AnnotatedKeyEvent | TapEvent | KeyboardDisconnect
+
+
+@enum.unique
+class BluetoothVariant(enum.Enum):
+    NONE = "none"
+    CLARA2E = "clara2e"

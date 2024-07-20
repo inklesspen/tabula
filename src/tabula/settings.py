@@ -9,6 +9,7 @@ import cattrs
 import pygtrie
 
 from .commontypes import ScreenRotation
+from .device.hwtypes import BluetoothVariant
 from .device.keyboard_consts import Key
 from .durations import format_duration, parse_duration
 
@@ -202,6 +203,7 @@ class Settings:
     max_editable_age: datetime.timedelta
     sprint_lengths: list[datetime.timedelta]
     default_screen_rotation: ScreenRotation
+    bluetooth_variant: BluetoothVariant
 
     def set_current_font(self, new_current_font: str, new_size: float, new_line_spacing: float):
         self.current_font = new_current_font
@@ -239,6 +241,7 @@ class Settings:
                 "max_editable_age": "1h",
                 "sprint_lengths": ["5m", "10m", "15m", "30m"],
                 "default_screen_rotation": "PORTRAIT",
+                "bluetooth_variant": "none",
             },
             cls,
         )
