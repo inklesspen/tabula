@@ -158,7 +158,7 @@ class KoboHardware(Hardware):
         return info
 
     def set_rotation(self, sr: ScreenRotation):
-        raise NotImplementedError()
+        self.fbink.set_rotation(sr)
 
     def display_pixels(self, imagebytes: bytes, rect: Rect):
         if self.fbink.active:
