@@ -120,7 +120,7 @@ class CocoaHardware:
         self.keystream_cancel_scope = trio.CancelScope()
         self.keystream = None
         self.keystream_send_channel = None
-        self.reset_keystream(False)
+        self.reset_keystream()
         self.touchstream_cancel_scope = trio.CancelScope()
         self.touchstream_receive_channel = None
         self.touchstream_send_channel = None
@@ -202,14 +202,14 @@ class CocoaHardware:
                 async for event in self.touchstream_receive_channel:
                     await self.event_channel.send(event)
 
-    def reset_keystream(self, enable_composes: bool):
+    def reset_keystream(self):
         # This needs redesign.
         old_send_channel = self.keystream_send_channel
         (
             new_keystream_send_channel,
             new_keystream_receive_channel,
         ) = trio.open_memory_channel(10)
-        self.keystream = make_keystream(new_keystream_receive_channel, self.settings, enable_composes)
+        self.keystream = make_keystream(new_keystream_receive_channel, self.settings)
         self.keystream_send_channel = new_keystream_send_channel
         if old_send_channel is not None:
             old_send_channel.close()

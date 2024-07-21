@@ -42,7 +42,7 @@ class ButtonMenu(Screen):
 
     async def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=False)
+        app.hardware.reset_keystream()
         self.screen_info = app.screen_info
         self.render_screen()
 

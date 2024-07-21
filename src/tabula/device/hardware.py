@@ -42,7 +42,7 @@ class Hardware(metaclass=abc.ABCMeta):
         self.keystream_cancel_scope = trio.CancelScope()
         self.keystream = None
         self.keystream_send_channel = None
-        self.reset_keystream(False)
+        self.reset_keystream()
         self.screen_size = Size(0, 0)
         self.touch_coordinate_transform = TouchCoordinateTransform.IDENTITY
         self.touchstream_cancel_scope = trio.CancelScope()
@@ -112,14 +112,14 @@ class Hardware(metaclass=abc.ABCMeta):
                     async for event in touchstream:
                         await self.event_channel.send(event)
 
-    def reset_keystream(self, enable_composes: bool):
+    def reset_keystream(self):
         # when resetting the keystream, we want to cancel the current handler and start a new one.
         old_send_channel = self.keystream_send_channel
         (
             new_keystream_send_channel,
             new_keystream_receive_channel,
         ) = trio.open_memory_channel(0)
-        self.keystream = make_keystream(new_keystream_receive_channel, self.settings, enable_composes)
+        self.keystream = make_keystream(new_keystream_receive_channel, self.settings)
         self.keystream_send_channel = new_keystream_send_channel
         if old_send_channel is not None:
             old_send_channel.close()

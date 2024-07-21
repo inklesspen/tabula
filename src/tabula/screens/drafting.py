@@ -42,7 +42,7 @@ class Drafting(Screen):
 
     async def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=False)
+        app.hardware.reset_keystream()
         if app.screen_info != self.screen_info:
             self.screen_info = app.screen_info
             self.layout_manager = LayoutManager(self.screen_info, self.document)

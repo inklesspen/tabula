@@ -75,7 +75,7 @@ class Help(Dialog):
 
     async def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=False)
+        app.hardware.reset_keystream()
         screen = self.render(app.screen_info)
         app.hardware.display_rendered(screen)
 
@@ -113,7 +113,7 @@ class ComposeHelp(Dialog):
 
     async def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=False)
+        app.hardware.reset_keystream()
         screen = self.render(app.screen_info)
         app.hardware.display_rendered(screen)
 

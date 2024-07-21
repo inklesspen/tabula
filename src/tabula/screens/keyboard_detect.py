@@ -85,7 +85,7 @@ class KeyboardDetectDialog(Dialog):
 
     def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=False)
+        app.hardware.reset_keystream()
         if self.screen_info != app.screen_info:
             self.screen = self.render(app.screen_info)
         app.hardware.display_rendered(self.screen)
