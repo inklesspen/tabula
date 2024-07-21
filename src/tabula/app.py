@@ -69,14 +69,16 @@ class Tabula:
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         TABULA.set(self)
-        starting_rotation = self.hardware.get_screen_info().rotation
-        if starting_rotation != self.settings.default_screen_rotation:
-            self.hardware.set_rotation(self.settings.default_screen_rotation)
         with setup_fontconfig(self.settings.font_path):
             async with trio.open_nursery() as nursery:
                 self._nursery = nursery
                 nursery.start_soon(self.dispatch_events, self.hardware.event_receive_channel, nursery)
                 await nursery.start(self.hardware.run)
+
+                starting_rotation = self.hardware.get_screen_info().rotation
+                if starting_rotation != self.settings.default_screen_rotation:
+                    self.hardware.set_rotation(self.settings.default_screen_rotation)
+
                 self.screen_info = self.hardware.get_screen_info()
                 self.hardware.clear_screen()
                 nursery.start_soon(self.ticks, trio_util.periodic(5))
