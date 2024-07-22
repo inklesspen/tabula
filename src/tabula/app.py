@@ -190,11 +190,12 @@ class Tabula:
                 case _:
                     raise NotImplementedError(f"Don't know how to handle {type(event)}.")
 
-    @classmethod
-    async def start_app(cls, hardware, settings_path):
-        settings = Settings.load(settings_path)
-        app = cls(hardware, settings)
-        await app.run()
+
+async def start_tabula(settings_path: pathlib.Path):
+    settings = Settings.load(settings_path)
+    hardware = KoboHardware(settings)
+    app = Tabula(hardware, settings)
+    await app.run()
 
 
 parser = argparse.ArgumentParser(prog="tabula")
@@ -212,5 +213,5 @@ def main(argv=sys.argv):
     Does stuff.
     """
     parsed = parser.parse_args(argv[1:])
-    trio.run(Tabula.start_app, KoboHardware(parsed.settings), parsed.settings)
+    trio.run(start_tabula, parsed.settings)
     return 0

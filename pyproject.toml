@@ -58,6 +58,10 @@ devel = ['black', 'flake8', 'Flake8-pyproject']
 linux = ['libevdev']
 test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
 
+[project.scripts]
+"list-tabula-fonts" = "tabula.scripts:list_fonts_cli"
+tabula = "tabula.app:main"
+
 [tool.ruff]
 extend-exclude = []
 line-length = 140
