@@ -624,11 +624,12 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
         self.exported_object_manager = ExportedObjectManager(self)
 
     async def _receiver(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        if self.conn is None:
+            raise RouterClosed("Not connected to D-Bus")
         recv_logger = logger.getChild("allmessages")
         task_status.started()
         try:
-            while True:
-                msg = await self.conn.receive()
+            async for msg in self.conn:
                 recv_logger.debug("BlueGroove received message %r", msg)
                 if msg.header.message_type in (MessageType.method_return, MessageType.error):
                     reply_to = msg.header.fields.get(HeaderFields.reply_serial, -1)
@@ -644,11 +645,10 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
                 if msg.header.message_type == MessageType.method_call:
                     await self.exported_object_manager.respond(msg)
                 self.check_predicates()
-        except trio.ClosedResourceError:
-            logger.debug("D-Bus connection closed")
         except Exception:
-            logger.exception("something happened")
+            logger.exception("something unexpected happened")
         finally:
+            logger.debug("D-Bus connection closed")
             for reply_channel in self.expected_replies.values():
                 reply_channel.send_nowait(outcome.Error(RouterClosed("D-Bus connection closed before reply arrived")))
             self.expected_replies = {}
@@ -806,6 +806,7 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
 
         event = trio.Event()
         self.waiting_predicates.append((predicate, event))
+        self.check_predicates()  # it may already be there…
         await event.wait()
 
     @contextlib.asynccontextmanager
@@ -898,3 +899,33 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
             yield
             await self.exported_object_manager.unexport_all()
             self.conn = None
+
+
+if __name__ == "__main__":
+    # importing readline makes arrow keys work properly.
+    import readline  # noqa: F401
+
+    import trio._repl
+
+    logging.basicConfig(level=logging.DEBUG)
+    logger.getChild("allmessages").setLevel(logging.INFO)
+
+    async def main():
+        async with BluezContext() as bluezcontext:
+            await bluezcontext.wait_for_adapter()
+            logger.debug("Started")
+            console = trio._repl.TrioInteractiveConsole(
+                {
+                    "trio": trio,
+                    "bluezcontext": bluezcontext,
+                    "nursery": bluezcontext.nursery,
+                    "BluezAgentManager": BluezAgentManager,
+                    "BluezAdapter": BluezAdapter,
+                    "BluezDevice": BluezDevice,
+                    "BluezAgent": BluezAgent,
+                    "Agent1Interface": Agent1Interface,
+                }
+            )
+            await trio._repl.run_repl(console)
+
+    trio.run(main)
