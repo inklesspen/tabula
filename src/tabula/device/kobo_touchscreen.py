@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-import collections
-import collections.abc
 import logging
 import typing
 
@@ -12,7 +10,7 @@ import msgspec
 import trio
 
 from .eventsource import AbsCode, Event, EventSource, EventType, KeyCode, SynCode
-from .hwtypes import TouchEvent, TouchReport
+from .hwtypes import MultitouchVariant, TouchEvent, TouchReport
 
 # https://www.kernel.org/doc/Documentation/input/multi-touch-protocol.txt
 # Kobo Clara HD uses what koreader calls a "snow protocol"; ABS_MT_TRACKING_ID is used
@@ -77,10 +75,10 @@ class WipTouchEvent(msgspec.Struct):
 
 
 class Touchscreen:
-    def __init__(self, channel: trio.abc.SendChannel, event_source: typing.Optional[EventSource] = None):
+    def __init__(self, variant: MultitouchVariant, channel: trio.abc.SendChannel, event_source: typing.Optional[EventSource] = None):
+        self.variant = variant
         self.active_touches = Touches()
         self.wip = WipTouchEvent()
-        self.eventqueue = collections.deque(maxlen=50)
         self.channel = channel
         if event_source is None:
             # Prevent importing libevdev unless necessary
@@ -89,7 +87,7 @@ class Touchscreen:
             event_source = EventDevice("/dev/input/event1")
         self.event_source = event_source
 
-    async def handle_events(self, *, task_status=trio.TASK_STATUS_IGNORED):
+    async def handle_events_snow_protocol(self, *, task_status=trio.TASK_STATUS_IGNORED):
         with self.event_source:
             task_status.started()
             disregard = False
@@ -101,7 +99,7 @@ class Touchscreen:
                             if disregard:
                                 disregard = False
                             else:
-                                self.eventqueue.append(TouchReport(touches=self.active_touches.values, timestamp=e.timestamp))
+                                await self.channel.send(TouchReport(touches=self.active_touches.values, timestamp=e.timestamp))
                             self.active_touches.clear()
                             self.wip.clear()
                         case Event(type=EventType.EV_SYN, code=SynCode.SYN_MT_REPORT):
@@ -120,20 +118,16 @@ class Touchscreen:
                         case Event(type=EventType.EV_KEY, code=KeyCode.BTN_TOUCH, value=0):
                             self.wip.clear()
                             self.active_touches.clear()
-                await trio.sleep(1 / 60)
-
-    async def eventstream(self):
-        while True:
-            try:
-                yield self.eventqueue.popleft()
-                await trio.lowlevel.checkpoint()
-            except IndexError:
-                # No key events, sleep a bit longer.
+                        case Event(type=EventType.EV_SYN, code=SynCode.SYN_CONFIG, value=42):
+                            self.channel.close()
+                            return
                 await trio.sleep(1 / 60)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         async with trio.open_nursery() as nursery:
+            match self.variant:
+                case MultitouchVariant.SNOW_PROTOCOL:
+                    nursery.start_soon(self.handle_events_snow_protocol)
+                case _:
+                    raise NotImplementedError(f"Variant {self.variant} is not yet implemented")
             task_status.started()
-            nursery.start_soon(self.handle_events)
-            async for event in self.eventstream():
-                await self.channel.send(event)
