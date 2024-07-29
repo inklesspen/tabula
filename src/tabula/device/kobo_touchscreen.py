@@ -71,6 +71,7 @@ class WipTouchEvent(msgspec.Struct, kw_only=True):
 
 
 class Touchscreen:
+    # https://www.kernel.org/doc/Documentation/input/multi-touch-protocol.txt
     def __init__(self, variant: MultitouchVariant, channel: trio.abc.SendChannel, event_source: typing.Optional[EventSource] = None):
         self.variant = variant
         self.active_touches = Touches()
@@ -86,6 +87,9 @@ class Touchscreen:
         self.event_source = event_source
 
     async def handle_events_snow_protocol(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        # Kobo Clara HD uses what koreader calls a "snow protocol"; ABS_MT_TRACKING_ID is used
+        # to convey a slot-type value (instead of using ABS_MT_SLOT properly)
+        # Lifting the touch is conveyed with EV_KEY:BTN_TOUCH:0.
         with self.event_source:
             task_status.started()
             while True:
