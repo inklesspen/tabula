@@ -10,7 +10,6 @@ from ..util import check_c_enum
 from ._cairopango import ffi, lib  # type: ignore
 
 
-# Pylance complains "Variable not allowed in type expression" when using this as a type
 @check_c_enum(ffi, "cairo_hint_style_t", AUTO=lib.CAIRO_HINT_STYLE_SLIGHT)
 class HintMode(enum.IntEnum):
     DEFAULT = 0
