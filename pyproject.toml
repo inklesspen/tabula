@@ -42,7 +42,7 @@ dependencies = [
   'cattrs',
   'jeepney',
   'outcome',
-  'libevdev; platform_system=="Linux"',
+  'libevdev',
 ]
 description = 'cool as hecc'
 dynamic = ['version']
@@ -54,8 +54,6 @@ requires-python = '>=3.12'
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
 # to require these on mac os: platform_system=="Darwin"
 devel = ['black', 'flake8', 'Flake8-pyproject']
-# this exists for convenience when using uv pip compile…
-linux = ['libevdev']
 test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
 
 [project.scripts]
