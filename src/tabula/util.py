@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import collections.abc
 import datetime
 import enum
 import inspect
 import math
 import typing
-from os.path import commonprefix
 
 import outcome
 import trio
@@ -21,19 +22,62 @@ TABULA: trio.lowlevel.RunVar["Tabula"] = trio.lowlevel.RunVar("tabula_app_instan
 AwaitableCallback = collections.abc.Callable[[], collections.abc.Awaitable[None]]
 
 
-def check_c_enum(ffi: "FFIType", enum_t: str, allow_skipped_c_values=False, **extras: int):
+def _nameprefix(*names: str):
+    "Given multiple identifiers (such as those used for enums), return the longest common prefix, or the empty string if no such prefix is found."
+    if not names:
+        return ""
+    names = sorted(set(names))
+    if len(names) == 1:
+        return names[0]
+    first = names[0]
+    last = names[-1]
+    for i, ch in enumerate(first):
+        if ch != last[i]:  # first differing character
+            return first[:i]  # so return everything up to that point
+    # if we fall off the end of the for loop, then the first string is a substring of the last string, which seems weird but is possible.
+    return first
+
+
+def check_c_enum(ffi: FFIType, enum_t: str, strip_prefix: str | None = None, allow_omitting_c_members: bool = False, **extras: int):
+    """Checks an IntEnum for consistency with a C enum.
+
+    For example, given this C enum type:
+        typedef enum {
+            STOP,
+            CAUTION,
+            GO
+        } traffic_light_states_t ;
+
+    You can define this IntEnum:
+        @check_c_enum(ffi, 'traffic_light_states_t')
+        class TrafficLightState(enum.IntEnum):
+            STOP = 0
+            CAUTION = 1
+            GO = 2
+
+    Raises KeyError if either enum has a name not found in the other, or ValueError if a name has different values in the two enums.
+
+    Many C enums have a common prefix, such as SOMELIBRARY_VALUE_A and SOMELIBRARY_VALUE_B. By default, check_c_enum detects and strips
+    this common prefix, so it will look for members named A and B on the Python-side enum. To turn off this detection, set strip_prefix
+    to a string value, or (to not strip anything) the empty string.
+
+    Set allow_omitting_c_members=True to allow the Python-side enum to omit one or more members from the C-side enum.
+
+    Any additional values defined in the Python-side enum may be specified as extra keyword arguments; this can be handy for defining aliases.
+    """
     ctype = ffi.typeof(enum_t)
-    prefix = commonprefix(tuple(ctype.relements.keys()))
-    values: dict[str, int] = {k.removeprefix(prefix): v for v, k in sorted(ctype.elements.items())}
+    if strip_prefix is None:
+        strip_prefix = _nameprefix(*ctype.relements.keys())
+    values: dict[str, int] = {k.removeprefix(strip_prefix): v for v, k in sorted(ctype.elements.items())}
     values.update(extras)
 
-    def checker[E: typing.Type[enum.IntEnum]](cls: E):
+    def checker[E: type[enum.IntEnum]](cls: E):
         for name, value in cls.__members__.items():
             if name not in values:
                 raise KeyError(name)
-            if values[name] != value:
+            if values.pop(name) != value:
                 raise ValueError(name)
-        if not allow_skipped_c_values:
+        if not allow_omitting_c_members:
             for name in values:
                 if name not in cls.__members__:
                     raise KeyError(name)
