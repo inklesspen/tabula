@@ -8,12 +8,14 @@ import tricycle
 import trio
 import trio.lowlevel
 
+from .bluez import BluezContext
+
 
 @contextlib.asynccontextmanager
 async def kmods():
     lsmod = await trio.run_process(["lsmod"], capture_stdout=True)
     loaded_mods = [line.split()[0] for line in lsmod.stdout.decode().splitlines() if line]
-    print(f"loaded mods at start: {loaded_mods}")
+    # print(f"loaded mods at start: {loaded_mods}")
     need_uhid = "uhid" not in loaded_mods
     need_pwr = "sdio_bt_pwr" not in loaded_mods
 
@@ -45,3 +47,11 @@ async def hciattach(nursery: trio.Nursery, *, task_status=trio.TASK_STATUS_IGNOR
                 raise Exception(f"hciattach went wrong; expected {expected!r} but got {line!r}")
         task_status.started(hci)
         await hci.wait()
+
+
+@contextlib.asynccontextmanager
+async def bluetooth():
+    async with kmods(), BluezContext() as bluezcontext:
+        await bluezcontext.nursery.start(hciattach, bluezcontext.nursery)
+        await bluezcontext.ensure_adapter_powered_on()
+        yield bluezcontext

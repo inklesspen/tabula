@@ -809,6 +809,11 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
         self.check_predicates()  # it may already be there…
         await event.wait()
 
+    async def ensure_adapter_powered_on(self):
+        await self.wait_for_adapter()
+        if not self.adapter["Powered"]:
+            await self.adapter.SetPowered(True)
+
     @contextlib.asynccontextmanager
     async def __wrap__(self):
         self.expected_replies = {}
