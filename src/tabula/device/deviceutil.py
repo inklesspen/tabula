@@ -11,7 +11,8 @@ from .eventsource import Event
 
 
 class EventDevice(contextlib.AbstractContextManager):
-    def __init__(self, device_path: str | pathlib.Path):
+    def __init__(self, device_path: str | pathlib.Path, allow_auto_sync=False):
+        self.allow_auto_sync = allow_auto_sync
         if not isinstance(device_path, pathlib.Path):
             device_path = pathlib.Path(device_path)
         if not device_path.is_absolute():
@@ -30,8 +31,33 @@ class EventDevice(contextlib.AbstractContextManager):
     def events(self) -> collections.abc.Iterator[Event]:
         if self._d is None:
             raise Exception("Must be within a context expression")
-        for evt in self._d.events():
-            yield Event.from_libevdev_event(evt)
+
+        resyncing = False
+        events = self._d.events()
+        while True:
+            if resyncing:
+                if self.allow_auto_sync:
+                    for evt in self._d.sync():
+                        yield Event.from_libevdev_event(evt)
+                else:
+                    # If we don't trust the auto-sync feature, then
+                    # we just have to discard all events until the next
+                    # SYN_REPORT (including that one).
+                    synced = False
+                    while not synced:
+                        evt = next(events)
+                        if evt.code == libevdev.EV_SYN.SYN_REPORT:
+                            synced = True
+                resyncing = False
+            else:
+                try:
+                    evt = next(events)
+                except StopIteration:
+                    return
+                except libevdev.EventsDroppedException:
+                    resyncing = True
+                else:
+                    yield Event.from_libevdev_event(evt)
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
         self._f.close()
@@ -60,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("output", type=argparse.FileType(mode="w"))
     args = parser.parse_args()
 
-    with EventDevice(args.device) as device:
+    with EventDevice(args.device, allow_auto_sync=True) as device:
         args.output.write(f"# {args.device}\n")
         while True:
             try:

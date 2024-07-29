@@ -1,25 +1,10 @@
-import contextlib
 import datetime
 
 import pytest
 import trio
-from tabula.device.eventsource import Event
+from tabula.device.eventsource import Event, SimpleEventSource
 from tabula.device.hwtypes import MultitouchVariant, TouchEvent, TouchReport
 from tabula.device.kobo_touchscreen import Touchscreen
-
-
-class SimpleEventSource(contextlib.AbstractContextManager):
-    def __init__(self, events: list[Event]):
-        self._events = events
-
-    def events(self):
-        while self._events:
-            evt = self._events.pop(0)
-            yield evt
-
-    def __exit__(self, _exc_type, _exc_value, _traceback):
-        return None
-
 
 TAP_RAW_EVENTS = [
     Event.from_log("EV_KEY", "BTN_TOOL_FINGER", value=1, seconds=3110, microseconds=243391),

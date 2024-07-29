@@ -91,12 +91,7 @@ class TouchEvent(msgspec.Struct, frozen=True):
 
 class TouchReport(msgspec.Struct, frozen=True):
     touches: typing.List[TouchEvent]
-    sec: int
-    usec: int
-
-    @property
-    def timestamp(self):
-        return datetime.timedelta(seconds=self.sec, microseconds=self.usec)
+    timestamp: datetime.timedelta
 
 
 class EventType(enum.Enum):
@@ -149,3 +144,14 @@ TabulaEvent = AnnotatedKeyEvent | TapEvent | KeyboardDisconnect
 class BluetoothVariant(enum.Enum):
     NONE = "none"
     CLARA2E = "clara2e"
+
+
+@enum.unique
+class MultitouchVariant(enum.Enum):
+    # https://www.kernel.org/doc/Documentation/input/multi-touch-protocol.txt
+    TYPE_A = "type_a"
+    TYPE_B = "type_b"
+    # Kobo Clara HD uses what koreader calls a "snow protocol"; ABS_MT_TRACKING_ID is used
+    # to convey a slot-type value (instead of using ABS_MT_SLOT properly)
+    # Lifting the touch is conveyed with EV_KEY:BTN_TOUCH:0.
+    SNOW_PROTOCOL = "snow_protocol"
