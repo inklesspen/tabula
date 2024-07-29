@@ -18,6 +18,7 @@ from .hwtypes import (
 )
 from .keyboard_consts import Led
 from .keystreams import make_keystream
+from .kobo_models import detect_model
 
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
@@ -147,11 +148,13 @@ class KoboHardware(Hardware):
         self,
         settings: Settings,
     ):
+        self.model = detect_model()
+        self.keyboard = None
+        self.touchscreen = None
         super().__init__(settings)
         from .fbink_screen_display import FbInk
 
         self.fbink = FbInk()
-        self.keyboards = None
 
     def get_screen_info(self) -> ScreenInfo:
         info = self.fbink.get_screen_info()
@@ -169,22 +172,32 @@ class KoboHardware(Hardware):
             self.fbink.clear()
 
     def set_led_state(self, state: SetLed):
-        if self.keyboards is not None:
-            self.keyboards.set_led(state.led, state.state)
+        if self.keyboard is not None:
+            self.keyboard.set_led(state.led, state.state)
 
     def set_waveform_mode(self, wfm_mode: str):
         self.fbink.set_waveform_mode(wfm_mode)
 
+    def reset_keystream(self):
+        super().reset_keystream()
+        if self.keyboard is not None:
+            self.keyboard.keyboard_send_channel = self.keystream_send_channel
+
+    def reset_touchstream(self):
+        super().reset_touchstream()
+        if self.touchscreen is not None:
+            self.touchscreen.channel = self.touchstream_send_channel
+
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        from .kobo_keyboard import AllKeyboards
+        from .kobo_keyboard import LibevdevKeyboard
         from .kobo_touchscreen import Touchscreen
 
         with self.fbink:
             async with trio.open_nursery() as nursery:
                 task_status.started()
-                self.keyboards = AllKeyboards(self.send_channel.clone())
-                nursery.start_soon(self.keyboards.run)
-                touchscreen = Touchscreen(self.send_channel.clone())
+                self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.keystream_send_channel)
+                nursery.start_soon(self.keyboard.run, nursery)
+                touchscreen = Touchscreen(self.model.multitouch_variant, self.touchstream_send_channel)
                 nursery.start_soon(touchscreen.run)
 
 
