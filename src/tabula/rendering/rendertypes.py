@@ -109,6 +109,29 @@ class CairoStatus(enum.IntEnum):
     LAST_STATUS = 45
 
 
+@check_c_enum(ffi, "PangoStyle")
+class Style(enum.IntEnum):
+    NORMAL = 0
+    OBLIQUE = 1
+    ITALIC = 2
+
+
+@check_c_enum(ffi, "PangoWeight")
+class Weight(enum.IntEnum):
+    THIN = 100
+    ULTRALIGHT = 200
+    LIGHT = 300
+    SEMILIGHT = 350
+    BOOK = 380
+    NORMAL = 400
+    MEDIUM = 500
+    SEMIBOLD = 600
+    BOLD = 700
+    ULTRABOLD = 800
+    HEAVY = 900
+    ULTRAHEAVY = 1000
+
+
 class AffineTransform(msgspec.Struct, frozen=True):
     # Both Cairo and Pango represent affine transforms as 6-tuples
     # https://www.cairographics.org/manual/cairo-cairo-matrix-t.html

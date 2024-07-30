@@ -514,6 +514,37 @@ struct _PangoLogAttr
 };
 typedef struct _PangoLogAttr PangoLogAttr;
 
+typedef ... PangoAttrList;
+typedef ... PangoAttrClass;
+struct _PangoAttribute
+{
+  const PangoAttrClass *klass;
+  guint start_index;
+  guint end_index;
+};
+typedef struct _PangoAttribute PangoAttribute;
+
+typedef enum {
+  PANGO_STYLE_NORMAL,
+  PANGO_STYLE_OBLIQUE,
+  PANGO_STYLE_ITALIC
+} PangoStyle;
+
+typedef enum {
+  PANGO_WEIGHT_THIN = 100,
+  PANGO_WEIGHT_ULTRALIGHT = 200,
+  PANGO_WEIGHT_LIGHT = 300,
+  PANGO_WEIGHT_SEMILIGHT = 350,
+  PANGO_WEIGHT_BOOK = 380,
+  PANGO_WEIGHT_NORMAL = 400,
+  PANGO_WEIGHT_MEDIUM = 500,
+  PANGO_WEIGHT_SEMIBOLD = 600,
+  PANGO_WEIGHT_BOLD = 700,
+  PANGO_WEIGHT_ULTRABOLD = 800,
+  PANGO_WEIGHT_HEAVY = 900,
+  PANGO_WEIGHT_ULTRAHEAVY = 1000
+} PangoWeight;
+
 const PangoMatrix *pango_context_get_matrix(PangoContext *context);
 void pango_context_set_language(PangoContext *context,
                                 PangoLanguage *language);
@@ -601,6 +632,8 @@ void pango_layout_set_markup(PangoLayout *layout,
 void pango_layout_set_text(PangoLayout *layout,
                            const char *text,
                            int length);
+void pango_layout_set_attributes (PangoLayout *layout, PangoAttrList *attrs);
+PangoAttrList *pango_layout_get_attributes (PangoLayout *layout);
 void pango_layout_set_auto_dir(PangoLayout *layout,
                                gboolean auto_dir);
 void pango_layout_set_ellipsize(PangoLayout *layout,
@@ -648,6 +681,18 @@ const char*
 pango_layout_get_text (
   PangoLayout* layout
 );
+
+PangoAttrList* pango_attr_list_new (void);
+void pango_attr_list_unref (PangoAttrList* list);
+void pango_attr_list_change (PangoAttrList* list, PangoAttribute* attr);
+void pango_attr_list_insert (PangoAttrList* list, PangoAttribute* attr);
+void pango_attr_list_update (PangoAttrList* list, int pos, int remove, int add);
+char* pango_attr_list_to_string (PangoAttrList* list);
+PangoAttrList* pango_attr_list_from_string (const char* text);
+
+PangoAttribute* pango_attr_weight_new (PangoWeight weight);
+PangoAttribute* pango_attr_style_new (PangoStyle style);
+void pango_attribute_destroy (PangoAttribute* attr);
 
 /* pangocairo */
 typedef struct _PangoCairoFontMap PangoCairoFontMap;
