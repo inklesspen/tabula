@@ -195,11 +195,11 @@ class FbInk(contextlib.AbstractContextManager):
         lib.fbink_print_raw_data(
             self.fbfd,
             imagebytes,
-            rect.spread.width,
-            rect.spread.height,
+            int_coord(rect.spread.width),
+            int_coord(rect.spread.height),
             len(imagebytes),
-            rect.origin.x,
-            rect.origin.y,
+            int_coord(rect.origin.x),
+            int_coord(rect.origin.y),
             self.fbink_cfg,
         )
 
@@ -217,3 +217,10 @@ class FbInk(contextlib.AbstractContextManager):
 
     def set_waveform_mode(self, wfm_mode: str):
         self.fbink_cfg.wfm_mode = WaveformMode[wfm_mode]
+
+
+def int_coord(maybeint):
+    actuallyint = round(maybeint)
+    if actuallyint != maybeint:
+        logger.warning("Got a non-integer rendering coordinate %r", maybeint, stack_info=True)
+    return actuallyint
