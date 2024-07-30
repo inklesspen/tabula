@@ -159,6 +159,7 @@ class Touchscreen:
                                 continue
                             self.wip_touches[current_slot].pressure = evt.value
                         case Event(type=EventType.EV_SYN, code=SynCode.SYN_REPORT):
+                            self.active_touches.clear()
                             for wip in self.wip_touches.values():
                                 if wip.slot > 1:
                                     logger.warning("Unable to handle touch in slot %d", wip.slot)

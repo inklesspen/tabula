@@ -91,6 +91,7 @@ TAP_RAW_EVENTS = [
     Event.from_log("EV_SYN", "SYN_REPORT", value=0, seconds=3110, microseconds=344374),
     Event.from_log("EV_KEY", "BTN_TOUCH", value=0, seconds=3110, microseconds=375037),
     Event.from_log("EV_KEY", "BTN_TOOL_FINGER", value=0, seconds=3110, microseconds=375037),
+    Event.from_log("EV_SYN", "SYN_REPORT", value=0, seconds=3110, microseconds=375037),
 ]
 
 TAP_TOUCH_EVENTS = [
@@ -102,6 +103,7 @@ TAP_TOUCH_EVENTS = [
     TouchReport(touches=[TouchEvent(x=601, y=617, pressure=38, slot=0)], timestamp=datetime.timedelta(seconds=3110, microseconds=312807)),
     TouchReport(touches=[TouchEvent(x=601, y=615, pressure=35, slot=0)], timestamp=datetime.timedelta(seconds=3110, microseconds=328752)),
     TouchReport(touches=[TouchEvent(x=600, y=613, pressure=34, slot=0)], timestamp=datetime.timedelta(seconds=3110, microseconds=344374)),
+    TouchReport(touches=[], timestamp=datetime.timedelta(seconds=3110, microseconds=375037)),
 ]
 
 SWIPE_RAW_EVENTS = [
@@ -319,6 +321,7 @@ SWIPE_RAW_EVENTS = [
     Event.from_log("EV_SYN", "SYN_REPORT", value=0, seconds=3132, microseconds=18711),
     Event.from_log("EV_KEY", "BTN_TOUCH", value=0, seconds=3132, microseconds=49361),
     Event.from_log("EV_KEY", "BTN_TOOL_FINGER", value=0, seconds=3132, microseconds=49361),
+    Event.from_log("EV_SYN", "SYN_REPORT", value=0, seconds=3132, microseconds=49361),
 ]
 
 SWIPE_TOUCH_EVENTS = [
@@ -343,6 +346,7 @@ SWIPE_TOUCH_EVENTS = [
     TouchReport(touches=[TouchEvent(x=499, y=464, pressure=34, slot=0)], timestamp=datetime.timedelta(seconds=3131, microseconds=987144)),
     TouchReport(touches=[TouchEvent(x=460, y=458, pressure=34, slot=0)], timestamp=datetime.timedelta(seconds=3132, microseconds=3142)),
     TouchReport(touches=[TouchEvent(x=439, y=455, pressure=34, slot=0)], timestamp=datetime.timedelta(seconds=3132, microseconds=18711)),
+    TouchReport(touches=[], timestamp=datetime.timedelta(seconds=3132, microseconds=49361)),
 ]
 
 
@@ -562,6 +566,7 @@ PINCH_RAW_EVENTS = [
     Event.from_log("EV_SYN", "SYN_REPORT", value=0, seconds=3383, microseconds=712934),
     Event.from_log("EV_KEY", "BTN_TOUCH", value=0, seconds=3383, microseconds=743562),
     Event.from_log("EV_KEY", "BTN_TOOL_FINGER", value=0, seconds=3383, microseconds=743562),
+    Event.from_log("EV_SYN", "SYN_REPORT", value=0, seconds=3383, microseconds=743562),
 ]
 PINCH_TOUCH_EVENTS = [
     TouchReport(touches=[TouchEvent(x=294, y=797, pressure=32, slot=0)], timestamp=datetime.timedelta(seconds=3383, microseconds=532388)),
@@ -604,6 +609,7 @@ PINCH_TOUCH_EVENTS = [
     ),
     TouchReport(touches=[TouchEvent(x=990, y=314, pressure=28, slot=1)], timestamp=datetime.timedelta(seconds=3383, microseconds=698468)),
     TouchReport(touches=[TouchEvent(x=970, y=331, pressure=23, slot=1)], timestamp=datetime.timedelta(seconds=3383, microseconds=712934)),
+    TouchReport(touches=[], timestamp=datetime.timedelta(seconds=3383, microseconds=743562)),
 ]
 
 

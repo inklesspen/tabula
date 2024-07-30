@@ -9,19 +9,13 @@ import trio
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from ..settings import Settings
 from .gestures import make_tapstream
-from .hwtypes import (
-    KeyEvent,
-    SetLed,
-    TouchEvent,
-    TouchReport,
-)
+from .hwtypes import AnnotatedKeyEvent, KeyEvent, SetLed, TabulaEvent, TapEvent, TouchReport
 from .keyboard_consts import Led
 from .keystreams import make_keystream
 from .kobo_models import detect_model
 
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
-    from .hwtypes import AnnotatedKeyEvent, TabulaEvent, TapEvent
 
 
 class Hardware(metaclass=abc.ABCMeta):
@@ -77,8 +71,8 @@ class Hardware(metaclass=abc.ABCMeta):
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.keystream_cancel_scope = cancel_scope
-                await self.set_led_state(SetLed(led=Led.LED_CAPSL, state=False))
-                await self.set_led_state(SetLed(led=Led.LED_COMPOSE, state=False))
+                self.set_led_state(SetLed(led=Led.LED_CAPSL, state=False))
+                self.set_led_state(SetLed(led=Led.LED_COMPOSE, state=False))
                 async with self.keystream as keystream:
                     async for event in keystream:
                         if event.is_led_able:
@@ -110,7 +104,7 @@ class Hardware(metaclass=abc.ABCMeta):
                 self.touchstream_cancel_scope = cancel_scope
                 async with self.touchstream as touchstream:
                     async for event in touchstream:
-                        await self.event_channel.send(event)
+                        await self.event_channel.send(self._transform_tap_event(event))
 
     def reset_keystream(self):
         # when resetting the keystream, we want to cancel the current handler and start a new one.
@@ -138,7 +132,7 @@ class Hardware(metaclass=abc.ABCMeta):
             old_send_channel.close()
         self.touchstream_cancel_scope.cancel()
 
-    def _transform_touch_event(self, event: TouchEvent):
+    def _transform_tap_event(self, event: TapEvent):
         return event.apply_transform(self.touch_coordinate_transform, self.screen_size)
 
 
@@ -157,10 +151,13 @@ class KoboHardware(Hardware):
 
     def get_screen_info(self) -> ScreenInfo:
         info = self.fbink.get_screen_info()
+        self.screen_size = info.size
+        self.touch_coordinate_transform = info.touch_coordinate_transform
         return info
 
     def set_rotation(self, sr: ScreenRotation):
         self.fbink.set_rotation(sr)
+        self.get_screen_info()  # refresh screen_size and touch_coordinate_transform
 
     def display_pixels(self, imagebytes: bytes, rect: Rect):
         if self.fbink.active:
@@ -195,8 +192,10 @@ class KoboHardware(Hardware):
             async with trio.open_nursery() as nursery:
                 task_status.started()
                 self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.keystream_send_channel)
+                nursery.start_soon(self._handle_keystream)
                 nursery.start_soon(self.keyboard.run, nursery)
                 touchscreen = Touchscreen(self.model.multitouch_variant, self.touchstream_send_channel)
+                nursery.start_soon(self._handle_touchstream)
                 nursery.start_soon(touchscreen.run)
 
     async def print_events(self):

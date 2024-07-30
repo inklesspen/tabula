@@ -8,12 +8,11 @@ import msgspec
 
 from tabula.device.keyboard_consts import KeyPress
 
-from ..commontypes import Point
+from ..commontypes import Point, Size, TouchCoordinateTransform
 
 if typing.TYPE_CHECKING:
     import collections.abc
 
-    from ..commontypes import Size, TouchCoordinateTransform
     from .keyboard_consts import Key, Led
 
 
@@ -135,6 +134,19 @@ class TapPhase(enum.Enum):
 class TapEvent(msgspec.Struct, frozen=True):
     location: Point
     phase: TapPhase
+
+    def apply_transform(self, transform: TouchCoordinateTransform, screen_size: Size):
+        match transform:
+            case TouchCoordinateTransform.IDENTITY:
+                return self
+            case TouchCoordinateTransform.SWAP_AND_MIRROR_Y:
+                return TapEvent(location=Point(x=self.location.y, y=screen_size.height - self.location.x), phase=self.phase)
+            case TouchCoordinateTransform.MIRROR_X_AND_MIRROR_Y:
+                return TapEvent(
+                    location=Point(x=screen_size.width - self.location.x, y=screen_size.height - self.location.y), phase=self.phase
+                )
+            case TouchCoordinateTransform.SWAP_AND_MIRROR_X:
+                return TapEvent(location=Point(x=screen_size.width - self.location.y, y=self.location.x), phase=self.phase)
 
 
 TabulaEvent = AnnotatedKeyEvent | TapEvent | KeyboardDisconnect

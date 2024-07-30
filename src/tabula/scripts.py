@@ -44,6 +44,7 @@ def print_kobo_events():
         async with trio.open_nursery() as nursery:
             hardware = KoboHardware(settings=settings)
             await nursery.start(hardware.run)
+            print(hardware.get_screen_info())
             await hardware.print_events()
 
     trio.run(runner)

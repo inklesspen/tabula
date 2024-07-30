@@ -93,7 +93,7 @@ TAP_TOUCH_EVENTS = [
     TouchReport(touches=[TouchEvent(x=316, y=129, pressure=126, slot=0)], timestamp=datetime.timedelta(seconds=2127, microseconds=218927)),
     TouchReport(touches=[TouchEvent(x=316, y=129, pressure=126, slot=0)], timestamp=datetime.timedelta(seconds=2127, microseconds=230569)),
     TouchReport(touches=[TouchEvent(x=316, y=129, pressure=126, slot=0)], timestamp=datetime.timedelta(seconds=2127, microseconds=242943)),
-    TouchReport(touches=[TouchEvent(x=316, y=129, pressure=126, slot=0)], timestamp=datetime.timedelta(seconds=2127, microseconds=254404)),
+    TouchReport(touches=[], timestamp=datetime.timedelta(seconds=2127, microseconds=254404)),
 ]
 
 SWIPE_RAW_EVENTS = [
@@ -237,7 +237,7 @@ SWIPE_TOUCH_EVENTS = [
     TouchReport(touches=[TouchEvent(x=475, y=494, pressure=106, slot=0)], timestamp=datetime.timedelta(seconds=2138, microseconds=263659)),
     TouchReport(touches=[TouchEvent(x=475, y=494, pressure=106, slot=0)], timestamp=datetime.timedelta(seconds=2138, microseconds=275677)),
     TouchReport(touches=[TouchEvent(x=475, y=494, pressure=106, slot=0)], timestamp=datetime.timedelta(seconds=2138, microseconds=289161)),
-    TouchReport(touches=[TouchEvent(x=475, y=494, pressure=106, slot=0)], timestamp=datetime.timedelta(seconds=2138, microseconds=298828)),
+    TouchReport(touches=[], timestamp=datetime.timedelta(seconds=2138, microseconds=298828)),
 ]
 
 
@@ -1154,7 +1154,7 @@ PINCH_TOUCH_EVENTS = [
         timestamp=datetime.timedelta(seconds=851, microseconds=893756),
     ),
     TouchReport(
-        touches=[TouchEvent(x=595, y=412, pressure=125, slot=0), TouchEvent(x=934, y=560, pressure=126, slot=1)],
+        touches=[],
         timestamp=datetime.timedelta(seconds=851, microseconds=905076),
     ),
 ]
