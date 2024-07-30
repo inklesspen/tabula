@@ -2,6 +2,9 @@ import argparse
 import pathlib
 import pprint
 
+import trio
+
+from .device.hardware import KoboHardware
 from .rendering.fontconfig import setup_fontconfig
 from .rendering.pango import Pango
 from .settings import Settings
@@ -28,3 +31,19 @@ def list_fonts_cli():
     else:
         font_path = args.userfonts
     list_fonts(font_path.absolute())
+
+
+kobo_events_parser = argparse.ArgumentParser()
+kobo_events_parser.add_argument("settings", type=pathlib.Path)
+
+
+def print_kobo_events():
+    settings = Settings.load(kobo_events_parser.parse_args().settings)
+
+    async def runner():
+        async with trio.open_nursery() as nursery:
+            hardware = KoboHardware(settings=settings)
+            await nursery.start(hardware.run)
+            await hardware.print_events()
+
+    trio.run(runner)

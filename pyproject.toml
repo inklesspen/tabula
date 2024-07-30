@@ -58,6 +58,7 @@ test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
 
 [project.scripts]
 "list-tabula-fonts" = "tabula.scripts:list_fonts_cli"
+"print-kobo-events" = "tabula.scripts:print_kobo_events"
 tabula = "tabula.app:main"
 
 [tool.ruff]

@@ -10,7 +10,6 @@ from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinat
 from ..settings import Settings
 from .gestures import make_tapstream
 from .hwtypes import (
-    AnnotatedKeyEvent,
     KeyEvent,
     SetLed,
     TouchEvent,
@@ -22,6 +21,7 @@ from .kobo_models import detect_model
 
 if typing.TYPE_CHECKING:
     from ..rendering.rendertypes import Rendered
+    from .hwtypes import AnnotatedKeyEvent, TabulaEvent, TapEvent
 
 
 class Hardware(metaclass=abc.ABCMeta):
@@ -29,8 +29,8 @@ class Hardware(metaclass=abc.ABCMeta):
     touch_coordinate_transform: TouchCoordinateTransform
     capslock_led: bool
     compose_led: bool
-    event_channel: trio.abc.SendChannel
-    event_receive_channel: trio.abc.ReceiveChannel
+    event_channel: trio.abc.SendChannel[TabulaEvent]
+    event_receive_channel: trio.abc.ReceiveChannel[TabulaEvent]
 
     def __init__(
         self,
@@ -80,7 +80,6 @@ class Hardware(metaclass=abc.ABCMeta):
                 await self.set_led_state(SetLed(led=Led.LED_CAPSL, state=False))
                 await self.set_led_state(SetLed(led=Led.LED_COMPOSE, state=False))
                 async with self.keystream as keystream:
-                    event: AnnotatedKeyEvent
                     async for event in keystream:
                         if event.is_led_able:
                             if event.annotation.capslock != self.capslock_led:
@@ -119,7 +118,7 @@ class Hardware(metaclass=abc.ABCMeta):
         (
             new_keystream_send_channel,
             new_keystream_receive_channel,
-        ) = trio.open_memory_channel(0)
+        ) = trio.open_memory_channel[AnnotatedKeyEvent](0)
         self.keystream = make_keystream(new_keystream_receive_channel, self.settings)
         self.keystream_send_channel = new_keystream_send_channel
         if old_send_channel is not None:
@@ -132,7 +131,7 @@ class Hardware(metaclass=abc.ABCMeta):
         (
             new_touchstream_send_channel,
             new_touchstream_receive_channel,
-        ) = trio.open_memory_channel(0)
+        ) = trio.open_memory_channel[TapEvent](0)
         self.touchstream = make_tapstream(new_touchstream_receive_channel)
         self.touchstream_send_channel = new_touchstream_send_channel
         if old_send_channel is not None:
@@ -199,6 +198,11 @@ class KoboHardware(Hardware):
                 nursery.start_soon(self.keyboard.run, nursery)
                 touchscreen = Touchscreen(self.model.multitouch_variant, self.touchstream_send_channel)
                 nursery.start_soon(touchscreen.run)
+
+    async def print_events(self):
+        async with self.event_receive_channel:
+            async for evt in self.event_receive_channel:
+                print(evt)
 
 
 class EventTestHardware(Hardware):
