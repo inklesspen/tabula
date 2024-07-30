@@ -97,7 +97,7 @@ class Fonts(Screen):
 
     async def become_responder(self):
         app = TABULA.get()
-        app.hardware.reset_keystream(enable_composes=False)
+        app.hardware.reset_keystream()
         self.pango = Pango(dpi=app.screen_info.dpi)
         self.screen_size = app.screen_info.size
         self.render_screen()
