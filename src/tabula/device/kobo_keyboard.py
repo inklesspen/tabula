@@ -144,7 +144,7 @@ class LibevdevKeyboard:
                     listener = DeviceListener(devicepath)
                     self.device_listeners[device_id] = listener
                     nursery.start_soon(listener.run)
-                await nursery.start(self.wait_for_keys)
+                await self.wait_for_keys()
             else:
                 await trio.sleep(0.2)
 
