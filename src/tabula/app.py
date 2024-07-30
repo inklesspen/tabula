@@ -177,6 +177,7 @@ class Tabula:
             try:
                 event = receive_channel.receive_nowait()
             except trio.WouldBlock:
+                await trio.sleep(1 / 60)
                 continue
 
             match event:
@@ -212,6 +213,13 @@ def main(argv=sys.argv):
 
     Does stuff.
     """
+    from trio_util import TaskStats
+
+    from .rendering import cairo  # noqa: F401
+
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger("markdown_it").setLevel(logging.ERROR)
     parsed = parser.parse_args(argv[1:])
-    trio.run(start_tabula, parsed.settings)
+    stats = TaskStats()
+    trio.run(start_tabula, parsed.settings, instruments=[stats])
     return 0

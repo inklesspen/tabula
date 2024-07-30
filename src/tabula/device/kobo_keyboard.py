@@ -67,6 +67,7 @@ class DeviceListener:
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         with self.cancelscope, self.device:
+            logger.debug("Getting events for %r", self.device.device_path)
             task_status.started()
             while True:
                 try:
@@ -135,6 +136,7 @@ class LibevdevKeyboard:
         task_status.started()
 
         while True:
+            logger.debug("Checking for keyboards")
             self._update_available_inputs()
             if self.present_devices:
                 self.device_listeners = {}

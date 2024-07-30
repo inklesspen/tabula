@@ -71,6 +71,7 @@ class Responder:
             task_status.started(ResponderMetadata(responder=self, event_channel=event_send_channel, cancel=cancel_scope.cancel))
 
             async with event_receive_channel:
+                logger.debug("Listening for events in %r", self)
                 while True:
                     match event := await event_receive_channel.receive():
                         case AnnotatedKeyEvent():
