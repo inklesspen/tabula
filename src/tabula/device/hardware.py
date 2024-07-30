@@ -84,7 +84,7 @@ class Hardware(metaclass=abc.ABCMeta):
                     async for event in keystream:
                         if event.is_led_able:
                             if event.annotation.capslock != self.capslock_led:
-                                await self.set_led_state(
+                                self.set_led_state(
                                     SetLed(
                                         led=Led.LED_CAPSL,
                                         state=event.annotation.capslock,
@@ -92,7 +92,7 @@ class Hardware(metaclass=abc.ABCMeta):
                                 )
                                 self.capslock_led = event.annotation.capslock
                             if event.annotation.compose != self.compose_led:
-                                await self.set_led_state(
+                                self.set_led_state(
                                     SetLed(
                                         led=Led.LED_COMPOSE,
                                         state=event.annotation.compose,
