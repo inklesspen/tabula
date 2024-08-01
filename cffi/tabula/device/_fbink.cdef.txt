@@ -1,15 +1,3 @@
-# Vendored from https://github.com/NiLuJe/py-fbink/blob/2cf98172f57772034cc434a18c825829724e11a1/fbink_build.py
-#
-# The resulting Python module, as FBInk itself:
-# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2018-2021 NiLuJe <ninuje@gmail.com>
-
-from cffi import FFI
-
-ffibuilder = FFI()
-
-ffibuilder.cdef(
-    """
 static const int FBFD_AUTO = -1;
 static const int LAST_MARKER = 0;
 typedef enum {
@@ -455,13 +443,3 @@ int fbink_wait_for_any_complete(int);
 int fbink_mtk_set_halftone(int, const FBInkRect *, MTK_HALFTONE_MODE_INDEX_T);
 int fbink_mtk_toggle_auto_reagl(int, bool);
 int fbink_mtk_toggle_pen_mode(int, bool);
-"""
-)
-
-ffibuilder.set_source(
-    "tabula.device._fbink",
-    """
-     #include "fbink.h"   // the C header of the library
-""",
-    libraries=["fbink"],
-)

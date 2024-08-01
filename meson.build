@@ -13,10 +13,19 @@ install_subdir('src/tabula', install_dir: py.get_install_dir())
 
 meson_cffi_buildtool = find_program('meson_cffi_buildtool.py')
 
-meson_cffi_gen = generator(
-    meson_cffi_buildtool,
-    output: '@BASENAME@',
-    arguments: ['@INPUT@', '@OUTPUT@'],
+cairopango_c = custom_target(
+    command: [
+        meson_cffi_buildtool,
+        '--modulename', 'tabula.rendering._cairopango',
+        '--cdef', '@INPUT0@',
+        '--csrc', '@INPUT1@',
+        '--output', '@OUTPUT@',
+    ],
+    output: '_cairopango.c',
+    input: [
+        'cffi/tabula/rendering/_cairopango.cdef.txt',
+        'cffi/tabula/rendering/_cairopango.csrc.c',
+    ],
 )
 
 fontconfig = dependency('fontconfig')
@@ -27,7 +36,7 @@ pango = dependency('pango')
 pangocairo = dependency('pangocairo')
 py.extension_module(
     '_cairopango',
-    meson_cffi_gen.process('cffi/tabula/rendering/_cairopango.c.py'),
+    cairopango_c,
     subdir: 'tabula/rendering',
     install: true,
     dependencies: [glib, gobject, cairo, pango, pangocairo, fontconfig, py.dependency()],
@@ -35,9 +44,23 @@ py.extension_module(
 
 fbink = dependency('fbink', required: host_machine.system() == 'linux')
 if fbink.found()
+    fbink_c = custom_target(
+        command: [
+            meson_cffi_buildtool,
+            '--modulename', 'tabula.device._fbink',
+            '--cdef', '@INPUT0@',
+            '--csrc', '@INPUT1@',
+            '--output', '@OUTPUT@',
+        ],
+        output: '_fbink.c',
+        input: [
+            'cffi/tabula/device/_fbink.cdef.txt',
+            'cffi/tabula/device/_fbink.csrc.c',
+        ],
+    )
     py.extension_module(
         '_fbink',
-        meson_cffi_gen.process('cffi/tabula/device/_fbink.c.py'),
+        fbink_c,
         subdir: 'tabula/device',
         install: true,
         dependencies: [fbink, py.dependency()],

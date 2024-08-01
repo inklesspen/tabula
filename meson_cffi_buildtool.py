@@ -8,39 +8,28 @@ from cffi.api import FFI
 from cffi.recompiler import Recompiler
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--ffivar", default="ffibuilder")
-parser.add_argument("infile", type=pathlib.Path)
-parser.add_argument("outfile", type=pathlib.Path)
+parser.add_argument("--modulename", required=True)
+parser.add_argument("--cdef", type=pathlib.Path, required=True)
+parser.add_argument("--csrc", type=pathlib.Path, required=True)
+parser.add_argument("--output", type=argparse.FileType("w", encoding="utf-8"), required=True)
 
 
-def execfile(srcfile: pathlib.Path, globs: dict):
-    compiled = compile(source=srcfile.read_text(), filename=srcfile, mode="exec")
-    exec(compiled, globs, globs)
-
-
-def get_ffi(srcfile: pathlib.Path, ffivar: str):
-    globs = {}
-    execfile(srcfile, globs)
-    if ffivar not in globs:
-        raise NameError()
-    ffi = globs[ffivar]
-    if not isinstance(ffi, FFI) and callable(ffi):
-        # Maybe it's a callable that returns a FFI
-        ffi = ffi()
-    if not isinstance(ffi, FFI):
-        raise TypeError()
-    return ffi
+def make_ffi(modulename: str, cdef: pathlib.Path, csrc: pathlib.Path):
+    ffibuilder = FFI()
+    ffibuilder.cdef(cdef.read_text())
+    ffibuilder.set_source(modulename, csrc.read_text())
+    return ffibuilder
 
 
 def main():
     args = parser.parse_args()
-    ffi = get_ffi(args.infile, args.ffivar)
+    ffi = make_ffi(args.modulename, args.cdef, args.csrc)
     # TODO: improve this; https://github.com/python-cffi/cffi/issues/47
     module_name, source, source_extension, kwds = ffi._assigned_source
     recompiler = Recompiler(ffi, module_name)
     recompiler.collect_type_table()
     recompiler.collect_step_tables()
-    with args.outfile.open("w") as f:
+    with args.output as f:
         recompiler.write_source_to_f(f, source)
 
 
