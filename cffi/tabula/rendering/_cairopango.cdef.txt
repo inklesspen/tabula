@@ -4,17 +4,20 @@ typedef unsigned int guint8;
 typedef unsigned int guint16;
 typedef unsigned int guint32;
 typedef unsigned int guint;
+typedef unsigned long gulong;
+typedef long glong;
 typedef int gint;
 typedef int gint32;
+typedef signed long gssize;
+typedef unsigned long gsize;
 typedef gint gboolean;
 typedef char gchar;
 typedef unsigned char guchar;
-typedef ... gunichar;
+typedef guint32 gunichar;
 typedef void *gpointer;
 typedef ... gconstpointer;
 typedef ... GObject;
 typedef ... GObjectClass;
-typedef ... GString;
 typedef ... GDestroyNotify;
 typedef ... GList;
 typedef ... GSList;
@@ -29,6 +32,30 @@ void g_free(gpointer mem);
 gchar *
 g_markup_escape_text(const gchar *text,
                      gssize length);
+gchar *g_utf8_find_next_char(const gchar *p, const gchar *end);
+gchar *g_utf8_find_prev_char(const gchar *str, const gchar *p);
+gchar *g_utf8_offset_to_pointer(const gchar *str, glong offset);
+glong g_utf8_pointer_to_offset(const gchar *str, const gchar *pos);
+gunichar g_utf8_get_char(const gchar *p);
+glong g_utf8_strlen (const gchar *p, gssize max);
+
+struct _GString
+{
+  gchar  *str;
+  gsize len;
+  gsize allocated_len;
+};
+typedef struct _GString GString;
+GString *g_string_new(const gchar *init);
+GString *g_string_sized_new(gsize dfl_size);
+GString *g_string_append(GString *string, const gchar *val);
+gchar *g_string_free(GString *string, gboolean free_segment);
+gchar *g_string_free_and_steal(GString *string);
+GString *g_string_append_c(GString *string, gchar c);
+GString *g_string_append_unichar(GString *string, gunichar wc);
+GString *g_string_assign(GString *string, const gchar *rval);
+GString *g_string_truncate(GString *string, gsize len);
+
 
 /* fontconfig */
 typedef unsigned char	FcChar8;
@@ -682,17 +709,23 @@ pango_layout_get_text (
   PangoLayout* layout
 );
 
-PangoAttrList* pango_attr_list_new (void);
-void pango_attr_list_unref (PangoAttrList* list);
-void pango_attr_list_change (PangoAttrList* list, PangoAttribute* attr);
-void pango_attr_list_insert (PangoAttrList* list, PangoAttribute* attr);
-void pango_attr_list_update (PangoAttrList* list, int pos, int remove, int add);
-char* pango_attr_list_to_string (PangoAttrList* list);
-PangoAttrList* pango_attr_list_from_string (const char* text);
+typedef gboolean (*PangoAttrFilterFunc)(PangoAttribute *attribute, void * user_data);
+extern "Python" gboolean filter_func_callback(PangoAttribute *, void *);
 
-PangoAttribute* pango_attr_weight_new (PangoWeight weight);
-PangoAttribute* pango_attr_style_new (PangoStyle style);
-void pango_attribute_destroy (PangoAttribute* attr);
+PangoAttrList *pango_attr_list_new(void);
+void pango_attr_list_unref(PangoAttrList *list);
+void pango_attr_list_change(PangoAttrList *list, PangoAttribute *attr);
+void pango_attr_list_insert(PangoAttrList *list, PangoAttribute *attr);
+void pango_attr_list_update(PangoAttrList *list, int pos, int remove, int add);
+void pango_attr_list_splice(PangoAttrList *list, PangoAttrList *other, int pos, int len);
+PangoAttrList *pango_attr_list_filter(PangoAttrList *list, PangoAttrFilterFunc func, void * data);
+
+char *pango_attr_list_to_string(PangoAttrList *list);
+PangoAttrList *pango_attr_list_from_string(const char *text);
+
+PangoAttribute *pango_attr_weight_new(PangoWeight weight);
+PangoAttribute *pango_attr_style_new(PangoStyle style);
+void pango_attribute_destroy(PangoAttribute *attr);
 
 /* pangocairo */
 typedef struct _PangoCairoFontMap PangoCairoFontMap;
@@ -775,3 +808,20 @@ FcPattern *pango_fc_font_get_pattern       (PangoFcFont      *font);
 int pango_pixels(int d);
 
 void invert_a8_surface(cairo_surface_t *surface);
+
+struct _MarkdownState
+{
+    PangoAttrList *attr_list;
+    PangoAttribute *bold;
+    PangoAttribute *italic;
+    glong pos;
+    ...;
+    // gchar *cached_start;
+    // gchar *pos_p;
+    // gchar *prev_pos_p;
+};
+
+typedef struct _MarkdownState MarkdownState;
+void markdown_attrs(MarkdownState *state, GString *string);
+void markdown_attrs_backspace(MarkdownState *state, GString *string);
+void simplify_attr_list(PangoAttrList *list);
