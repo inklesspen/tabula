@@ -6,7 +6,6 @@ import re
 import typing
 
 from ..device.keyboard_consts import Key
-from ..rendering.markup import CURSOR, escape_for_markup
 
 if typing.TYPE_CHECKING:
     import pygtrie
@@ -108,13 +107,13 @@ class ComposeState:
         return ComposeOther()
 
     @property
-    def markup(self):
-        if self.active is False:
-            return None
-        escaped = ""
+    def composing_chars(self):
+        chars = ""
+        if not self.active:
+            return chars
         devoured_string = "".join(self.devoured_characters)
         if self.can_be_compose_sequence:
-            escaped = escape_for_markup(devoured_string)
+            chars = devoured_string
         elif self.can_be_codepoint:
-            escaped = escape_for_markup("U+" + devoured_string[1:])
-        return f'<span underline="single">{escaped}{CURSOR}</span>'
+            chars = "U+" + devoured_string[1:]
+        return chars

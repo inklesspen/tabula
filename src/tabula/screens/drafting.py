@@ -184,7 +184,6 @@ class Drafting(Screen):
         current_font = self.settings.current_font
         font_size = self.settings.current_font_size
         font_spec = f"{current_font} {font_size}"
-        rendered = self.layout_manager.render_update(
-            font_spec, self.settings.current_line_spacing, replace_cursor_with=self.compose_state.markup
-        )
+        self.layout_manager.set_font(font_spec).set_line_spacing(self.settings.current_line_spacing)
+        rendered = self.layout_manager.render_update(composing_chars=self.compose_state.composing_chars)
         app.hardware.display_rendered(rendered)

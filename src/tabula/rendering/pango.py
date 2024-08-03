@@ -34,7 +34,7 @@ class PangoLayout(AbstractContextManager):
     ):
         self.pango = pango
         self.layout = ffi.gc(lib.pango_layout_new(self.pango.context), lib.g_object_unref)
-        self.setup_layout(
+        self._setup_layout(
             width=width,
             justify=justify,
             alignment=alignment,
@@ -42,7 +42,7 @@ class PangoLayout(AbstractContextManager):
             wrap=wrap,
         )
 
-    def setup_layout(
+    def _setup_layout(
         self,
         width: float,
         justify: bool,
@@ -67,11 +67,17 @@ class PangoLayout(AbstractContextManager):
             lib.pango_layout_set_font_description(self.layout, font_description)
 
     def set_content(self, text: str, is_markup: bool = False):
-        setter = lib.pango_layout_set_markup if is_markup else lib.pango_layout_set_text
-        # -1 means null-terminated, which cffi will automatically do for us
-        setter(self.layout, text.encode("utf-8"), -1)
+        textbytes = text.encode("utf-8")
+        if is_markup:
+            lib.pango_layout_set_markup(self.layout, textbytes, len(textbytes))
+        else:
+            self.clear_attributes()
+            lib.pango_layout_set_text(self.layout, textbytes, len(textbytes))
 
-    def render(self, cairo: "Cairo"):
+    def clear_attributes(self):
+        lib.pango_layout_set_attributes(self.layout, ffi.NULL)
+
+    def render(self, cairo: Cairo):
         lib.pango_cairo_show_layout(cairo.context, self.layout)
 
     def __enter__(self):

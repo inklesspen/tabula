@@ -10,12 +10,12 @@ from ..commontypes import Point, Rect, Size
 from ..durations import timer_display
 from ..editor.wordcount import format_wordcount
 from ..util import now
-from ._cairopango import ffi, lib  # type: ignore
+from ._cairopango import ffi, lib  # type: ignore  # noqa: F401
 from .cairo import Cairo
 from .fonts import SERIF
-from .markup import CURSOR
+from .markup import CURSOR, escape_for_markup
 from .pango import Pango, PangoLayout
-from .rendertypes import Alignment, CairoColor, Rendered, WrapMode
+from .rendertypes import Alignment, CairoColor, Rendered
 
 if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo
@@ -51,16 +51,14 @@ class LayoutManager:
         self,
         screen_info: ScreenInfo,
         document: DocumentModel,
-        full_height=False,
     ):
         self.screen_info = screen_info
         self.pango = Pango(dpi=screen_info.dpi)
         self.document = document
         self.render_width = self.screen_info.size.width
         self.cursor_y = self.screen_info.size.height // 2
-        self.render_height = self.screen_info.size.height if full_height else self.cursor_y
-        self.layout = ffi.gc(lib.pango_layout_new(self.pango.context), lib.g_object_unref)
-        self.setup_layout()
+        self.render_height = self.cursor_y
+        self.layout = PangoLayout(pango=self.pango, width=self.render_width)
         self.rendered_markups = {}
         self.rendered_font = None
         self.rendered_line_spacing = None
@@ -69,76 +67,40 @@ class LayoutManager:
         self.target_cairo = Cairo(self.render_size)
         self.target_cairo.setup()
 
-    def setup_layout(self):
-        lib.pango_layout_set_auto_dir(self.layout, False)
-        lib.pango_layout_set_ellipsize(self.layout, lib.PANGO_ELLIPSIZE_NONE)
-        lib.pango_layout_set_justify(self.layout, False)
-        lib.pango_layout_set_single_paragraph_mode(self.layout, False)
-        lib.pango_layout_set_wrap(self.layout, WrapMode.WORD_CHAR)
-        lib.pango_layout_set_width(
-            self.layout,
-            self.render_width * lib.PANGO_SCALE,
-        )
-        lib.pango_layout_set_alignment(self.layout, Alignment.LEFT)
-
-    def setup_layout_font(self, font: str):
-        with (
-            ffi.gc(
-                lib.pango_font_description_from_string(font.encode("utf-8")),
-                lib.pango_font_description_free,
-            ) as font_description,
-            ffi.gc(
-                lib.pango_font_map_load_font(self.pango.fontmap, self.pango.context, font_description),
-                lib.g_object_unref,
-            ) as loaded_font,
-            ffi.gc(
-                lib.pango_font_get_metrics(loaded_font, self.pango.language),
-                lib.pango_font_metrics_unref,
-            ) as font_metrics,
-        ):
-            lib.pango_layout_set_font_description(self.layout, font_description)
-            font_height = lib.pango_font_metrics_get_height(font_metrics) / lib.PANGO_SCALE
-            self.skip_height = math.floor(font_height)
-
     def set_font(self, font: str):
-        self.rendered_markups = {}
-        self.setup_layout_font(font)
-        self.rendered_font = font
+        if font != self.rendered_font:
+            self.rendered_markups = {}
+            self.skip_height = math.floor(self.pango.calculate_line_height(font))
+            self.layout.set_font(font)
+            self.rendered_font = font
+        return self
 
-    def set_line_spacing(self, line_spacing: float):
-        self.rendered_markups = {}
-        lib.pango_layout_set_line_spacing(self.layout, line_spacing)
-        self.rendered_line_spacing = line_spacing
+    def set_line_spacing(self, factor: float):
+        if factor != self.rendered_line_spacing:
+            self.rendered_markups = {}
+            self.layout.set_line_spacing(factor)
+            self.rendered_line_spacing = factor
+        return self
 
     def render_to_image_surface(self, markup: str):
-        lib.pango_layout_set_markup(self.layout, markup.encode("utf-8"), -1)
-        with ffi.new("PangoRectangle *") as logical_rect:
-            lib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, logical_rect)
-            markup_size = Size(width=self.render_width, height=logical_rect.height)
+        self.layout.set_content(markup, is_markup=True)
+        markup_size = self.layout.get_layout_rects().logical.spread
+        # don't use the context manager approach because we keep the surface around
+        # alternatively, use cairo_surface_reference and a CairoRendered class (which needs to know its Size)
         markup_cairo = Cairo(markup_size)
         markup_cairo.setup()
         markup_cairo.fill_with_color(CairoColor.WHITE)
         markup_cairo.set_draw_color(CairoColor.BLACK)
         markup_cairo.move_to(Point.zeroes())
-        lib.pango_cairo_show_layout(markup_cairo.context, self.layout)
-        # markup_surface = self.renderer.create_surface(markup_size)
-        # with self.renderer.create_cairo_context(markup_surface) as markup_context:
-        #     lib.cairo_set_operator(markup_context, lib.CAIRO_OPERATOR_SOURCE)
-        #     lib.cairo_set_source_rgba(markup_context, 1, 1, 1, 1)
-        #     lib.cairo_paint(markup_context)
-        #     lib.cairo_set_source_rgba(markup_context, 0, 0, 0, 0)
-        #     lib.pango_cairo_show_layout(markup_context, self.layout)
-        # lib.cairo_surface_flush(markup_surface)
+        self.layout.render(markup_cairo)
         rendered = RenderedMarkup(markup=markup, cairo=markup_cairo)
         self.rendered_markups[markup] = rendered
 
-    def render_update(self, font: str, line_spacing: float, replace_cursor_with: typing.Optional[str] = None):
-        if font != self.rendered_font:
-            self.set_font(font)
-        if line_spacing != self.rendered_line_spacing:
-            self.set_line_spacing(line_spacing)
-
-        at_end = CURSOR if replace_cursor_with is None else replace_cursor_with
+    def render_update(self, *, composing_chars: str):
+        if composing_chars:
+            at_end = f'<span underline="single">{escape_for_markup(composing_chars)}{CURSOR}</span>'
+        else:
+            at_end = CURSOR
 
         laidouts: list[LaidOut] = []
         used_rendereds = {}
@@ -151,13 +113,11 @@ class LayoutManager:
             if cursor_para_id == para.id:
                 markup += at_end
             if markup not in self.rendered_markups:
-                # print(f"rendering image for {markup!r}")
                 self.render_to_image_surface(markup)
             rendered = self.rendered_markups[markup]
             used_rendereds[markup] = rendered
             rendered_height = rendered.cairo.size.height
             top = current_y - rendered_height
-            # set_into(laidouts, current_i, LaidOut(rendered=rendered, y_top=top, y_bottom=current_y))
             laidouts.append(LaidOut(rendered=rendered, y_top=top, y_bottom=current_y))
             current_y -= rendered_height + self.skip_height
             current_i -= 1
