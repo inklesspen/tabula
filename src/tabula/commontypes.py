@@ -25,10 +25,6 @@ class Point(msgspec.Struct, frozen=True):
             return Point(x=self.x / other, y=self.y / other)
         return NotImplemented
 
-    @property
-    def tuple(self):
-        return (self.x, self.y)
-
     @classmethod
     def zeroes(cls):
         return cls(x=0, y=0)
@@ -42,10 +38,6 @@ class Size(msgspec.Struct, frozen=True):
         return self.width * self.height
 
     def as_tuple(self):
-        return (self.width, self.height)
-
-    @property
-    def pillow_size(self):
         return (self.width, self.height)
 
     @classmethod
@@ -75,23 +67,6 @@ class Rect(msgspec.Struct, frozen=True):
         )
 
     @property
-    def as_pillow_box(self):
-        return (
-            self.origin.x,
-            self.origin.y,
-            self.origin.x + self.spread.width,
-            self.origin.y + self.spread.height,
-        )
-
-    @property
-    def pillow_size(self):
-        return self.spread.pillow_size
-
-    @property
-    def pillow_origin(self):
-        return (self.origin.x, self.origin.y)
-
-    @property
     def bottom(self):
         return self.origin.y + self.spread.height
 
@@ -102,7 +77,12 @@ class Rect(msgspec.Struct, frozen=True):
     def __contains__(self, item):
         if not isinstance(item, Point):
             return NotImplemented
-        min_x, min_y, max_x, max_y = self.as_pillow_box
+        min_x, min_y, max_x, max_y = (
+            self.origin.x,
+            self.origin.y,
+            self.origin.x + self.spread.width,
+            self.origin.y + self.spread.height,
+        )
         return item.x >= min_x and item.x <= max_x and item.y >= min_y and item.y <= max_y
 
 
