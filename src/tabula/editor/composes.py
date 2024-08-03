@@ -30,6 +30,7 @@ class ComposeSucceeded:
 class ComposeOther:
     active_changed: bool = False
     show_help: bool = False
+    absorb: bool = False
 
 
 ComposeResult = ComposeFailed | ComposeSucceeded | ComposeOther
@@ -60,6 +61,14 @@ class ComposeState:
             else:
                 self.active = False
                 return ComposeOther(active_changed=True, show_help=True)
+        # if key is backspace, we should just cancel the compose without dumping out the captured keys
+        if event.key is Key.KEY_BACKSPACE:
+            self.devoured = []
+            self.devoured_characters = []
+            self.can_be_codepoint = False
+            self.can_be_compose_sequence = False
+            self.active = False
+            return ComposeOther(active_changed=True, absorb=True)
 
         self.devoured.append(event)
         if event.is_modifier:

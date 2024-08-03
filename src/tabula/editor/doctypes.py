@@ -2,6 +2,7 @@ import datetime
 import typing
 
 import attrs
+import msgspec
 import timeflake
 from attrs import define, field
 
@@ -9,27 +10,25 @@ from ..rendering.markup import make_markup
 from ..util import now
 
 
-@define(kw_only=True, frozen=True)
-class Session:
+class Session(msgspec.Struct, kw_only=True, frozen=True):
     id: timeflake.Timeflake
     started_on: datetime.date
     updated_at: datetime.datetime
-    exported_at: typing.Optional[datetime.datetime] = field(default=None)
-    wordcount: int = field(default=0)
+    exported_at: typing.Optional[datetime.datetime] = None
+    wordcount: int = 0
 
     @property
     def needs_export(self):
         return self.exported_at is None or self.exported_at < self.updated_at
 
 
-@define(kw_only=True, frozen=True)
-class Sprint:
+class Sprint(msgspec.Struct, kw_only=True, frozen=True):
     id: timeflake.Timeflake
     session_id: timeflake.Timeflake
     started_at: datetime.datetime
     intended_duration: datetime.timedelta
-    ended_at: typing.Optional[datetime.datetime] = field(default=None)
-    wordcount: int = field(default=0)
+    ended_at: typing.Optional[datetime.datetime] = None
+    wordcount: int = 0
 
     @property
     def elapsed(self):

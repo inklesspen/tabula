@@ -28,6 +28,8 @@ typedef signed long gssize;
 
 void g_object_unref(gpointer object);
 void g_free(gpointer mem);
+gpointer g_malloc(gsize n_bytes);
+gpointer g_malloc0(gsize n_bytes);
 
 gchar *
 g_markup_escape_text(const gchar *text,
@@ -47,8 +49,10 @@ struct _GString
 };
 typedef struct _GString GString;
 GString *g_string_new(const gchar *init);
+GString *g_string_new_len(const gchar *init, gssize len);
 GString *g_string_sized_new(gsize dfl_size);
 GString *g_string_append(GString *string, const gchar *val);
+GString *g_string_append_len(GString *string, const gchar *val, gssize len);
 gchar *g_string_free(GString *string, gboolean free_segment);
 gchar *g_string_free_and_steal(GString *string);
 GString *g_string_append_c(GString *string, gchar c);
@@ -714,6 +718,7 @@ extern "Python" gboolean filter_func_callback(PangoAttribute *, void *);
 
 PangoAttrList *pango_attr_list_new(void);
 void pango_attr_list_unref(PangoAttrList *list);
+PangoAttrList *pango_attr_list_copy(PangoAttrList *list);
 void pango_attr_list_change(PangoAttrList *list, PangoAttribute *attr);
 void pango_attr_list_insert(PangoAttrList *list, PangoAttribute *attr);
 void pango_attr_list_update(PangoAttrList *list, int pos, int remove, int add);
@@ -811,17 +816,21 @@ void invert_a8_surface(cairo_surface_t *surface);
 
 struct _MarkdownState
 {
+    gulong pos;
     PangoAttrList *attr_list;
     PangoAttribute *bold;
     PangoAttribute *italic;
-    glong pos;
     ...;
-    // gchar *cached_start;
-    // gchar *pos_p;
-    // gchar *prev_pos_p;
 };
 
 typedef struct _MarkdownState MarkdownState;
+MarkdownState *markdown_state_new(GString *string);
+void markdown_state_free(MarkdownState *state);
 void markdown_attrs(MarkdownState *state, GString *string);
 void markdown_attrs_backspace(MarkdownState *state, GString *string);
 void simplify_attr_list(PangoAttrList *list);
+void fully_free_g_string(GString *string);
+void setup_cursor(MarkdownState *state, GString *string);
+void cleanup_cursor(MarkdownState *state, GString *string);
+void setup_compose(MarkdownState *state, GString *string);
+void cleanup_compose(MarkdownState *state);

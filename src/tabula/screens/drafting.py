@@ -89,7 +89,7 @@ class Drafting(Screen):
             if compose_result.show_help:
                 self.document.save_session(self.db, "COMPOSE_HELP")
                 return await self.show_compose_help()
-            if not self.compose_state.active:
+            if not self.compose_state.active and not compose_result.absorb:
                 return await self.handle_non_compose_key_event(event)
             self.render_document()
         elif isinstance(compose_result, ComposeFailed):

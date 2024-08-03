@@ -1,5 +1,5 @@
 from ..rendering._cairopango import ffi, lib  # type: ignore
-from ..rendering.markup import make_markup
+from ..rendering.markup import CURSOR, make_markup
 
 
 def fully_free_gstring(gstring):
@@ -18,5 +18,5 @@ def undertest():
     mystr = ""
     for letter in DRACULA:
         mystr += letter
-        markup = make_markup(mystr)
+        markup = make_markup(mystr + CURSOR)
         lib.pango_layout_set_markup(layout, markup.encode("utf-8"), -1)

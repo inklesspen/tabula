@@ -199,12 +199,6 @@ class DocumentModel:
 
         self.unsaved_changes = True
 
-    def get_markups(self):
-        return [p.markup for p in self.contents]
-
-    def get_markup(self, i: int) -> str:
-        return self.contents[i].markup
-
     def export_markdown(self):
         return "\n\n".join(p.markdown for p in self.contents)
 
