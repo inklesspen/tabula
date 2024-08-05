@@ -5,7 +5,7 @@ from tabula.rendering.markup import CURSOR
 OPEN_ATTR_END = 4294967295
 PARKED_CURSOR_ALPHA = "0 0 foreground-alpha 32767"
 PARKED_COMPOSE_UNDERLINE = "0 0 underline single"
-PARKED_ATTRS = [PARKED_CURSOR_ALPHA, PARKED_COMPOSE_UNDERLINE]
+PARKED_ATTRS = [PARKED_COMPOSE_UNDERLINE, PARKED_CURSOR_ALPHA]
 
 
 def split_attr_string(attrstring):
@@ -115,26 +115,20 @@ def test_multibyte():
 
 
 @pytest.mark.parametrize(
-    "test_string,expected_attrs",
+    "test_string,expected_attrs,should_have_bold,should_have_italic",
     [
+        pytest.param("We slowly go back.", [], False, False, id="unstyled"),
+        pytest.param("There were **two** lights", ["11 18 weight semibold"], False, False, id="style unchanged"),
+        pytest.param("This is _only_", [f"8 {OPEN_ATTR_END} style italic"], False, True, id="closed italic reopened"),
+        pytest.param("This **is** only _", ["5 11 weight semibold"], False, False, id="open italic removed"),
         pytest.param(
-            "We slowly go back.",
-            [],
-            id="unstyled",
+            "Let us now **_un_bold**", [f"11 {OPEN_ATTR_END} weight semibold", "13 17 style italic"], True, False, id="closed bold reopened"
         ),
-        pytest.param("There were **two** lights", ["11 18 weight semibold"], id="style unchanged"),
-        pytest.param("This is _only_", [f"8 {OPEN_ATTR_END} style italic"], id="closed italic reopened"),
-        pytest.param("This **is** only _", ["5 11 weight semibold"], id="open italic removed"),
-        pytest.param(
-            "Let us now **_un_bold**",
-            [f"11 {OPEN_ATTR_END} weight semibold", "13 17 style italic"],
-            id="closed bold reopened",
-        ),
-        pytest.param("And now _the_ **", ["8 13 style italic"], id="open bold removed"),
-        pytest.param("**Multibyte**: ☭", ["0 13 weight semibold"], id="multibyte backspace"),
+        pytest.param("And now _the_ **", ["8 13 style italic"], False, False, id="open bold removed"),
+        pytest.param("**Multibyte**: ☭", ["0 13 weight semibold"], False, False, id="multibyte backspace"),
     ],
 )
-def test_backspace(test_string, expected_attrs):
+def test_backspace(test_string, expected_attrs, should_have_bold, should_have_italic):
     gstr = ffi.gc(lib.g_string_new(test_string.encode("utf-8")), lib.fully_free_g_string)
     mstate = ffi.gc(lib.markdown_state_new(gstr), lib.markdown_state_free)
     lib.markdown_attrs(mstate, gstr)
@@ -147,6 +141,28 @@ def test_backspace(test_string, expected_attrs):
     assert ffi.string(gstr.str).decode("utf-8") == test_string[:-1]
     attrs = get_split_attrs(mstate.attr_list)
     assert attrs == PARKED_ATTRS + expected_attrs
+    assert bool(mstate.bold) == should_have_bold
+    assert bool(mstate.italic) == should_have_italic
+
+
+def test_backspace_to_reopen():
+    test_string = "Let us now **_un_bold**"
+    gstr = ffi.gc(lib.g_string_new(test_string.encode("utf-8")), lib.fully_free_g_string)
+    mstate = ffi.gc(lib.markdown_state_new(gstr), lib.markdown_state_free)
+    lib.markdown_attrs(mstate, gstr)
+
+    lib.markdown_attrs_backspace(mstate, gstr)
+    assert mstate.pos == len(test_string[:-1])
+    assert gstr.len == len(test_string[:-1].encode("utf-8"))
+    assert ffi.string(gstr.str).decode("utf-8") == test_string[:-1]
+    attrs = get_split_attrs(mstate.attr_list)
+    assert attrs == PARKED_ATTRS + [f"11 {OPEN_ATTR_END} weight semibold", "13 17 style italic"]
+
+    # now close it again!
+    lib.g_string_append_unichar(gstr, ord("*"))
+    lib.markdown_attrs(mstate, gstr)
+    attrs = get_split_attrs(mstate.attr_list)
+    assert attrs == PARKED_ATTRS + ["11 23 weight semibold", "13 17 style italic"]
 
 
 def test_cursor():
@@ -157,7 +173,7 @@ def test_cursor():
     context = ffi.gc(lib.pango_font_map_create_context(fontmap), lib.g_object_unref)
     layout = ffi.gc(lib.pango_layout_new(context), lib.g_object_unref)
     lib.pango_layout_set_markup(layout, markup_string.encode("utf-8"), -1)
-    markup_attrs = get_split_attrs(lib.pango_layout_get_attributes(layout)) + [PARKED_COMPOSE_UNDERLINE]
+    markup_attrs = [PARKED_COMPOSE_UNDERLINE] + get_split_attrs(lib.pango_layout_get_attributes(layout))
 
     gstr = ffi.gc(lib.g_string_new_len(test_string.encode("utf-8"), len(test_string.encode("utf-8"))), lib.fully_free_g_string)
     mstate = ffi.gc(lib.markdown_state_new(gstr), lib.markdown_state_free)

@@ -97,8 +97,8 @@ MarkdownState *markdown_state_new(GString *string)
     state->cached_start = string->str;
     state->pos_p = string->str;
     state->prev_pos_p = NULL;
-    pango_attr_list_insert(state->attr_list, state->cursor_alpha);
     pango_attr_list_insert(state->attr_list, state->compose_underline);
+    pango_attr_list_insert(state->attr_list, state->cursor_alpha);
     return state;
 }
 
@@ -170,8 +170,14 @@ void markdown_attrs(MarkdownState *state, GString *string)
 
 static gboolean backspace_filter(PangoAttribute *attribute, gpointer user_data)
 {
-    guint *last_p = (guint *)user_data;
-    guint last = *last_p;
+    MarkdownState *state = (MarkdownState *)user_data;
+    guint last = (state->pos_p - state->cached_start);
+
+    if (!(attribute->klass->type == PANGO_ATTR_STYLE || attribute->klass->type == PANGO_ATTR_WEIGHT))
+    {
+        // never remove the cursor or compose attributes
+        return FALSE;
+    }
     if (attribute->klass->type == PANGO_ATTR_WEIGHT)
     {
         // bold ones start one character before. luckily the asterisk is always a single byte.
@@ -180,9 +186,26 @@ static gboolean backspace_filter(PangoAttribute *attribute, gpointer user_data)
     if (attribute->end_index >= last)
     {
         attribute->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
+        if (attribute->klass->type == PANGO_ATTR_WEIGHT)
+        {
+            state->bold = attribute;
+        }
+        else if (attribute->klass->type == PANGO_ATTR_STYLE)
+        {
+            state->italic = attribute;
+        }
     }
     if (attribute->start_index >= last)
     {
+        // we are removing this, but first we might have to clear state->bold or state->italic
+        if (attribute == state->bold)
+        {
+            state->bold = NULL;
+        }
+        if (attribute == state->italic)
+        {
+            state->italic = NULL;
+        }
         return TRUE;
     }
     return FALSE;
@@ -203,9 +226,8 @@ void markdown_attrs_backspace(MarkdownState *state, GString *string)
     // truncate the string
     g_string_truncate(string, (state->pos_p - string->str));
     // fix the attrlist
-    guint last = (state->pos_p - string->str);
     PangoAttrList *out;
-    out = pango_attr_list_filter(state->attr_list, backspace_filter, (gpointer)&last);
+    out = pango_attr_list_filter(state->attr_list, backspace_filter, (gpointer)state);
     pango_attr_list_unref(out);
 }
 
@@ -224,13 +246,41 @@ void cleanup_cursor(MarkdownState *state, GString *string)
     state->cursor_alpha->end_index = 0;
 }
 
-void setup_compose(MarkdownState *state, GString *string)
+void setup_compose(MarkdownState *state, guint start, guint end)
 {
-    state->compose_underline->start_index = string->len;
-    state->compose_underline->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
+    state->compose_underline->start_index = start;
+    state->compose_underline->end_index = end;
 }
 void cleanup_compose(MarkdownState *state)
 {
     state->compose_underline->start_index = 0;
     state->compose_underline->end_index = 0;
+}
+
+struct _CursorPara
+{
+    gchar *para;
+    PangoAttrList *attr_list;
+};
+
+typedef struct _CursorPara CursorPara;
+
+CursorPara *cursor_para_new(void)
+{
+    CursorPara *para = g_new(CursorPara, 1);
+    GString *string = g_string_sized_new(2);
+    g_string_append_unichar(string, UNDERSCORE);
+    para->para = g_string_free_and_steal(string);
+    PangoAttribute *cursor_alpha = pango_attr_foreground_alpha_new(0x7FFF);
+    cursor_alpha->start_index = 0;
+    cursor_alpha->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
+    para->attr_list = pango_attr_list_new();
+    pango_attr_list_insert(para->attr_list, cursor_alpha);
+    return para;
+}
+void cursor_para_free(CursorPara *para)
+{
+    pango_attr_list_unref(para->attr_list);
+    g_free(para->para);
+    g_free(para);
 }

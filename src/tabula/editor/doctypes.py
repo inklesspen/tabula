@@ -1,12 +1,9 @@
 import datetime
 import typing
 
-import attrs
 import msgspec
 import timeflake
-from attrs import define, field
 
-from ..rendering.markup import make_markup
 from ..util import now
 
 
@@ -49,21 +46,17 @@ class Sprint(msgspec.Struct, kw_only=True, frozen=True):
         return self.elapsed >= self.intended_duration
 
 
-@define(kw_only=True, frozen=True)
-class Paragraph:
+class Paragraph(msgspec.Struct, kw_only=True):
     id: timeflake.Timeflake
     session_id: timeflake.Timeflake
     index: int
-    sprint_id: typing.Optional[timeflake.Timeflake] = field(default=None)
-    markdown: str = field(repr=False, eq=False, order=False)
-    markup: str = field(repr=False, eq=False, order=False, init=False)
+    sprint_id: typing.Optional[timeflake.Timeflake] = None
+    markdown: str
 
-    @markup.default
-    def _init_markup(self):
-        return make_markup(self.markdown)
-
-    def evolve(self, markdown: str):
-        return attrs.evolve(self, markdown=markdown)
+    def __setattr__(self, name: str, value: typing.Any) -> None:
+        if name != "markdown":
+            raise AttributeError(f"The field {name!r} cannot be modified.")
+        return super().__setattr__(name, value)
 
     def to_db_dict(self):
-        return attrs.asdict(self, filter=attrs.filters.exclude(attrs.fields(Paragraph).markup))
+        return msgspec.structs.asdict(self)

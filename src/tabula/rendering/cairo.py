@@ -2,22 +2,37 @@ from __future__ import annotations
 
 import collections.abc
 import math
+import typing
 from contextlib import AbstractContextManager, contextmanager
+
+import msgspec
 
 from ..commontypes import Point, Rect, Size
 from ._cairopango import ffi, lib  # type: ignore
 from .rendertypes import CairoColor, CairoOp, CairoPathOp, Rendered
 
+cairo_surface_t_p = typing.NewType("cairo_surface_t_p", typing.Any)
+
+
+class CairoSurfaceReference(msgspec.Struct, frozen=True, kw_only=True):
+    surface: cairo_surface_t_p
+    size: Size
+
+    @classmethod
+    def from_cairo(cls, cairo: Cairo):
+        surface = cairo_surface_t_p(ffi.gc(lib.cairo_surface_reference(cairo.surface), lib.cairo_surface_destroy))
+        return cls(surface=surface, size=cairo.size)
+
 
 class Cairo(AbstractContextManager):
+    surface: cairo_surface_t_p
+
     def __init__(self, surface_size: Size):
         self.size = surface_size
 
     def setup(self):
-        self.surface = ffi.gc(
-            lib.cairo_image_surface_create(lib.CAIRO_FORMAT_A8, self.size.width, self.size.height),
-            lib.cairo_surface_destroy,
-            size=self.size.total(),
+        self.surface = cairo_surface_t_p(
+            ffi.gc(lib.cairo_image_surface_create(lib.CAIRO_FORMAT_A8, self.size.width, self.size.height), lib.cairo_surface_destroy)
         )
         self.context = ffi.gc(lib.cairo_create(self.surface), lib.cairo_destroy)
 
@@ -162,7 +177,7 @@ class Cairo(AbstractContextManager):
     def draw_path(self):
         lib.cairo_stroke(self.context)
 
-    def paste_other(self, other: "Cairo", location: Point, other_rect: Rect):
+    def paste_other(self, other: Cairo | CairoSurfaceReference, location: Point, other_rect: Rect):
         with self.cairo_save_restore():
             lib.cairo_set_operator(self.context, lib.CAIRO_OPERATOR_SOURCE)
             offset = location - other_rect.origin

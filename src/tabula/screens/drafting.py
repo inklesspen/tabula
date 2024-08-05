@@ -3,13 +3,10 @@ from __future__ import annotations
 import logging
 import typing
 
-from ..commontypes import Point, Rect, Size
 from ..device.hwtypes import AnnotatedKeyEvent
 from ..device.keyboard_consts import Key
 from ..editor.composes import ComposeFailed, ComposeOther, ComposeState, ComposeSucceeded
-from ..rendering.cairo import Cairo
 from ..rendering.layout import LayoutManager, StatusLayout
-from ..rendering.rendertypes import CairoColor
 from ..util import TABULA
 from .base import Screen, TargetDialog, TargetScreen
 
@@ -100,6 +97,7 @@ class Drafting(Screen):
             self.status_layout.compose = False
             self.render_status()
             self.document.keystroke(compose_result.result)
+            self.layout_manager.active_renderable.append_chars(compose_result.result)
             self.render_document()
         else:
             typing.assert_never()
@@ -111,6 +109,7 @@ class Drafting(Screen):
                 self.clear_status_area()
             else:
                 self.document.keystroke(event.character)
+                self.layout_manager.active_renderable.append_chars(event.character)
             self.render_document()
         elif event.key is Key.KEY_ENTER:
             if self.document.has_sprint and self.document.sprint.completed:
@@ -121,6 +120,7 @@ class Drafting(Screen):
             self.document.save_session(self.db, "KEY_ENTER")
         elif event.key is Key.KEY_BACKSPACE:
             self.document.backspace()
+            self.layout_manager.active_renderable.backspace()
             self.render_document()
         elif event.key is Key.KEY_F1:
             self.document.save_session(self.db, "KEY_F1")
@@ -167,23 +167,14 @@ class Drafting(Screen):
         self.render_status()  # This is mainly to update the clock.
 
     def clear_status_area(self):
-        app = TABULA.get()
-        half_height = self.screen_info.size.height // 2
-        status_area = Rect(origin=Point(x=0, y=half_height), spread=Size(width=self.screen_info.size.width, height=half_height))
-        with Cairo(status_area.spread) as cairo:
-            cairo.fill_with_color(CairoColor.WHITE)
-            rendered = cairo.get_rendered(status_area.origin)
-        app.hardware.display_rendered(rendered)
+        TABULA.get().hardware.display_rendered(self.status_layout.clear())
 
     def render_status(self):
-        app = TABULA.get()
-        app.hardware.display_rendered(self.status_layout.render())
+        TABULA.get().hardware.display_rendered(self.status_layout.render())
 
     def render_document(self):
-        app = TABULA.get()
-        current_font = self.settings.current_font
-        font_size = self.settings.current_font_size
-        font_spec = f"{current_font} {font_size}"
-        self.layout_manager.set_font(font_spec).set_line_spacing(self.settings.current_line_spacing)
-        rendered = self.layout_manager.render_update(composing_chars=self.compose_state.composing_chars)
-        app.hardware.display_rendered(rendered)
+        TABULA.get().hardware.display_rendered(
+            self.layout_manager.set_font(f"{self.settings.current_font} {self.settings.current_font_size}")
+            .set_line_spacing(self.settings.current_line_spacing)
+            .render_document(composing_chars=self.compose_state.composing_chars)
+        )

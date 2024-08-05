@@ -49,7 +49,6 @@ class DocumentModel:
         self.currently: typing.Optional[Paragraph] = None
         self.sprint: typing.Optional[Sprint] = None
         self.sprint_start_para: typing.Optional[int] = None
-        self.buffer: list[str] = []
         self._contents_by_id: dict[timeflake.Timeflake, Paragraph] = {}
         self._contents_by_index: dict[int, Paragraph] = {}
         self.unsaved_changes = False
@@ -114,7 +113,6 @@ class DocumentModel:
             )
             paras.append(new_para)
         self.contents = paras
-        self.buffer = []
         self.currently = paras[-1]
         self.session_id = session_id
         self.sprint_id = None
@@ -130,7 +128,6 @@ class DocumentModel:
     def delete_session(self, db: TabulaDb):
         db.delete_session(self.session_id)
         self.contents = []
-        self.buffer = []
         self.currently = None
         self.session_id = None
         self.sprint_id = None
@@ -142,9 +139,7 @@ class DocumentModel:
         self.sprint = db.load_sprint_info(self.sprint_id)
         self.new_para()
         start_time = self.sprint.started_at.strftime("%H:%M")
-        sprint_info_text = f"# Started {format_duration(self.sprint.intended_duration)} sprint at {start_time}."
-        self.buffer.extend(sprint_info_text)
-        self._update_currently()
+        self.currently.markdown = f"# Started {format_duration(self.sprint.intended_duration)} sprint at {start_time}."
         self.sprint_start_para = self.currently.index
         self.new_para()
 
@@ -153,41 +148,29 @@ class DocumentModel:
         db.update_sprint(self.sprint_id, wordcount=self.sprint_wordcount, ended=True)
         self.sprint = db.load_sprint_info(self.sprint_id)
         self.new_para()
-        sprint_info_text = (
+        self.currently.markdown = (
             f"# Sprint ended after {format_duration(self.sprint.actual_duration)} with {wordcount.format_wordcount(self.sprint.wordcount)}."
         )
-        self.buffer.extend(sprint_info_text)
-        self._update_currently()
         self.sprint_id = None
         self.sprint = None
         self.sprint_start_para = None
         self.new_para()
 
-    def _update_currently(self, evolve=True):
-        if evolve:
-            self.currently = self.currently.evolve("".join(self.buffer))
-        self._contents_by_id[self.currently.id] = self.currently
-        self._contents_by_index[self.currently.index] = self.currently
-
     def keystroke(self, keystroke: str):
-        self.buffer.append(keystroke)
-        self._update_currently()
-
+        self.currently.markdown += keystroke
         self.unsaved_changes = True
 
     def backspace(self):
-        if len(self.buffer) == 0:
+        if len(self.currently.markdown) == 0:
             # no going back
             return
-        del self.buffer[-1]
-        self._update_currently()
+        self.currently.markdown = self.currently.markdown[:-1]
 
         self.unsaved_changes = True
 
     def new_para(self):
-        if len(self.buffer) == 0:
+        if self.currently and len(self.currently.markdown) == 0:
             return
-        self.buffer = []
         self.currently = Paragraph(
             id=timeflake.random(),
             session_id=self.session_id,
@@ -195,7 +178,8 @@ class DocumentModel:
             sprint_id=self.sprint_id,
             markdown="",
         )
-        self._update_currently(evolve=False)
+        self._contents_by_id[self.currently.id] = self.currently
+        self._contents_by_index[self.currently.index] = self.currently
 
         self.unsaved_changes = True
 

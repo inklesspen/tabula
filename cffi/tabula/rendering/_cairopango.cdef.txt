@@ -334,6 +334,7 @@ void cairo_set_source_rgba(cairo_t *cr,
 
 void cairo_paint(cairo_t *cr);
 
+cairo_surface_t *cairo_surface_reference(cairo_surface_t *surface);
 void cairo_surface_destroy(cairo_surface_t *surface);
 
 cairo_font_options_t *
@@ -820,6 +821,8 @@ struct _MarkdownState
     PangoAttrList *attr_list;
     PangoAttribute *bold;
     PangoAttribute *italic;
+    PangoAttribute *cursor_alpha;
+    PangoAttribute *compose_underline;
     ...;
 };
 
@@ -832,5 +835,16 @@ void simplify_attr_list(PangoAttrList *list);
 void fully_free_g_string(GString *string);
 void setup_cursor(MarkdownState *state, GString *string);
 void cleanup_cursor(MarkdownState *state, GString *string);
-void setup_compose(MarkdownState *state, GString *string);
+void setup_compose(MarkdownState *state, guint start, guint end);
 void cleanup_compose(MarkdownState *state);
+
+struct _CursorPara
+{
+    gchar *para;
+    PangoAttrList *attr_list;
+};
+
+typedef struct _CursorPara CursorPara;
+
+CursorPara *cursor_para_new(void);
+void cursor_para_free(CursorPara *para);
