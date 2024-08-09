@@ -7,6 +7,7 @@ from contextlib import contextmanager
 
 import libevdev
 
+from ..commontypes import NotInContextError
 from .eventsource import Event
 
 
@@ -30,7 +31,7 @@ class EventDevice(contextlib.AbstractContextManager):
 
     def events(self) -> collections.abc.Iterator[Event]:
         if self._d is None:
-            raise Exception("Must be within a context expression")
+            raise NotInContextError()
 
         resyncing = False
         events = self._d.events()

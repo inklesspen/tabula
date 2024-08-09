@@ -7,6 +7,7 @@ import typing
 import msgspec
 import trio
 
+from ..commontypes import TabulaError
 from ..device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TabulaEvent, TapEvent
 from ..util import invoke_if_present
 
@@ -55,6 +56,10 @@ class DialogResult(msgspec.Struct, frozen=True):
 
 
 RetVal = ChangeScreen | Shutdown | Close | DialogResult
+
+
+class ScreenError(TabulaError):
+    pass
 
 
 @dataclasses.dataclass(frozen=True)

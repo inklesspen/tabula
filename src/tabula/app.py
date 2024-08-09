@@ -17,7 +17,7 @@ from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TabulaEvent, 
 from .editor.document import DocumentModel
 from .rendering.fontconfig import setup_fontconfig
 from .screens import DIALOGS, SCREENS
-from .screens.base import Responder, ResponderMetadata, Screen, TargetDialog, TargetScreen
+from .screens.base import Responder, ResponderMetadata, Screen, ScreenError, TargetDialog, TargetScreen
 from .screens.dialogs import Dialog
 from .settings import Settings
 from .util import TABULA, AwaitableCallback, Future, invoke, invoke_if_present, removing, replacing_last
@@ -120,7 +120,7 @@ class Tabula:
             task_status.started(outer_future)
             await inner_future._event.wait()
             if self.current_responder_metadata.responder is not dialog:
-                raise Exception("expected %r to be responder; it was instead %r", dialog, self.current_responder_metadata.responder)
+                raise ScreenError("expected %r to be responder; it was instead %r", dialog, self.current_responder_metadata.responder)
             self.current_responder_metadata.cancel()
             await invoke_if_present(dialog, "resign_responder")
             self.modal_stack.value = removing(self.modal_stack.value, dialog)
@@ -147,9 +147,9 @@ class Tabula:
 
     async def change_screen(self, target_screen: TargetScreen, **kwargs):
         if self.modal_stack.value:
-            raise Exception("this is not the right way to close a modal")
+            raise ScreenError("this is not the right way to close a modal")
         if self.current_responder_metadata.responder is not self.current_screen:
-            raise Exception("attempted to change screen when not current responder")
+            raise ScreenError("attempted to change screen when not current responder")
 
         await invoke_if_present(self.current_screen, "resign_responder")
         self.current_responder_metadata.cancel()
@@ -171,7 +171,7 @@ class Tabula:
             await trio.lowlevel.checkpoint()
 
             if self.current_screen is None:
-                raise Exception("no current screen, which shouldn't ever happen")
+                raise ScreenError("no current screen, which shouldn't ever happen")
             if self.current_responder_metadata is None or self.current_screen is not self.current_responder_metadata.responder:
                 self.current_responder_metadata = cast(ResponderMetadata, await nursery.start(self.current_screen.run))
                 await invoke_if_present(self.current_screen, "become_responder")

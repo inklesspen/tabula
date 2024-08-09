@@ -9,12 +9,16 @@ import errno
 import logging
 import typing
 
-from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
+from ..commontypes import NotInContextError, Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from ..util import check_c_enum
 from ._fbink import ffi, lib  # type: ignore
-from .hwtypes import DisplayUpdateMode
+from .hwtypes import DisplayUpdateMode, HardwareError
 
 logger = logging.getLogger(__name__)
+
+
+class FBInkError(HardwareError):
+    pass
 
 
 # https://www.waveshare.net/w/upload/c/c4/E-paper-mode-declaration.pdf
@@ -156,18 +160,18 @@ class FbInk(contextlib.AbstractContextManager):
 
     def set_bitdepth(self, depth: BitDepth, set_grayscale=True):
         if not self.active:
-            raise Exception("enter the context first")
+            raise NotInContextError()
         if depth is None:
             depth = lib.KEEP_CURRENT_BITDEPTH
         # #define GRAYSCALE_8BIT          0x1
         grayscale = 1 if set_grayscale else lib.KEEP_CURRENT_GRAYSCALE
         code = lib.fbink_set_fb_info(self.fbfd, lib.KEEP_CURRENT_ROTATE, depth, grayscale, self.fbink_cfg)
         if code == errno.ENODEV:
-            raise Exception("device not initialized; this should never happen")
+            raise FBInkError("device not initialized; this should never happen")
         if code == errno.EINVAL:
             raise ValueError("invalid argument")
         if code == errno.ECANCELED:
-            raise Exception("ioctl failure; re-init recommended")
+            raise FBInkError("ioctl failure; re-init recommended")
 
     def get_screen_info(self) -> ScreenInfo:
         with ffi.new("FBInkState *") as state:
@@ -176,7 +180,7 @@ class FbInk(contextlib.AbstractContextManager):
             # https://github.com/NiLuJe/FBInk/blob/master/utils/finger_trace.c#L502-L534
             touch_coordinate_transform = TOUCH_COORDINATE_TRANSFORMS[state.current_rota]
             if touch_coordinate_transform != canonical_rota.touch_coordinate_transform():
-                raise Exception("something's gone wrong with tcts")
+                raise FBInkError("something's gone wrong with tcts")
 
             logger.debug("Screen rotation: %r", canonical_rota)
             logger.debug("Touch Coordinate Transform: %r", touch_coordinate_transform)
@@ -212,15 +216,15 @@ class FbInk(contextlib.AbstractContextManager):
 
     def set_rotation(self, sr: ScreenRotation):
         if not self.active:
-            raise Exception("enter the context first")
+            raise NotInContextError()
         native_rota = lib.fbink_rota_canonical_to_native(KoboRota.from_screen_rotation(sr))
         code = lib.fbink_set_fb_info(self.fbfd, native_rota, lib.KEEP_CURRENT_BITDEPTH, lib.KEEP_CURRENT_GRAYSCALE, self.fbink_cfg)
         if code == errno.ENODEV:
-            raise Exception("device not initialized; this should never happen")
+            raise FBInkError("device not initialized; this should never happen")
         if code == errno.EINVAL:
             raise ValueError("invalid argument")
         if code == errno.ECANCELED:
-            raise Exception("ioctl failure; re-init recommended")
+            raise FBInkError("ioctl failure; re-init recommended")
 
     def clear(self):
         lib.fbink_cls(self.fbfd, self.fbink_cfg, ffi.NULL, False)

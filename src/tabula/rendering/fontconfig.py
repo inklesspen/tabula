@@ -3,6 +3,7 @@ import importlib.resources
 import pathlib
 import tempfile
 
+from ..commontypes import TabulaError
 from ._cairopango import ffi, lib  # type: ignore
 from .fonts import FILES
 
@@ -44,7 +45,7 @@ def setup_fontconfig(user_font_path: pathlib.Path):
     # self._finalizer = weakref.finalize(self, fontconfig.close())
     resource_manager = contextlib.ExitStack()
     if not FILES.is_dir():
-        raise Exception("unable to load app fonts")
+        raise TabulaError("unable to load app fonts")
     appfonts_path = resource_manager.enter_context(importlib.resources.as_file(FILES))
     cache_path = resource_manager.enter_context(tempfile.TemporaryDirectory(prefix="fc_cache"))
     root_config = (

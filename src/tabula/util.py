@@ -198,6 +198,10 @@ def humanized_delta(delta: datetime.timedelta, allow_future: bool = False):
 V = typing.TypeVar("V")
 
 
+class AlreadyFinalizedError(Exception):
+    pass
+
+
 class Future(typing.Generic[V]):
     _outcome: typing.Optional[outcome.Outcome]
 
@@ -207,7 +211,7 @@ class Future(typing.Generic[V]):
 
     def finalize(self, result: V | outcome.Outcome[V]):
         if self._outcome is not None:
-            raise Exception("already finalized")
+            raise AlreadyFinalizedError()
         if isinstance(result, outcome.Outcome):
             self._outcome = result
         else:

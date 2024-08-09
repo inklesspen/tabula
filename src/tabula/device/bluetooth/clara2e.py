@@ -8,6 +8,7 @@ import tricycle
 import trio
 import trio.lowlevel
 
+from ..hwtypes import BluetoothInitError
 from .bluez import BluezContext
 
 
@@ -44,7 +45,7 @@ async def hciattach(nursery: trio.Nursery, *, task_status=trio.TASK_STATUS_IGNOR
         with trio.move_on_after(10):
             line = (await stdout.receive_line()).strip()
             if line != expected:
-                raise Exception(f"hciattach went wrong; expected {expected!r} but got {line!r}")
+                raise BluetoothInitError(f"hciattach went wrong; expected {expected!r} but got {line!r}")
         task_status.started(hci)
         await hci.wait()
 
@@ -52,6 +53,10 @@ async def hciattach(nursery: trio.Nursery, *, task_status=trio.TASK_STATUS_IGNOR
 @contextlib.asynccontextmanager
 async def bluetooth():
     async with kmods(), BluezContext() as bluezcontext:
-        await bluezcontext.nursery.start(hciattach, bluezcontext.nursery)
-        await bluezcontext.ensure_adapter_powered_on()
+        _hci = await bluezcontext.nursery.start(hciattach, bluezcontext.nursery)
+        try:
+            with trio.fail_after(5):
+                await bluezcontext.ensure_adapter_powered_on()
+        except trio.TooSlowError as exc:
+            raise BluetoothInitError() from exc
         yield bluezcontext

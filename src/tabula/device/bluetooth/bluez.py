@@ -709,7 +709,7 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
                             self._object_at_path(bus_name="org.bluez", object_path=ObjectPath(signal.body[0])), signal.body[1]
                         )
                     case _:
-                        raise Exception("Unexpected signal type %r" % signal_type)
+                        raise AssertionError("Unexpected signal type %r" % signal_type)
 
     async def _property_watcher(self, recv: trio.MemoryReceiveChannel[Signal], *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()

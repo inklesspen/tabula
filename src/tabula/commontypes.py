@@ -117,3 +117,12 @@ class ScreenInfo(msgspec.Struct, frozen=True):
     dpi: float
     rotation: ScreenRotation
     touch_coordinate_transform: TouchCoordinateTransform
+
+
+class TabulaError(Exception):
+    pass
+
+
+class NotInContextError(Exception):
+    def __init__(self):
+        return super().__init__("Must be inside an appropriate context manager")

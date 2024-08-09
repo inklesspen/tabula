@@ -7,13 +7,21 @@ import msgspec
 
 from tabula.device.keyboard_consts import KeyPress
 
-from ..commontypes import Point, Size, TouchCoordinateTransform
+from ..commontypes import Point, Size, TabulaError, TouchCoordinateTransform
 
 if typing.TYPE_CHECKING:
     import collections.abc
     import datetime
 
     from .keyboard_consts import Key, Led
+
+
+class HardwareError(TabulaError):
+    pass
+
+
+class BluetoothInitError(HardwareError):
+    pass
 
 
 class KeyboardDisconnect(msgspec.Struct, frozen=True):
