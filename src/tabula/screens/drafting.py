@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import typing
 
-from ..device.hwtypes import AnnotatedKeyEvent
+from ..device.hwtypes import AnnotatedKeyEvent, DisplayUpdateMode
 from ..device.keyboard_consts import Key
 from ..editor.composes import ComposeFailed, ComposeOther, ComposeState, ComposeSucceeded
 from ..rendering.layout import LayoutManager, StatusLayout
@@ -50,14 +50,17 @@ class Drafting(Screen):
             capslock=False,
             compose=False,
         )
+        app.hardware.set_display_update_mode(DisplayUpdateMode.FIDELITY)
         app.hardware.clear_screen()
         self.render_document()
         self.render_status()
+        app.hardware.set_display_update_mode(DisplayUpdateMode.RAPID)
         app.tick_receivers.append(self.tick)
 
     def resign_responder(self):
         app = TABULA.get()
         app.tick_receivers.remove(self.tick)
+        app.hardware.set_display_update_mode(DisplayUpdateMode.AUTO)
         self.document.save_session(self.db, "resign_responder")
 
     async def show_help(self):

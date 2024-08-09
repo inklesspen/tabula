@@ -163,3 +163,10 @@ class MultitouchVariant(enum.Enum):
     TYPE_A = "type_a"
     TYPE_B = "type_b"
     SNOW_PROTOCOL = "snow_protocol"
+
+
+@enum.unique
+class DisplayUpdateMode(enum.Enum):
+    AUTO = "auto"
+    RAPID = "rapid"
+    FIDELITY = "fidelity"

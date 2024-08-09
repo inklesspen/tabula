@@ -36,7 +36,7 @@ from Foundation import (
 from PyObjCTools import AppHelper
 from tabula.app import Tabula, parser
 from tabula.commontypes import Point, Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
-from tabula.device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, KeyEvent, SetLed, TapEvent, TapPhase
+from tabula.device.hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyboardDisconnect, KeyEvent, SetLed, TapEvent, TapPhase
 from tabula.device.keyboard_consts import Key, KeyPress
 from tabula.device.keystreams import make_keystream
 from tabula.settings import Settings
@@ -166,6 +166,9 @@ class CocoaHardware:
 
     def display_rendered(self, rendered: "Rendered"):
         self.display_pixels(rendered.image, rendered.extent)
+
+    def set_display_update_mode(self, mode: DisplayUpdateMode):
+        logger.debug("set display update mode: %r", mode)
 
     def clear_screen(self):
         self.appdelegate.view.clearScreen()
@@ -452,6 +455,7 @@ def configure_logging(root_level=logging.DEBUG):
     handler.setLevel(root_level)
     logging.basicConfig(handlers=[handler])
     logging.getLogger("tabula").setLevel(root_level)
+    logger.setLevel(root_level)
 
 
 def start():

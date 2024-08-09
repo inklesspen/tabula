@@ -9,11 +9,13 @@ import logging
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from ..util import check_c_enum
 from ._fbink import ffi, lib  # type: ignore
+from .hwtypes import DisplayUpdateMode
 
 logger = logging.getLogger(__name__)
 
 
 # https://www.waveshare.net/w/upload/c/c4/E-paper-mode-declaration.pdf
+# also see notes at https://github.com/NiLuJe/FBInk/blob/master/fbink.h#L354
 @check_c_enum(ffi, "WFM_MODE_INDEX_E")
 class WaveformMode(enum.IntEnum):
     AUTO = 0
@@ -117,6 +119,12 @@ TOUCH_COORDINATE_TRANSFORMS = (
     TouchCoordinateTransform.SWAP_AND_MIRROR_X,  # native_rota 3
 )
 
+DISPLAY_UPDATE_MODES = {
+    DisplayUpdateMode.AUTO: WaveformMode.AUTO,
+    DisplayUpdateMode.RAPID: WaveformMode.GC4,
+    DisplayUpdateMode.FIDELITY: WaveformMode.REAGL,
+}
+
 
 class FbInk(contextlib.AbstractContextManager):
     def __init__(self):
@@ -214,6 +222,9 @@ class FbInk(contextlib.AbstractContextManager):
             lib.fbink_restore(self.fbfd, self.fbink_cfg, self.screendump)
             lib.fbink_free_dump_data(self.screendump)
         self.screendump = None
+
+    def set_display_update_mode(self, mode: DisplayUpdateMode):
+        self.fbink_cfg.wfm_mode = DISPLAY_UPDATE_MODES.get(mode, WaveformMode.AUTO)
 
     def set_waveform_mode(self, wfm_mode: str):
         self.fbink_cfg.wfm_mode = WaveformMode[wfm_mode]

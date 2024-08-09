@@ -9,7 +9,7 @@ import trio
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from ..settings import Settings
 from .gestures import make_tapstream
-from .hwtypes import AnnotatedKeyEvent, KeyEvent, SetLed, TabulaEvent, TapEvent, TouchReport
+from .hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyEvent, SetLed, TabulaEvent, TapEvent, TouchReport
 from .keyboard_consts import Led
 from .keystreams import make_keystream
 from .kobo_models import detect_model
@@ -56,6 +56,9 @@ class Hardware(metaclass=abc.ABCMeta):
 
     def display_rendered(self, rendered: "Rendered"):
         self.display_pixels(rendered.image, rendered.extent)
+
+    @abc.abstractmethod
+    def set_display_update_mode(self, mode: DisplayUpdateMode): ...
 
     @abc.abstractmethod
     def clear_screen(self): ...
@@ -171,8 +174,8 @@ class KoboHardware(Hardware):
         if self.keyboard is not None:
             self.keyboard.set_led(state.led, state.state)
 
-    def set_waveform_mode(self, wfm_mode: str):
-        self.fbink.set_waveform_mode(wfm_mode)
+    def set_display_update_mode(self, mode: DisplayUpdateMode):
+        self.fbink.set_display_update_mode(mode)
 
     def reset_keystream(self):
         super().reset_keystream()
