@@ -131,6 +131,7 @@ class FbInk(contextlib.AbstractContextManager):
         self.fbink_cfg = ffi.new("FBInkConfig *")
         self.fbink_cfg.is_quiet = True
         self.screendump = None
+        self.fbfd = None
 
     def __enter__(self):
         self.fbfd = lib.fbink_open()
