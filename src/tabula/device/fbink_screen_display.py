@@ -1,10 +1,13 @@
 # SPDX-FileCopyrightText: 2021 Rose Davidson <rose@metaclassical.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
+
 import contextlib
 import enum
 import errno
 import logging
+import typing
 
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from ..util import check_c_enum
@@ -125,6 +128,8 @@ DISPLAY_UPDATE_MODES = {
     DisplayUpdateMode.FIDELITY: WaveformMode.REAGL,
 }
 
+BitDepth = typing.Optional[typing.Literal[4, 8, 16, 32]]  # None for KEEP_CURRENT_BITDEPTH
+
 
 class FbInk(contextlib.AbstractContextManager):
     def __init__(self):
@@ -139,6 +144,7 @@ class FbInk(contextlib.AbstractContextManager):
     def __enter__(self):
         self.fbfd = lib.fbink_open()
         lib.fbink_init(self.fbfd, self.fbink_cfg)
+        self.set_bitdepth(8)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -148,6 +154,21 @@ class FbInk(contextlib.AbstractContextManager):
     @property
     def active(self):
         return self.fbfd is not None
+
+    def set_bitdepth(self, depth: BitDepth, set_grayscale=True):
+        if not self.active:
+            raise Exception("enter the context first")
+        if depth is None:
+            depth = lib.KEEP_CURRENT_BITDEPTH
+        # #define GRAYSCALE_8BIT          0x1
+        grayscale = 1 if set_grayscale else lib.KEEP_CURRENT_GRAYSCALE
+        code = lib.fbink_set_fb_info(self.fbfd, lib.KEEP_CURRENT_ROTATE, depth, grayscale, self.fbink_cfg)
+        if code == errno.ENODEV:
+            raise Exception("device not initialized; this should never happen")
+        if code == errno.EINVAL:
+            raise ValueError("invalid argument")
+        if code == errno.ECANCELED:
+            raise Exception("ioctl failure; re-init recommended")
 
     def get_screen_info(self) -> ScreenInfo:
         with ffi.new("FBInkState *") as state:
@@ -191,6 +212,8 @@ class FbInk(contextlib.AbstractContextManager):
             )
 
     def set_rotation(self, sr: ScreenRotation):
+        if not self.active:
+            raise Exception("enter the context first")
         native_rota = lib.fbink_rota_canonical_to_native(KoboRota.from_screen_rotation(sr))
         code = lib.fbink_set_fb_info(self.fbfd, native_rota, lib.KEEP_CURRENT_BITDEPTH, lib.KEEP_CURRENT_GRAYSCALE, self.fbink_cfg)
         if code == errno.ENODEV:

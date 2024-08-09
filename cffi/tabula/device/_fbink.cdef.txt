@@ -431,11 +431,11 @@ uint32_t fbink_rota_canonical_to_native(uint8_t);
 int fbink_invert_screen(int, const FBInkConfig *restrict);
 unsigned char *fbink_get_fb_pointer(int, size_t *);
 void fbink_get_fb_info(struct fb_var_screeninfo *, struct fb_fix_screeninfo *);
-static const int KEEP_CURRENT_ROTATE = 128;
-static const int KEEP_CURRENT_BITDEPTH = 128;
-static const int KEEP_CURRENT_GRAYSCALE = 128;
-static const int TOGGLE_GRAYSCALE = 64;
-int fbink_set_fb_info(int, uint32_t, uint8_t, uint8_t, const FBInkConfig *restrict);
+#define KEEP_CURRENT_ROTATE ...
+#define KEEP_CURRENT_BITDEPTH ...
+#define KEEP_CURRENT_GRAYSCALE ...
+#define TOGGLE_GRAYSCALE ...
+int fbink_set_fb_info(int fbfd, uint32_t rota, uint8_t bpp, uint8_t grayscale, const FBInkConfig *restrict fbink_cfg);
 int fbink_sunxi_toggle_ntx_pen_mode(int, bool);
 int fbink_sunxi_ntx_enforce_rota(int, SUNXI_FORCE_ROTA_INDEX_T, const FBInkConfig *restrict);
 int fbink_mtk_set_swipe_data(MTK_SWIPE_DIRECTION_INDEX_T, uint8_t);
