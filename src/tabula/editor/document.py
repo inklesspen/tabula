@@ -190,7 +190,8 @@ class DocumentModel:
         export_path.mkdir(parents=True, exist_ok=True)
         timestamp = now()
         session_id = self.session_id
-        export_filename = f"{session_id} - {timestamp} - {self.wordcount} words.md"
+        path_timestamp = timestamp.strftime("%Y-%m-%d-%H-%M")
+        export_filename = f"{session_id} - {path_timestamp} - {self.wordcount} words.md"
         export_file = export_path / export_filename
         with export_file.open(mode="w", encoding="utf-8") as out:
             out.write(self.export_markdown())
