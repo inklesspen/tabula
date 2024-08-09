@@ -43,18 +43,18 @@ dependencies = [
   'jeepney',
   'outcome',
   'libevdev',
+  'importlib-resources==5.12.0',
 ]
 description = 'cool as hecc'
 dynamic = ['version']
 name = 'tabula'
 readme = 'README.md'
-requires-python = '>=3.12'
+requires-python = '>=3.11'
 
 [project.optional-dependencies]
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
 # to require these on mac os: platform_system=="Darwin"
-devel = ['black', 'flake8', 'Flake8-pyproject']
-test = ['Pillow', 'pytest', 'pytest-trio', 'pytest-benchmark']
+test = ['pytest', 'pytest-trio']
 
 [project.scripts]
 "list-tabula-fonts" = "tabula.scripts:list_fonts_cli"
@@ -64,6 +64,7 @@ tabula = "tabula.app:main"
 [tool.ruff]
 extend-exclude = []
 line-length = 140
+target-version = "py311"
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
@@ -86,15 +87,6 @@ docstring-code-format = false
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
-
-[tool.black]
-line-length = 140
-target-version = ['py312']
-
-[tool.flake8]
-exclude = [".tox", ".eggs", "ci/templates", "build", "dist"]
-ignore = ["E203", "E704"]
-max-line-length = 140
 
 # Consider if we care about limited-api.
 # [tool.meson-python]

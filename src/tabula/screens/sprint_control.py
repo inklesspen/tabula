@@ -138,7 +138,8 @@ class SprintControl(Dialog):
             return
         app = TABULA.get()
 
-        time_info = f"{format_duration(self.sprint_length)} sprint\nWill end at {self.sprint_end.strftime("%H:%M")}"
+        end_time = self.sprint_end.strftime("%H:%M")
+        time_info = f"{format_duration(self.sprint_length)} sprint\nWill end at {end_time}"
 
         with Cairo(Size(width=self.screen_size.width - 100, height=200)) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
