@@ -37,8 +37,8 @@ class Tabula:
         self.settings = settings
         self.db = make_db(settings.db_path)
         self.document = DocumentModel()
-        self.screen_stack = trio_util.AsyncValue(tuple())
-        self.modal_stack = trio_util.AsyncValue(tuple())
+        self.screen_stack = trio_util.AsyncValue(())
+        self.modal_stack = trio_util.AsyncValue(())
         self.tick_receivers = []
         self._nursery = None
         self.current_responder_metadata = None
@@ -113,7 +113,7 @@ class Tabula:
             await invoke_if_present(self.current_screen, "resign_responder")
         saved_metadata = self.current_responder_metadata
         self.current_responder_metadata = None
-        self.modal_stack.value += tuple([dialog])
+        self.modal_stack.value += (dialog,)
 
         async def modal_wait(inner_future: Future, *, task_status: trio.TaskStatus):
             outer_future = Future()
@@ -142,7 +142,7 @@ class Tabula:
         # TODO: clean shutdown tasks?
         self.hardware.event_receive_channel.close()
         self._nursery.cancel_scope.cancel()
-        logger.warn("Shutting down…")
+        logger.warning("Shutting down…")
         self.hardware.clear_screen()
 
     async def change_screen(self, target_screen: TargetScreen, **kwargs):

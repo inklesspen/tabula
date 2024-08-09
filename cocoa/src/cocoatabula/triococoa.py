@@ -266,7 +266,7 @@ class KoboView(NSImageView):
 
     @objc.python_method
     def setTabulaScreenSize(self, size: Size):
-        logger.info(f"setTabulaScreenSize: {size}")
+        logger.info("setTabulaScreenSize: %r", size)
         self.current_size = NSMakeSize(size.width, size.height)
         self.image().setSize_(self.current_size)
         self.clearScreen()

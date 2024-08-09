@@ -7,7 +7,6 @@ import tricycle
 import trio
 
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
-from ..settings import Settings
 from .gestures import make_tapstream
 from .hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyEvent, SetLed, TabulaEvent, TapEvent, TouchReport
 from .keyboard_consts import Led
@@ -18,6 +17,7 @@ if typing.TYPE_CHECKING:
     import contextlib
 
     from ..rendering.rendertypes import Rendered
+    from ..settings import Settings
 
 
 class Hardware(metaclass=abc.ABCMeta):

@@ -6,7 +6,6 @@ from __future__ import annotations
 import typing
 
 from ..commontypes import Point
-from ..device.hwtypes import AnnotatedKeyEvent
 from ..device.keyboard_consts import Key
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
@@ -17,6 +16,7 @@ from .dialogs import Dialog
 
 if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo
+    from ..device.hwtypes import AnnotatedKeyEvent
     from ..settings import Settings
 
 ROMAN_FACE = "B612 8"

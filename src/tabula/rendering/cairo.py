@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import collections.abc
 import math
 import typing
 from contextlib import AbstractContextManager, contextmanager
@@ -10,6 +9,9 @@ import msgspec
 from ..commontypes import Point, Rect, Size
 from ._cairopango import ffi, lib  # type: ignore
 from .rendertypes import CairoColor, CairoOp, CairoPathOp, Rendered
+
+if typing.TYPE_CHECKING:
+    import collections.abc
 
 cairo_surface_t_p = typing.NewType("cairo_surface_t_p", typing.Any)
 
@@ -104,10 +106,11 @@ class Cairo(AbstractContextManager):
 
     @property
     def current_point(self):
-        if lib.cairo_has_current_point(self.context):
-            point_p = glib_alloc("double[]", 2)
-            lib.cairo_get_current_point(self.context, point_p, point_p + 1)
-            return Point(x=point_p[0], y=point_p[1])
+        if not lib.cairo_has_current_point(self.context):
+            return None
+        point_p = glib_alloc("double[]", 2)
+        lib.cairo_get_current_point(self.context, point_p, point_p + 1)
+        return Point(x=point_p[0], y=point_p[1])
 
     def move_to(self, point: Point):
         lib.cairo_move_to(self.context, point.x, point.y)

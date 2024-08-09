@@ -91,10 +91,10 @@ def check_c_enum(ffi: FFIType, enum_t: str, strip_prefix: str | None = None, all
 
 async def invoke_if_present(obj: typing.Any, method_name: str, **provided_kwargs):
     if not hasattr(obj, method_name):
-        return
+        return None
     c = getattr(obj, method_name)
     if not callable(c):
-        return
+        return None
     result = invoke(c, **provided_kwargs)
     if inspect.isawaitable(result):
         return await result

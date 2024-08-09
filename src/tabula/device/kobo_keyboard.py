@@ -63,7 +63,7 @@ class DeviceListener:
         # We'll have to use the actual enums from libevdev, not our own.
         # libevdev.evbit('EV_LED', led)
         # libevdev.evbit('EV_LED', Led.LED_CAPSL)
-        logger.info(f"Would set {led} to {state}")
+        logger.info("Would set %r to %r", led, state)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         with self.cancelscope, self.device:

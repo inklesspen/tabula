@@ -78,8 +78,7 @@ class AwareDateTime(TypeDecorator):
         if isinstance(value, datetime.datetime):
             if value.tzinfo is None:
                 raise ValueError("{!r} must be TZ-aware".format(value))
-            else:
-                value = value.astimezone(datetime.timezone.utc)
+            value = value.astimezone(datetime.timezone.utc)
         return value
 
     def process_result_value(self, value, dialect):
@@ -224,7 +223,7 @@ class TabulaDb:
                 # the unique constraint apparently fires before the id constraint
                 # and sqlite < 3.35.0 only allows a single conflict target.
                 index_elements=["session_id", "index"],
-                set_=dict(sprint_id=pstmt.excluded.sprint_id, markdown=pstmt.excluded.markdown),
+                set_={"sprint_id": pstmt.excluded.sprint_id, "markdown": pstmt.excluded.markdown},
             )
             conn.execute(p_on_update, [para.to_db_dict() for para in paragraphs])
 

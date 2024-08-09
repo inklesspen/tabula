@@ -57,7 +57,7 @@ class ComposeState:
                 self.can_be_codepoint = False
                 self.can_be_compose_sequence = False
                 return ComposeOther()
-            else:
+            else:  # noqa: RET505
                 self.active = False
                 return ComposeOther(active_changed=True, show_help=True)
         # if key is backspace, we should just cancel the compose without dumping out the captured keys
@@ -82,16 +82,15 @@ class ComposeState:
             # not a match
             self.active = False
             return ComposeFailed(key_events=self.devoured)
-        else:
-            if self.sequences.has_key(self.devoured_characters):
-                # end of sequence
-                self.active = False
-                return ComposeSucceeded(result=self.sequences[self.devoured_characters])
-            if codepoint_match := CODEPOINT_MATCHER.match("".join(self.devoured_characters)):
-                self.active = False
-                codepoint_str = codepoint_match.group(1)
-                codepoint = int(codepoint_str, base=16)
-                return ComposeSucceeded(result=chr(codepoint))
+        if self.sequences.has_key(self.devoured_characters):
+            # end of sequence
+            self.active = False
+            return ComposeSucceeded(result=self.sequences[self.devoured_characters])
+        if codepoint_match := CODEPOINT_MATCHER.match("".join(self.devoured_characters)):
+            self.active = False
+            codepoint_str = codepoint_match.group(1)
+            codepoint = int(codepoint_str, base=16)
+            return ComposeSucceeded(result=chr(codepoint))
         return ComposeOther()
 
     def handle_key_event(self, event: AnnotatedKeyEvent) -> ComposeResult:

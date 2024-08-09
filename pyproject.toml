@@ -70,8 +70,13 @@ target-version = "py311"
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
 # McCabe complexity (`C901`) by default.
-ignore = []
-select = ["E4", "E7", "E9", "F", "B", "I", "RUF005", "RUF012", "RUF013"]
+# RET503 and RET504 are good ideas but would need more code churn than i want to do right now. maybe in future.
+ignore = ["RET503", "RET504"]
+# consider for future:
+# https://docs.astral.sh/ruff/rules/#flake8-boolean-trap-fbt
+# https://docs.astral.sh/ruff/rules/#flake8-errmsg-em
+# https://docs.astral.sh/ruff/rules/#eradicate-era
+select = ["E4", "E7", "E9", "F", "B", "I", "RUF005", "RUF012", "RUF013", "FA", "C4", "DTZ", "LOG", "G", "PIE", "RET", "SIM", "TCH"]
 
 [tool.ruff.format]
 # Enable auto-formatting of code examples in docstrings. Markdown,

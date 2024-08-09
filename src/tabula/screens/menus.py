@@ -10,7 +10,6 @@ import trio
 
 from ..commontypes import Point, Rect, Size
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
-from ..editor.doctypes import Session
 from ..editor.document import DocumentModel
 from ..rendering.cairo import Cairo
 from ..rendering.fonts import SERIF
@@ -24,6 +23,7 @@ from .widgets import Button, ButtonSpec, ButtonState, Label, make_button_stack
 if typing.TYPE_CHECKING:
     from ..commontypes import ScreenInfo
     from ..db import TabulaDb
+    from ..editor.doctypes import Session
     from ..rendering.rendertypes import Rendered
     from ..settings import Settings
 

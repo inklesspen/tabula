@@ -6,7 +6,6 @@ import math
 import typing
 
 import msgspec
-import timeflake
 
 from ..commontypes import Point, Rect, Size
 from ..durations import timer_display
@@ -19,6 +18,8 @@ from .pango import Pango, PangoLayout
 from .rendertypes import Alignment, CairoColor, Rendered
 
 if typing.TYPE_CHECKING:
+    import timeflake
+
     from ..commontypes import ScreenInfo
     from ..editor.doctypes import Paragraph
     from ..editor.document import DocumentModel
@@ -209,9 +210,8 @@ class LayoutManager:
                     surface = self.ensure_only_cursor_para_rendered()
                 else:
                     # we shall assume that the active_renderable is up to date
-                    with self.active_renderable.composing_chars(composing_chars):
-                        with self.active_renderable.cursor():
-                            surface = self._render(self.active_renderable.g_string, self.active_renderable.markdown_state.attr_list)
+                    with self.active_renderable.composing_chars(composing_chars), self.active_renderable.cursor():
+                        surface = self._render(self.active_renderable.g_string, self.active_renderable.markdown_state.attr_list)
 
             rendered_height = surface.size.height
             top = current_y - rendered_height

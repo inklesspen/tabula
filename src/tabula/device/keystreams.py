@@ -6,14 +6,16 @@ from __future__ import annotations
 import abc
 import unicodedata
 from contextlib import aclosing, asynccontextmanager
-from typing import Any, AsyncIterable, cast
+from typing import TYPE_CHECKING, Any, AsyncIterable, cast
 
 import msgspec
 import trio
 
-from ..settings import Settings
 from .hwtypes import AnnotatedKeyEvent, KeyEvent, KeyPress, ModifierAnnotation
 from .keyboard_consts import Key
+
+if TYPE_CHECKING:
+    from ..settings import Settings
 
 
 class Section(abc.ABC):

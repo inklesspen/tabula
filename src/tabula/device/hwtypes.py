@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import enum
 import typing
 
@@ -12,6 +11,7 @@ from ..commontypes import Point, Size, TouchCoordinateTransform
 
 if typing.TYPE_CHECKING:
     import collections.abc
+    import datetime
 
     from .keyboard_consts import Key, Led
 

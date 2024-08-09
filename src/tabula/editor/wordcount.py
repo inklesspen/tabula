@@ -34,9 +34,7 @@ class PlainRenderer(markdown_it.renderer.RendererProtocol):
                 skip = True
             elif token.type == "heading_close":
                 skip = False
-            elif skip:
-                continue
-            elif token.type == "paragraph_open":
+            elif skip or token.type == "paragraph_open":
                 continue
             elif token.type == "paragraph_close":
                 result += "\n\n"

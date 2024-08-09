@@ -105,7 +105,7 @@ def parse_duration(val: str) -> datetime.timedelta:
         if len(val) == 0:
             raise ValueError("Invalid duration string; expected unit")
         unit = None
-        for unitstr in PARSE_UNITS.keys():
+        for unitstr in PARSE_UNITS:
             if val.startswith(unitstr):
                 unit = PARSE_UNITS[unitstr]
                 val = val[len(unitstr) :]

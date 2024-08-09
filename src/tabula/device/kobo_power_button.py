@@ -10,7 +10,7 @@ from trio_util import AsyncBool
 
 
 def open_device():
-    f = open("/dev/input/event0", "rb")
+    f = open("/dev/input/event0", "rb")  # noqa: SIM115
     fcntl.fcntl(f, fcntl.F_SETFL, os.O_NONBLOCK)
     d = libevdev.Device(f)
     return d

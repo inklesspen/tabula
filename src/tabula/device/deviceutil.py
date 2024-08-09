@@ -68,14 +68,11 @@ class EventDevice(contextlib.AbstractContextManager):
 
 @contextmanager
 def open_device(devpath):
-    f = open(devpath, "r+b", buffering=0)
-    fcntl.fcntl(f, fcntl.F_SETFL, os.O_NONBLOCK)
-    d = libevdev.Device(f)
-    d.grab()
-    try:
+    with open(devpath, "r+b", buffering=0) as f:
+        fcntl.fcntl(f, fcntl.F_SETFL, os.O_NONBLOCK)
+        d = libevdev.Device(f)
+        d.grab()
         yield d
-    finally:
-        f.close()
 
 
 if __name__ == "__main__":
