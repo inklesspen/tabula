@@ -1,3 +1,4 @@
+import contextlib
 import enum
 import logging
 import typing
@@ -169,6 +170,9 @@ class CocoaHardware:
 
     def set_display_update_mode(self, mode: DisplayUpdateMode):
         logger.debug("set display update mode: %r", mode)
+
+    def display_update_mode(self, mode: DisplayUpdateMode):
+        return contextlib.nullcontext(self.set_display_update_mode(mode))
 
     def clear_screen(self):
         self.appdelegate.view.clearScreen()

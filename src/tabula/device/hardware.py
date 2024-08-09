@@ -15,6 +15,8 @@ from .keystreams import make_keystream
 from .kobo_models import detect_model
 
 if typing.TYPE_CHECKING:
+    import contextlib
+
     from ..rendering.rendertypes import Rendered
 
 
@@ -59,6 +61,9 @@ class Hardware(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def set_display_update_mode(self, mode: DisplayUpdateMode): ...
+
+    @abc.abstractmethod
+    def display_update_mode(self, mode: DisplayUpdateMode) -> contextlib.AbstractContextManager[None]: ...
 
     @abc.abstractmethod
     def clear_screen(self): ...
@@ -176,6 +181,9 @@ class KoboHardware(Hardware):
 
     def set_display_update_mode(self, mode: DisplayUpdateMode):
         self.fbink.set_display_update_mode(mode)
+
+    def display_update_mode(self, mode: DisplayUpdateMode):
+        return self.fbink.display_update_mode(mode)
 
     def reset_keystream(self):
         super().reset_keystream()

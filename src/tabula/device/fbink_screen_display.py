@@ -128,9 +128,12 @@ DISPLAY_UPDATE_MODES = {
 
 class FbInk(contextlib.AbstractContextManager):
     def __init__(self):
+        self.display_update_mode = DisplayUpdateMode.AUTO
         self.fbink_cfg = ffi.new("FBInkConfig *")
         self.fbink_cfg.is_quiet = True
         self.screendump = None
+        self.fbink_cfg.ignore_alpha = True
+        self.fbink_cfg.wfm_mode = DISPLAY_UPDATE_MODES[self.display_update_mode]
         self.fbfd = None
 
     def __enter__(self):
@@ -225,7 +228,15 @@ class FbInk(contextlib.AbstractContextManager):
         self.screendump = None
 
     def set_display_update_mode(self, mode: DisplayUpdateMode):
+        self.display_update_mode = mode
         self.fbink_cfg.wfm_mode = DISPLAY_UPDATE_MODES.get(mode, WaveformMode.AUTO)
+
+    @contextlib.contextmanager
+    def display_update_mode(self, mode: DisplayUpdateMode):
+        initial_mode = self.display_update_mode
+        self.set_display_update_mode(mode)
+        yield
+        self.set_display_update_mode(initial_mode)
 
     def set_waveform_mode(self, wfm_mode: str):
         self.fbink_cfg.wfm_mode = WaveformMode[wfm_mode]
