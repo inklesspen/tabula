@@ -136,7 +136,6 @@ class FbInk(contextlib.AbstractContextManager):
         self.display_update_mode = DisplayUpdateMode.AUTO
         self.fbink_cfg = ffi.new("FBInkConfig *")
         self.fbink_cfg.is_quiet = True
-        self.screendump = None
         self.fbink_cfg.ignore_alpha = True
         self.fbink_cfg.wfm_mode = DISPLAY_UPDATE_MODES[self.display_update_mode]
         self.fbfd = None
@@ -237,18 +236,6 @@ class FbInk(contextlib.AbstractContextManager):
             int_coord(rect.origin.y),
             self.fbink_cfg,
         )
-
-    def save_screen(self) -> None:
-        self.screendump = ffi.new("FBInkDump *")
-        lib.fbink_dump(self.fbfd, self.screendump)
-
-    def restore_screen(self) -> None:
-        if self.screendump is None:
-            raise ValueError("Cannot restore screen; nothing saved.")
-        with self.screendump:
-            lib.fbink_restore(self.fbfd, self.fbink_cfg, self.screendump)
-            lib.fbink_free_dump_data(self.screendump)
-        self.screendump = None
 
     def set_display_update_mode(self, mode: DisplayUpdateMode):
         self.display_update_mode = mode
