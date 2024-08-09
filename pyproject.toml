@@ -70,7 +70,7 @@ line-length = 140
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
 # McCabe complexity (`C901`) by default.
 ignore = []
-select = ["E4", "E7", "E9", "F", "B", "I", "RUF012"]
+select = ["E4", "E7", "E9", "F", "B", "I", "RUF005", "RUF012", "RUF013"]
 
 [tool.ruff.format]
 # Enable auto-formatting of code examples in docstrings. Markdown,

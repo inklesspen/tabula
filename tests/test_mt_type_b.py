@@ -1173,7 +1173,7 @@ async def test_touches(raw_events, expected, nursery):
         "EV_SYN", "SYN_CONFIG", value=42, seconds=raw_events[-1].timestamp.seconds, microseconds=raw_events[-1].timestamp.microseconds
     )
     touch_send, touch_receive = trio.open_memory_channel[TouchReport](0)
-    touchscreen = Touchscreen(MultitouchVariant.TYPE_B, touch_send, SimpleEventSource(raw_events + [end_event]))
+    touchscreen = Touchscreen(MultitouchVariant.TYPE_B, touch_send, SimpleEventSource([*raw_events, end_event]))
     await nursery.start(touchscreen.run)
     received = []
     async with touch_receive:

@@ -56,7 +56,7 @@ def test_open_italics():
     assert mstate.italic != ffi.NULL
     assert mstate.italic.start_index == 6
     attrs = get_split_attrs(mstate.attr_list)
-    assert attrs == PARKED_ATTRS + [f"6 {OPEN_ATTR_END} style italic"]
+    assert attrs == [*PARKED_ATTRS, f"6 {OPEN_ATTR_END} style italic"]
 
 
 @pytest.mark.parametrize(
@@ -156,13 +156,13 @@ def test_backspace_to_reopen():
     assert gstr.len == len(test_string[:-1].encode("utf-8"))
     assert ffi.string(gstr.str).decode("utf-8") == test_string[:-1]
     attrs = get_split_attrs(mstate.attr_list)
-    assert attrs == PARKED_ATTRS + [f"11 {OPEN_ATTR_END} weight semibold", "13 17 style italic"]
+    assert attrs == [*PARKED_ATTRS, f"11 {OPEN_ATTR_END} weight semibold", "13 17 style italic"]
 
     # now close it again!
     lib.g_string_append_unichar(gstr, ord("*"))
     lib.markdown_attrs(mstate, gstr)
     attrs = get_split_attrs(mstate.attr_list)
-    assert attrs == PARKED_ATTRS + ["11 23 weight semibold", "13 17 style italic"]
+    assert attrs == [*PARKED_ATTRS, "11 23 weight semibold", "13 17 style italic"]
 
 
 def test_cursor():
@@ -173,7 +173,7 @@ def test_cursor():
     context = ffi.gc(lib.pango_font_map_create_context(fontmap), lib.g_object_unref)
     layout = ffi.gc(lib.pango_layout_new(context), lib.g_object_unref)
     lib.pango_layout_set_markup(layout, markup_string.encode("utf-8"), -1)
-    markup_attrs = [PARKED_COMPOSE_UNDERLINE] + get_split_attrs(lib.pango_layout_get_attributes(layout))
+    markup_attrs = [PARKED_COMPOSE_UNDERLINE, *get_split_attrs(lib.pango_layout_get_attributes(layout))]
 
     gstr = ffi.gc(lib.g_string_new_len(test_string.encode("utf-8"), len(test_string.encode("utf-8"))), lib.fully_free_g_string)
     mstate = ffi.gc(lib.markdown_state_new(gstr), lib.markdown_state_free)

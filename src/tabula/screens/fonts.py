@@ -204,7 +204,8 @@ class Fonts(Screen):
         confirm_abort_y = self.screen_size.height - 160
         confirm_x = math.ceil(self.screen_size.width * 0.8 - button_size.width)
         abort_x = math.floor(self.screen_size.width * 0.2)
-        self.action_buttons = font_size_buttons + [
+        self.action_buttons = [
+            *font_size_buttons,
             Button.create(
                 self.pango,
                 button_text=CONFIRM_GLYPH,
