@@ -62,7 +62,7 @@ class Renderable(msgspec.Struct, frozen=True, kw_only=True):
 
     @classmethod
     def for_para(cls, para: Paragraph):
-        gstr = new_g_string(para.markdown)
+        gstr = new_g_string(para.markdown, extra_capacity=256)
         mstate = new_markdown_state(gstr)
         lib.markdown_attrs(mstate, gstr)
         return cls(para_id=para.id, g_string=gstr, markdown_state=mstate)
@@ -158,7 +158,7 @@ class LayoutManager:
     def _render(self, g_string: g_string_p, attr_list: pango_attr_list_p):
         lib.pango_layout_set_text(self.layout.layout, g_string.str, g_string.len)
         lib.pango_layout_set_attributes(self.layout.layout, attr_list)
-        render_size = self.layout.get_layout_rects().logical.spread
+        render_size = self.layout.get_logical_layout_rect().spread
         with Cairo(render_size) as cairo:
             cairo.fill_with_color(CairoColor.WHITE)
             cairo.set_draw_color(CairoColor.BLACK)
@@ -178,7 +178,7 @@ class LayoutManager:
         if self.only_cursor_para_rendered is None:
             lib.pango_layout_set_text(self.layout.layout, self.only_cursor_para.para, 1)
             lib.pango_layout_set_attributes(self.layout.layout, self.only_cursor_para.attr_list)
-            render_size = self.layout.get_layout_rects().logical.spread
+            render_size = self.layout.get_logical_layout_rect().spread
             with Cairo(render_size) as cairo:
                 cairo.fill_with_color(CairoColor.WHITE)
                 cairo.set_draw_color(CairoColor.BLACK)

@@ -13,6 +13,8 @@ from .rendertypes import CairoColor, CairoOp, CairoPathOp, Rendered
 
 cairo_surface_t_p = typing.NewType("cairo_surface_t_p", typing.Any)
 
+glib_alloc = ffi.new_allocator(alloc=lib.g_malloc0, free=lib.g_free, should_clear_after_alloc=False)
+
 
 class CairoSurfaceReference(msgspec.Struct, frozen=True, kw_only=True):
     surface: cairo_surface_t_p
@@ -103,10 +105,9 @@ class Cairo(AbstractContextManager):
     @property
     def current_point(self):
         if lib.cairo_has_current_point(self.context):
-            xp = ffi.new("double *")
-            yp = ffi.new("double *")
-            lib.cairo_get_current_point(self.context, xp, yp)
-            return Point(x=xp[0], y=yp[0])
+            point_p = glib_alloc("double[]", 2)
+            lib.cairo_get_current_point(self.context, point_p, point_p + 1)
+            return Point(x=point_p[0], y=point_p[1])
 
     def move_to(self, point: Point):
         lib.cairo_move_to(self.context, point.x, point.y)

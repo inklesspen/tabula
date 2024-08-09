@@ -20,6 +20,8 @@ from .rendertypes import (
 if typing.TYPE_CHECKING:
     from .cairo import Cairo
 
+glib_alloc = ffi.new_allocator(alloc=lib.g_malloc0, free=lib.g_free, should_clear_after_alloc=False)
+
 
 class PangoLayout(AbstractContextManager):
     def __init__(
@@ -34,6 +36,8 @@ class PangoLayout(AbstractContextManager):
     ):
         self.pango = pango
         self.layout = ffi.gc(lib.pango_layout_new(self.pango.context), lib.g_object_unref)
+        self.layout_ink_rect = glib_alloc("PangoRectangle *")
+        self.layout_logical_rect = glib_alloc("PangoRectangle *")
         self._setup_layout(
             width=width,
             justify=justify,
@@ -88,12 +92,14 @@ class PangoLayout(AbstractContextManager):
         del self.layout
 
     def get_layout_rects(self):
-        with ffi.new("PangoRectangle *") as ink, ffi.new("PangoRectangle *") as logical:
-            lib.pango_layout_get_pixel_extents(self.layout, ink, logical)
-            return LayoutRects(
-                ink=Rect.from_pango_rect(ink),
-                logical=Rect.from_pango_rect(logical),
-            )
+        # The Pango docs say the resulting rects are owned by the layout instance, which means we shouldn't free them.
+        # Therefore we simply use rects with the same lifetime as the layout instance.
+        lib.pango_layout_get_pixel_extents(self.layout, self.layout_ink_rect, self.layout_logical_rect)
+        return LayoutRects(ink=Rect.from_pango_rect(self.layout_ink_rect), logical=Rect.from_pango_rect(self.layout_logical_rect))
+
+    def get_logical_layout_rect(self):
+        lib.pango_layout_get_pixel_extents(self.layout, ffi.NULL, self.layout_logical_rect)
+        return Rect.from_pango_rect(self.layout_logical_rect)
 
     def set_line_spacing(self, factor: float):
         lib.pango_layout_set_line_spacing(self.layout, factor)
@@ -169,12 +175,12 @@ class Pango:
         return round(golden_section_search(lambda x: abs(self.calculate_ascent(f"{unsized_font} {x}") - desired_ascent), 1, 100), 1)
 
     def list_available_fonts(self) -> list[str]:
-        with ffi.new("int *") as size_p, ffi.new("PangoFontFamily***") as families_p:
+        with glib_alloc("int *") as size_p, glib_alloc("PangoFontFamily***") as families_p:
             lib.pango_font_map_list_families(self.fontmap, families_p, size_p)
-            font_names = [
-                ffi.string(lib.pango_font_family_get_name(family)).decode("utf-8")
-                for family in ffi.unpack(ffi.gc(families_p[0], lib.g_free), size_p[0])
-            ]
+            with ffi.gc(families_p[0], lib.g_free) as families:
+                font_names = [
+                    ffi.string(lib.pango_font_family_get_name(family)).decode("utf-8") for family in ffi.unpack(families, size_p[0])
+                ]
         return sorted(font_names)
 
     def list_drafting_fonts(self):
