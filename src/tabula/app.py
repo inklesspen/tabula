@@ -10,6 +10,8 @@ import trio
 import trio_util
 
 from .db import make_db
+from .device.bluetooth.bluez import BluezContext
+from .device.bluetooth.clara2e import hciattach, kmods
 from .device.hardware import Hardware, KoboHardware
 from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TabulaEvent, TapEvent
 from .editor.document import DocumentModel
@@ -195,8 +197,17 @@ class Tabula:
 async def start_tabula(settings_path: pathlib.Path):
     settings = Settings.load(settings_path)
     hardware = KoboHardware(settings)
-    app = Tabula(hardware, settings)
-    await app.run()
+    # this isn't the proper location but we'll try it like this anyway.
+    async with kmods(), BluezContext() as bluezcontext:
+        _hci = await bluezcontext.nursery.start(hciattach, bluezcontext.nursery)
+        try:
+            with trio.fail_after(5):
+                await bluezcontext.ensure_adapter_powered_on()
+        except trio.TooSlowError:
+            hardware.fbink.emergency_print("Unable to activate Bluetooth; giving up.")
+        else:
+            app = Tabula(hardware, settings)
+            await app.run()
 
 
 parser = argparse.ArgumentParser(prog="tabula")
@@ -213,13 +224,11 @@ def main(argv=sys.argv):
 
     Does stuff.
     """
-    from trio_util import TaskStats
-
+    # this ensures we import the rendering c extension ASAP
     from .rendering import cairo  # noqa: F401
 
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger("markdown_it").setLevel(logging.ERROR)
     parsed = parser.parse_args(argv[1:])
-    stats = TaskStats()
-    trio.run(start_tabula, parsed.settings, instruments=[stats])
+    trio.run(start_tabula, parsed.settings)
     return 0

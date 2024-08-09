@@ -275,8 +275,12 @@ class Fonts(Screen):
     def render_screen(self):
         app = TABULA.get()
         app.hardware.clear_screen()
+        logger.debug("Rendering sample")
         sample = self.render_sample()
-        app.hardware.display_rendered(sample)
+        logger.debug("Rendering buttons")
         self.make_buttons(sample.extent)
+        logger.debug("Displaying sample")
+        app.hardware.display_rendered(sample)
+        logger.debug("Displaying buttons")
         for button in self.font_buttons + self.action_buttons:
             app.hardware.display_rendered(button.render())

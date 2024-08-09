@@ -218,6 +218,15 @@ class FbInk(contextlib.AbstractContextManager):
     def set_waveform_mode(self, wfm_mode: str):
         self.fbink_cfg.wfm_mode = WaveformMode[wfm_mode]
 
+    def emergency_print(self, message: str):
+        # only use this if we're about to shut down; it makes no attempt to clean up after itself.
+        cmanager = contextlib.nullcontext(self) if self.active else self
+        with cmanager:
+            self.fbink_cfg.is_cleared = True
+            self.fbink_cfg.is_centered = True
+            self.fbink_cfg.is_halfway = True
+            lib.fbink_print(self.fbfd, message.encode("utf-8"), self.fbink_cfg)
+
 
 def int_coord(maybeint):
     actuallyint = round(maybeint)

@@ -20,7 +20,7 @@ async def kmods():
     need_pwr = "sdio_bt_pwr" not in loaded_mods
 
     if need_uhid:
-        await trio.run_process(["insmod", "/opt/modules/uhid.ko"])
+        await trio.run_process(["insmod", "/opt/tabula/modules/uhid.ko"])
     if need_pwr:
         await trio.run_process(["insmod", "/drivers/mx6sll-ntx/wifi/sdio_bt_pwr.ko"])
     yield True

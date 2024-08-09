@@ -388,7 +388,7 @@ int fbink_close(int);
 int fbink_init(int, const FBInkConfig *restrict);
 void fbink_state_dump(const FBInkConfig *restrict);
 void fbink_get_state(const FBInkConfig *restrict, FBInkState *restrict);
-int fbink_print(int, const char *restrict, const FBInkConfig *restrict);
+int fbink_print(int fbfd, const char* restrict string, const FBInkConfig* restrict fbink_cfg);
 int fbink_add_ot_font(const char *, FONT_STYLE_T);
 int fbink_add_ot_font_v2(const char *, FONT_STYLE_T, FBInkOTConfig *restrict);
 int fbink_free_ot_fonts(void);

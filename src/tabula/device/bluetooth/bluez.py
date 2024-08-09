@@ -111,6 +111,7 @@ class NameAwareMatchRule(MatchRule):
                     return False
                 if self.wnk_sender in name_owners:
                     if sender != name_owners.get(self.wnk_sender):
+                        logger.info("Saw signal from %r, we want it from %r, and we know about %r", sender, self.wnk_sender, name_owners)
                         return False
                 else:
                     logger.warning("Tried to match the unique name for %r, but we don't know it.", self.wnk_sender)
@@ -149,6 +150,7 @@ class DBusInterface(abc.ABC):
         return await self.obj.router.send_and_get_reply(new_method_call(self.address, method, signature, body))
 
     def _update_properties(self, properties: dict[PropertyName, typing.Any]):
+        logger.info("Got updated properties for %r: %r", self.address, properties)
         self._properties |= properties
         return self
 
@@ -206,6 +208,9 @@ class DBusObject:
 
     def __getitem__(self, interface_name):
         return self._interfaces[interface_name]
+
+    def __repr__(self):
+        return f"DBusObject(address={self.address!r}, interfaces={self._interfaces!r})"
 
 
 class BluezAgentManager(DBusInterface, interface_name="org.bluez.AgentManager1"):
@@ -645,6 +650,8 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
                 if msg.header.message_type == MessageType.method_call:
                     await self.exported_object_manager.respond(msg)
                 self.check_predicates()
+        except trio.ClosedResourceError:
+            logger.debug("Socket was closed on our end; this is normal")
         except Exception:
             logger.exception("something unexpected happened")
         finally:
@@ -654,8 +661,10 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
             self.expected_replies = {}
 
     def check_predicates(self):
+        logger.debug("Checking predicates")
         for predicate, event in self.waiting_predicates:
             if predicate(self.objects_by_path):
+                logger.debug("A predicate matched")
                 event.set()
         self.waiting_predicates = [item for item in self.waiting_predicates if not item[1].is_set()]
 
@@ -757,6 +766,7 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
     def _object_at_path(self, bus_name: BusName, object_path: ObjectPath):
         if object_path not in self.objects_by_path:
             self.objects_by_path[object_path] = DBusObject(router=self, address=DBusAddress(object_path=object_path, bus_name=bus_name))
+            logger.debug("Became aware of %r", self.objects_by_path[object_path])
         return self.objects_by_path[object_path]
 
     def _update_object_interfaces(
@@ -765,7 +775,9 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
         for ifacename, props in interface_props.items():
             if not is_known_interface_name(ifacename):
                 continue
+            logger.debug("Object %r gained interface %r", obj, ifacename)
             obj._interface(ifacename)._update_properties(remove_property_signatures(props))
+        self.check_predicates()
 
     async def get_managed_objects(self, address: DBusAddress):
         msg = new_method_call(address.with_interface(OBJECT_MANAGER), "GetManagedObjects")
@@ -778,19 +790,19 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
         return tuple(obj for obj_path, obj in self.objects_by_path.items() if obj_path.startswith(some_path) and obj_path != some_path)
 
     @property
-    def agent_manager(self):
+    def agent_manager(self) -> BluezAgentManager:
         for obj in self.objects_by_path.values():
             if "org.bluez.Adapter1" in obj:
                 return obj["org.bluez.AgentManager1"]
 
     @property
-    def adapter(self):
+    def adapter(self) -> BluezAdapter:
         for obj in self.objects_by_path.values():
             if "org.bluez.Adapter1" in obj:
                 return obj["org.bluez.Adapter1"]
 
     @property
-    def devices(self):
+    def devices(self) -> dict[ObjectPath, BluezDevice]:
         return {path: obj["org.bluez.Device1"] for path, obj in self.objects_by_path.items() if "org.bluez.Device1" in obj}
 
     async def install_agent(self, object_path: ObjectPath):
@@ -801,18 +813,30 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
         return agent
 
     async def wait_for_adapter(self):
-        def predicate(objects_by_path):
-            return any("org.bluez.Adapter1" in obj for obj in objects_by_path.values())
+        def predicate(objects_by_path: dict[ObjectPath, DBusObject]):
+            # return any("org.bluez.Adapter1" in obj for obj in objects_by_path.values())
+            for obj in objects_by_path.values():
+                logger.debug("Checking %r for adapter-ness", obj)
+                if "org.bluez.Adapter1" in obj:
+                    return True
+            return False
 
         event = trio.Event()
         self.waiting_predicates.append((predicate, event))
         self.check_predicates()  # it may already be there…
+        logging.debug("Waiting for adapter")
         await event.wait()
+        logging.debug("Adapter found")
 
     async def ensure_adapter_powered_on(self):
         await self.wait_for_adapter()
-        if not self.adapter["Powered"]:
-            await self.adapter.SetPowered(True)
+        logging.debug("Checking Powered property")
+        while True:
+            with trio.move_on_after(2):
+                if self.adapter["Powered"]:
+                    break
+                logging.debug("Setting Powered to true")
+                await self.adapter.SetPowered(True)
 
     @contextlib.asynccontextmanager
     async def __wrap__(self):
