@@ -819,6 +819,15 @@ int pango_pixels(int d);
 
 void invert_a8_surface(cairo_surface_t *surface);
 
+typedef enum _draw_color
+{
+    DRAW_COLOR_NONE = 0,
+    DRAW_COLOR_BLACK = 1,
+    DRAW_COLOR_WHITE = 2
+} draw_color_t;
+
+void draw_roundrect(cairo_t *cr, const cairo_rectangle_t *rect, double radius, double line_width, draw_color_t fill_color, draw_color_t stroke_color);
+
 struct _MarkdownState
 {
     gulong pos;

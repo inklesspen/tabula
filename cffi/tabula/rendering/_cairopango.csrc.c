@@ -1,3 +1,4 @@
+#include <math.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <cairo.h>
@@ -24,6 +25,45 @@ static void invert_a8_surface(cairo_surface_t *surface)
     for (i = 0; i < width * height; i++)
     {
         surface_data[i] = 255 - surface_data[i];
+    }
+}
+
+typedef enum _draw_color
+{
+    DRAW_COLOR_NONE = 0,
+    DRAW_COLOR_BLACK = 1,
+    DRAW_COLOR_WHITE = 2
+} draw_color_t;
+
+#define radians(degrees) ((degrees) * M_PI / 180.0)
+
+void draw_roundrect(cairo_t *cr, const cairo_rectangle_t *rect, double radius, double line_width, draw_color_t fill_color, draw_color_t stroke_color)
+{
+    // This basically just draws the corners, and relies on cairo_arc to draw line segments connecting them.
+    // Angles are given in radians; see https://www.cairographics.org/manual/cairo-Paths.html#cairo-arc for more info.
+    // Not really worrying about type limits here tbh; doubles can hold very large numbers relative to the sizes we're throwing around.
+    cairo_new_sub_path(cr);
+    // upper left
+    cairo_arc(cr, rect->x + radius, rect->y + radius, radius, radians(180), radians(270));
+    // upper right
+    cairo_arc(cr, rect->x + rect->width - radius, rect->y + radius, radius, radians(270), radians(0));
+    // lower right
+    cairo_arc(cr, rect->x + rect->width - radius, rect->y + rect->height - radius, radius, radians(0), radians(90));
+    // lower left
+    cairo_arc(cr, rect->x + radius, rect->y + rect->height - radius, radius, radians(90), radians(180));
+    cairo_close_path(cr);
+    cairo_set_line_width(cr, line_width);
+    if (fill_color)
+    {
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_set_source_rgba(cr, 0, 0, 0, fill_color - 1);
+        cairo_fill_preserve(cr);
+    }
+    if (G_LIKELY(stroke_color))
+    {
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_set_source_rgba(cr, 0, 0, 0, stroke_color - 1);
+        cairo_stroke(cr);
     }
 }
 

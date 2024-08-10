@@ -164,19 +164,9 @@ class Margins(msgspec.Struct, frozen=True):
     right: int
 
 
-class CairoOp(enum.Enum):
-    STROKE = enum.auto()
-    FILL = enum.auto()
-
-
 class CairoColor(enum.IntEnum):
     WHITE = 1
     BLACK = 0
-
-
-class CairoPathOp(msgspec.Struct, frozen=True):
-    op: CairoOp
-    color: CairoColor
 
 
 class LayoutRects(msgspec.Struct, frozen=True):

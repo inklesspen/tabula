@@ -8,14 +8,7 @@ from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
 from ..commontypes import Point, Rect, Size
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoFontDescription, PangoLayout
-from ..rendering.rendertypes import (
-    Alignment,
-    CairoColor,
-    CairoOp,
-    CairoPathOp,
-    Rendered,
-    WrapMode,
-)
+from ..rendering.rendertypes import Alignment, CairoColor, Rendered, WrapMode
 
 if TYPE_CHECKING:
     from typing import Any, Optional
@@ -126,12 +119,7 @@ class Button:
             button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=True, draw_callback=draw_callback
         )
         outline_bounds = Rect(origin=Point(x=4, y=4), spread=button_size - Size(width=8, height=8))
-        outlined.roundrect(
-            rect=outline_bounds,
-            radius=corner_radius,
-            line_width=2,
-            path_ops=(CairoPathOp(op=CairoOp.STROKE, color=CairoColor.WHITE),),
-        )
+        outlined.roundrect(rect=outline_bounds, radius=corner_radius, line_width=2, fill_color=None, stroke_color=CairoColor.WHITE)
         origin = screen_location if screen_location is not None else Point.zeroes()
         return cls(
             normal=normal,
@@ -200,22 +188,8 @@ class Button:
         cairo.setup()
         cairo.fill_with_color(CairoColor.WHITE)
         cairo.roundrect(
-            rect=rect,
-            radius=radius,
-            line_width=2,
-            path_ops=(
-                (
-                    CairoPathOp(op=CairoOp.FILL, color=CairoColor.BLACK),
-                    CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
-                )
-                if inverted
-                else (
-                    CairoPathOp(op=CairoOp.FILL, color=CairoColor.WHITE),
-                    CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),
-                )
-            ),
+            rect=rect, radius=radius, line_width=2, fill_color=CairoColor.BLACK if inverted else None, stroke_color=CairoColor.BLACK
         )
-
         cairo.move_to(layout_origin)
         cairo.set_draw_color(CairoColor.WHITE if inverted else CairoColor.BLACK)
         layout.render(cairo)

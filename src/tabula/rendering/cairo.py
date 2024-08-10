@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import typing
 from contextlib import AbstractContextManager, contextmanager
 
@@ -8,10 +7,7 @@ import msgspec
 
 from ..commontypes import Point, Rect, Size
 from ._cairopango import ffi, lib  # type: ignore
-from .rendertypes import CairoColor, CairoOp, CairoPathOp, Rendered
-
-if typing.TYPE_CHECKING:
-    import collections.abc
+from .rendertypes import CairoColor, Rendered
 
 cairo_surface_t_p = typing.NewType("cairo_surface_t_p", typing.Any)
 
@@ -118,65 +114,12 @@ class Cairo(AbstractContextManager):
     def line_to(self, point: Point):
         lib.cairo_line_to(self.context, point.x, point.y)
 
-    def roundrect(
-        self,
-        rect: Rect,
-        radius: float,
-        line_width: float = 2.0,
-        path_ops: collections.abc.Sequence[CairoPathOp] = (CairoPathOp(op=CairoOp.STROKE, color=CairoColor.BLACK),),
-    ):
-        # This basically just draws the corners, and relies on cairo_arc to draw line segments connecting them.
-        # Angles are given in radians; see https://www.cairographics.org/manual/cairo-Paths.html#cairo-arc for more info.
-        lib.cairo_new_sub_path(self.context)
-        # upper left
-        lib.cairo_arc(
-            self.context,
-            rect.origin.x + radius,
-            rect.origin.y + radius,
-            radius,
-            math.radians(180),
-            math.radians(270),
-        )
-        # upper right
-        lib.cairo_arc(
-            self.context,
-            rect.origin.x + rect.spread.width - radius,
-            rect.origin.y + radius,
-            radius,
-            math.radians(270),
-            math.radians(0),
-        )
-        # lower right
-        lib.cairo_arc(
-            self.context,
-            rect.origin.x + rect.spread.width - radius,
-            rect.origin.y + rect.spread.height - radius,
-            radius,
-            math.radians(0),
-            math.radians(90),
-        )
-        # lower left
-        lib.cairo_arc(
-            self.context,
-            rect.origin.x + radius,
-            rect.origin.y + rect.spread.height - radius,
-            radius,
-            math.radians(90),
-            math.radians(180),
-        )
-        lib.cairo_close_path(self.context)
-        path_data = ffi.gc(lib.cairo_copy_path(self.context), lib.cairo_path_destroy)
-        lib.cairo_set_line_width(self.context, line_width)
-        for i, path_op in enumerate(path_ops):
-            self.set_draw_color(path_op.color)
-            is_last = i == len(path_ops) - 1
-            match path_op.op:
-                case CairoOp.STROKE:
-                    verb = lib.cairo_stroke if is_last else lib.cairo_stroke_preserve
-                case CairoOp.FILL:
-                    verb = lib.cairo_fill if is_last else lib.cairo_fill_preserve
-            verb(self.context)
-        return path_data
+    def roundrect(self, *, rect: Rect, radius: float, line_width: float = 2.0, fill_color=None, stroke_color=CairoColor.BLACK):
+        colormapping = {None: lib.DRAW_COLOR_NONE, CairoColor.BLACK: lib.DRAW_COLOR_BLACK, CairoColor.WHITE: lib.DRAW_COLOR_WHITE}
+        with glib_alloc(
+            "cairo_rectangle_t *", {"x": rect.origin.x, "y": rect.origin.y, "width": rect.spread.width, "height": rect.spread.height}
+        ) as c_rect:
+            lib.draw_roundrect(self.context, c_rect, radius, line_width, colormapping[fill_color], colormapping[stroke_color])
 
     def draw_path(self):
         lib.cairo_stroke(self.context)
