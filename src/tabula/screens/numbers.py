@@ -1,4 +1,4 @@
-from ..device.keyboard_consts import Key
+from ..device.eventsource import KeyCode
 
 # https://en.wikipedia.org/wiki/Enclosed_Alphanumerics
 # U+24EA is zero; it's out of order from the rest
@@ -36,14 +36,14 @@ B612_CIRCLED_DIGITS = {
 }
 
 NUMBER_KEYS = {
-    1: Key.KEY_1,
-    2: Key.KEY_2,
-    3: Key.KEY_3,
-    4: Key.KEY_4,
-    5: Key.KEY_5,
-    6: Key.KEY_6,
-    7: Key.KEY_7,
-    8: Key.KEY_8,
-    9: Key.KEY_9,
-    0: Key.KEY_0,
+    1: KeyCode.KEY_1,
+    2: KeyCode.KEY_2,
+    3: KeyCode.KEY_3,
+    4: KeyCode.KEY_4,
+    5: KeyCode.KEY_5,
+    6: KeyCode.KEY_6,
+    7: KeyCode.KEY_7,
+    8: KeyCode.KEY_8,
+    9: KeyCode.KEY_9,
+    0: KeyCode.KEY_0,
 }

@@ -5,7 +5,7 @@ import logging
 import re
 import typing
 
-from ..device.keyboard_consts import Key
+from ..device.eventsource import KeyCode
 
 if typing.TYPE_CHECKING:
     import pygtrie
@@ -49,7 +49,7 @@ class ComposeState:
 
     def actively_handle_key_event(self, event: AnnotatedKeyEvent) -> ComposeResult:
         # if key is compose and we have collected already, restart the collecting; if no collection, show help screen instead
-        if event.key is Key.KEY_COMPOSE:
+        if event.key is KeyCode.KEY_COMPOSE:
             if self.devoured:
                 logging.debug("Restarting compose collecting")
                 self.devoured = []
@@ -61,7 +61,7 @@ class ComposeState:
                 self.active = False
                 return ComposeOther(active_changed=True, show_help=True)
         # if key is backspace, we should just cancel the compose without dumping out the captured keys
-        if event.key is Key.KEY_BACKSPACE:
+        if event.key is KeyCode.KEY_BACKSPACE:
             self.devoured = []
             self.devoured_characters = []
             self.can_be_codepoint = False
@@ -96,7 +96,7 @@ class ComposeState:
     def handle_key_event(self, event: AnnotatedKeyEvent) -> ComposeResult:
         if self.active:
             return self.actively_handle_key_event(event)
-        if event.key is Key.KEY_COMPOSE:
+        if event.key is KeyCode.KEY_COMPOSE:
             self.active = True
             self.devoured = []
             self.devoured_characters = []

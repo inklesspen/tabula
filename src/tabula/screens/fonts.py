@@ -8,8 +8,8 @@ import math
 import typing
 
 from ..commontypes import Point, Rect, Size
+from ..device.eventsource import KeyCode
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
-from ..device.keyboard_consts import Key
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoFontDescription, PangoLayout
 from ..rendering.rendertypes import CairoColor
@@ -112,7 +112,7 @@ class Fonts(Screen):
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
         app = TABULA.get()
-        if event.key is Key.KEY_ESC:
+        if event.key is KeyCode.KEY_ESC:
             return await app.change_screen(TargetScreen.SystemMenu)
 
     async def handle_tap_event(self, event: TapEvent):

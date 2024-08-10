@@ -9,7 +9,7 @@ import cattrs
 import pygtrie
 
 from .commontypes import ScreenRotation
-from .device.keyboard_consts import Key
+from .device.eventsource import KeyCode
 from .durations import format_duration, parse_duration
 
 COMPOSE_SEQUENCES = {
@@ -162,8 +162,8 @@ def structure_trie(d: dict, typ: type[pygtrie.Trie]):
 
 settings_converter.register_unstructure_hook(pygtrie.Trie, unstructure_trie)
 settings_converter.register_structure_hook(pygtrie.Trie, structure_trie)
-settings_converter.register_unstructure_hook(Key, operator.attrgetter("name"))
-settings_converter.register_structure_hook(Key, lambda v, _: Key[v])
+settings_converter.register_unstructure_hook(KeyCode, operator.attrgetter("name"))
+settings_converter.register_structure_hook(KeyCode, lambda v, _: KeyCode[v])
 
 
 def unstructure_screen_rotation(sr: ScreenRotation):
@@ -191,11 +191,11 @@ class Settings:
     current_font: str
     current_font_size: float
     current_line_spacing: float
-    compose_key: Key
+    compose_key: KeyCode
     compose_key_description: str
     compose_sequences: pygtrie.Trie
     compose_examples: list[dict[str, str]]
-    keymaps: dict[Key, list[str]]
+    keymaps: dict[KeyCode, list[str]]
     db_path: pathlib.Path
     export_path: pathlib.Path
     font_path: pathlib.Path

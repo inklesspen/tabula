@@ -5,15 +5,13 @@ import typing
 
 import msgspec
 
-from tabula.device.keyboard_consts import KeyPress
-
 from ..commontypes import Point, Size, TabulaError, TouchCoordinateTransform
 
 if typing.TYPE_CHECKING:
     import collections.abc
     import datetime
 
-    from .keyboard_consts import Key, Led
+    from .eventsource import KeyCode, LedCode
 
 
 class HardwareError(TabulaError):
@@ -28,16 +26,22 @@ class KeyboardDisconnect(msgspec.Struct, frozen=True):
     pass
 
 
+class KeyPress(enum.IntEnum):
+    RELEASED = 0
+    PRESSED = 1
+    REPEATED = 2
+
+
 class KeyEvent(msgspec.Struct, frozen=True):
-    key: Key
+    key: KeyCode
     press: KeyPress
 
     @classmethod
-    def pressed(cls, key: Key):
+    def pressed(cls, key: KeyCode):
         return cls(key=key, press=KeyPress.PRESSED)
 
     @classmethod
-    def released(cls, key: Key):
+    def released(cls, key: KeyCode):
         return cls(key=key, press=KeyPress.RELEASED)
 
 
@@ -51,7 +55,7 @@ class ModifierAnnotation(msgspec.Struct, frozen=True):
 
 
 class AnnotatedKeyEvent(msgspec.Struct, frozen=True):
-    key: Key
+    key: KeyCode
     press: KeyPress
     annotation: ModifierAnnotation
     character: typing.Optional[str] = None
@@ -107,7 +111,7 @@ class EventType(enum.Enum):
 
 
 class SetLed(msgspec.Struct, frozen=True):
-    led: Led
+    led: LedCode
     state: bool
 
 

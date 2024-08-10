@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, AsyncIterable, cast
 import msgspec
 import trio
 
+from .eventsource import KeyCode
 from .hwtypes import AnnotatedKeyEvent, KeyEvent, KeyPress, ModifierAnnotation
-from .keyboard_consts import Key
 
 if TYPE_CHECKING:
     from ..settings import Settings
@@ -27,26 +27,26 @@ class Section(abc.ABC):
 class ModifierTracking(Section):
     def __init__(self):
         self.momentary_state = {
-            Key.KEY_LEFTALT: False,
-            Key.KEY_RIGHTALT: False,
-            Key.KEY_LEFTCTRL: False,
-            Key.KEY_RIGHTCTRL: False,
-            Key.KEY_LEFTMETA: False,
-            Key.KEY_RIGHTMETA: False,
-            Key.KEY_LEFTSHIFT: False,
-            Key.KEY_RIGHTSHIFT: False,
+            KeyCode.KEY_LEFTALT: False,
+            KeyCode.KEY_RIGHTALT: False,
+            KeyCode.KEY_LEFTCTRL: False,
+            KeyCode.KEY_RIGHTCTRL: False,
+            KeyCode.KEY_LEFTMETA: False,
+            KeyCode.KEY_RIGHTMETA: False,
+            KeyCode.KEY_LEFTSHIFT: False,
+            KeyCode.KEY_RIGHTSHIFT: False,
         }
         self.lock_state = {
-            Key.KEY_CAPSLOCK: False,
+            KeyCode.KEY_CAPSLOCK: False,
         }
 
     def _make_annotation(self):
         return ModifierAnnotation(
-            alt=self.momentary_state[Key.KEY_LEFTALT] or self.momentary_state[Key.KEY_RIGHTALT],
-            ctrl=self.momentary_state[Key.KEY_LEFTCTRL] or self.momentary_state[Key.KEY_RIGHTCTRL],
-            meta=self.momentary_state[Key.KEY_LEFTMETA] or self.momentary_state[Key.KEY_RIGHTMETA],
-            shift=self.momentary_state[Key.KEY_LEFTSHIFT] or self.momentary_state[Key.KEY_RIGHTSHIFT],
-            capslock=self.lock_state[Key.KEY_CAPSLOCK],
+            alt=self.momentary_state[KeyCode.KEY_LEFTALT] or self.momentary_state[KeyCode.KEY_RIGHTALT],
+            ctrl=self.momentary_state[KeyCode.KEY_LEFTCTRL] or self.momentary_state[KeyCode.KEY_RIGHTCTRL],
+            meta=self.momentary_state[KeyCode.KEY_LEFTMETA] or self.momentary_state[KeyCode.KEY_RIGHTMETA],
+            shift=self.momentary_state[KeyCode.KEY_LEFTSHIFT] or self.momentary_state[KeyCode.KEY_RIGHTSHIFT],
+            capslock=self.lock_state[KeyCode.KEY_CAPSLOCK],
         )
 
     async def pump(self, source: trio.MemoryReceiveChannel[KeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
@@ -84,7 +84,7 @@ class OnlyPresses(Section):
 
 # stage 2: convert key event + modifier into character
 class MakeCharacter(Section):
-    def __init__(self, keymaps: dict[Key, list[str]]):
+    def __init__(self, keymaps: dict[KeyCode, list[str]]):
         self.keymaps = keymaps
 
     async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
@@ -104,7 +104,7 @@ class MakeCharacter(Section):
 
 # stage 2.25: convert compose key to KEY_COMPOSE (more convenient to keep separate from synthesis)
 class ComposeKey(Section):
-    def __init__(self, compose_key: Key):
+    def __init__(self, compose_key: KeyCode):
         self.compose_key = compose_key
 
     async def pump(self, source: trio.MemoryReceiveChannel[AnnotatedKeyEvent], sink: trio.MemorySendChannel[AnnotatedKeyEvent]):
@@ -113,7 +113,7 @@ class ComposeKey(Section):
                 if event.key == self.compose_key:
                     await sink.send(
                         AnnotatedKeyEvent(
-                            key=Key.KEY_COMPOSE,
+                            key=KeyCode.KEY_COMPOSE,
                             press=KeyPress.PRESSED,
                             annotation=ModifierAnnotation(compose=True, capslock=event.annotation.capslock),
                             is_modifier=True,

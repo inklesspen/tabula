@@ -6,7 +6,7 @@ from __future__ import annotations
 import typing
 
 from ..commontypes import Point
-from ..device.keyboard_consts import Key
+from ..device.eventsource import KeyCode
 from ..rendering.cairo import Cairo
 from ..rendering.pango import Pango, PangoLayout
 from ..rendering.rendertypes import CairoColor, Rendered
@@ -80,9 +80,9 @@ class Help(Dialog):
         app.hardware.display_rendered(screen)
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
-        if event.key is Key.KEY_ESC:
+        if event.key is KeyCode.KEY_ESC:
             self.future.finalize(None)
-        if event.key is Key.KEY_F2 or event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
+        if event.key is KeyCode.KEY_F2:
             self.future.finalize(TargetDialog.ComposeHelp)
 
     def render(self, screen_info: ScreenInfo) -> Rendered:
@@ -118,9 +118,9 @@ class ComposeHelp(Dialog):
         app.hardware.display_rendered(screen)
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
-        if event.key is Key.KEY_ESC:
+        if event.key is KeyCode.KEY_ESC:
             self.future.finalize(None)
-        if event.key is Key.KEY_F1:
+        if event.key is KeyCode.KEY_F1:
             self.future.finalize(TargetDialog.Help)
 
     def render(self, screen_info: ScreenInfo) -> Rendered:

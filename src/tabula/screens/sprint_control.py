@@ -4,8 +4,8 @@ import logging
 import typing
 
 from ..commontypes import Point, Size
+from ..device.eventsource import KeyCode
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
-from ..device.keyboard_consts import Key
 from ..durations import format_duration
 from ..rendering.cairo import Cairo
 from ..rendering.fonts import SERIF
@@ -60,7 +60,7 @@ class SprintControl(Dialog):
         self.render_screen()
 
     async def handle_key_event(self, event: AnnotatedKeyEvent):
-        if event.key is Key.KEY_ESC:
+        if event.key is KeyCode.KEY_ESC:
             self.future.finalize(False)
 
     async def handle_tap_event(self, event: TapEvent):

@@ -6,9 +6,9 @@ import typing
 import trio
 
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
+from .eventsource import LedCode
 from .gestures import make_tapstream
 from .hwtypes import AnnotatedKeyEvent, BluetoothVariant, DisplayUpdateMode, SetLed, TabulaEvent, TapEvent
-from .keyboard_consts import Led
 from .keystreams import make_keystream
 from .kobo_models import detect_model
 
@@ -91,7 +91,7 @@ class Hardware:
 
     def set_led_state(self, state: SetLed):
         if self.keyboard is not None:
-            self.keyboard.set_led(state.led, state.state)
+            self.keyboard.set_led_state(state)
 
     async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
@@ -101,26 +101,16 @@ class Hardware:
                 continue
             with trio.CancelScope() as cancel_scope:
                 self.keystream_cancel_scope = cancel_scope
-                self.set_led_state(SetLed(led=Led.LED_CAPSL, state=False))
-                self.set_led_state(SetLed(led=Led.LED_COMPOSE, state=False))
+                self.set_led_state(SetLed(led=LedCode.LED_CAPSL, state=False))
+                self.set_led_state(SetLed(led=LedCode.LED_COMPOSE, state=False))
                 async with self.keystream as keystream:
                     async for event in keystream:
                         if event.is_led_able:
                             if event.annotation.capslock != self.capslock_led:
-                                self.set_led_state(
-                                    SetLed(
-                                        led=Led.LED_CAPSL,
-                                        state=event.annotation.capslock,
-                                    )
-                                )
+                                self.set_led_state(SetLed(led=LedCode.LED_CAPSL, state=event.annotation.capslock))
                                 self.capslock_led = event.annotation.capslock
                             if event.annotation.compose != self.compose_led:
-                                self.set_led_state(
-                                    SetLed(
-                                        led=Led.LED_COMPOSE,
-                                        state=event.annotation.compose,
-                                    )
-                                )
+                                self.set_led_state(SetLed(led=LedCode.LED_COMPOSE, state=event.annotation.compose))
                                 self.compose_led = event.annotation.compose
                         await self.event_channel.send(event)
 

@@ -37,8 +37,8 @@ from Foundation import (
 from PyObjCTools import AppHelper
 from tabula.app import Tabula, parser
 from tabula.commontypes import Point, Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
-from tabula.device.hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyboardDisconnect, KeyEvent, SetLed, TapEvent, TapPhase
-from tabula.device.keyboard_consts import Key, KeyPress
+from tabula.device.eventsource import KeyCode
+from tabula.device.hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyboardDisconnect, KeyEvent, KeyPress, SetLed, TapEvent, TapPhase
 from tabula.device.keystreams import make_keystream
 from tabula.settings import Settings
 
@@ -327,7 +327,7 @@ class KoboView(NSImageView):
         modifier_mask = MODIFIER_MAP[key]
         key_event = KeyEvent.pressed(key) if modifier_mask & theEvent.modifierFlags() else KeyEvent.released(key)
         self.hardware.handle_key_event(key_event)
-        if key is Key.KEY_CAPSLOCK:
+        if key is KeyCode.KEY_CAPSLOCK:
             # if the key was capslock, we need to synthesize the counterpart event
             # because in Cocoa we only get it once; pressed when enabled, released otherwise
             counterpart = KeyEvent.released(key) if key_event.press is KeyPress.PRESSED else KeyEvent.pressed(key)

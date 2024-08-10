@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 import typing
 
+from ..device.eventsource import KeyCode
 from ..device.hwtypes import AnnotatedKeyEvent, DisplayUpdateMode
-from ..device.keyboard_consts import Key
 from ..editor.composes import ComposeFailed, ComposeOther, ComposeState, ComposeSucceeded
 from ..rendering.layout import LayoutManager, StatusLayout
 from ..util import TABULA
@@ -114,24 +114,24 @@ class Drafting(Screen):
                 self.document.keystroke(event.character)
                 self.layout_manager.active_renderable.append_chars(event.character)
             self.render_document()
-        elif event.key is Key.KEY_ENTER:
+        elif event.key is KeyCode.KEY_ENTER:
             if self.document.has_sprint and self.document.sprint.completed:
                 self.document.end_sprint(self.db)
                 self.clear_status_area()
             self.document.new_para()
             self.render_document()
             self.document.save_session(self.db, "KEY_ENTER")
-        elif event.key is Key.KEY_BACKSPACE:
+        elif event.key is KeyCode.KEY_BACKSPACE:
             self.document.backspace()
             self.layout_manager.active_renderable.backspace()
             self.render_document()
-        elif event.key is Key.KEY_F1:
+        elif event.key is KeyCode.KEY_F1:
             self.document.save_session(self.db, "KEY_F1")
             await self.show_help()
-        elif event.key is Key.KEY_F2 or event.key is Key.SYNTHETIC_COMPOSE_DOUBLETAP:
+        elif event.key is KeyCode.KEY_F2:
             self.document.save_session(self.db, "COMPOSE_HELP")
             await self.show_compose_help()
-        elif event.key is Key.KEY_F8:
+        elif event.key is KeyCode.KEY_F8:
             self.document.save_session(self.db, "KEY_F8")
             app = TABULA.get()
             if self.document.has_sprint:
@@ -151,7 +151,7 @@ class Drafting(Screen):
                     self.document.save_session(self.db, "new sprint")
                 logger.debug("sprint control result: %r", result)
 
-        elif event.key is Key.KEY_F12:
+        elif event.key is KeyCode.KEY_F12:
             app = TABULA.get()
             if self.document.has_sprint:
                 self.document.end_sprint(self.db)
