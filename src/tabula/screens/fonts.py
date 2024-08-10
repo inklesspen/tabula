@@ -11,7 +11,7 @@ from ..commontypes import Point, Rect, Size
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..device.keyboard_consts import Key
 from ..rendering.cairo import Cairo
-from ..rendering.pango import Pango, PangoLayout
+from ..rendering.pango import Pango, PangoFontDescription, PangoLayout
 from ..rendering.rendertypes import CairoColor
 from ..util import TABULA
 from .base import Screen, TargetScreen
@@ -77,17 +77,25 @@ class Fonts(Screen):
         self.settings = settings
         self.hardware = hardware
         self.pango = Pango(dpi=screen_info.dpi)
+        self.b612_8 = PangoFontDescription.new("B612 8").fetch_metrics(self.pango)
+        self.action_button_font = PangoFontDescription.new(ACTION_BUTTON_FONT)
         self.drafting_fonts = self.pango.list_drafting_fonts()[:FONT_LIMIT]
+        self.drafting_font_descs = {font: PangoFontDescription.new(font) for font in self.drafting_fonts}
         if self.settings.current_font in self.drafting_fonts:
             self.current_font = self.settings.current_font
             self.current_font_size = self.settings.current_font_size
             self.current_line_spacing = self.settings.current_line_spacing
+            self.current_font_desc = PangoFontDescription.new(self.sized_font)
         else:
             self.current_font = DEFAULT_FONT
-            self.current_font_size = self.pango.find_size_for_desired_ascent(DEFAULT_FONT, DEFAULT_ASCENT_SIZE)
+            self.current_font_desc = PangoFontDescription.new(self.current_font)
+            self.current_font_size = self.current_font_desc.find_size_for_desired_ascent(
+                pango=self.pango, desired_ascent=DEFAULT_ASCENT_SIZE
+            )
+            self.current_font_desc.pt = self.current_font_size
             self.current_line_spacing = DEFAULT_LINE_SPACING
 
-        self.current_font_ascent = self.pango.calculate_ascent(self.sized_font)
+        self.current_font_ascent = self.current_font_desc.fetch_metrics(self.pango).calculate_ascent()
         self.screen_size = screen_info.size
         self.samples = collections.deque([PANGRAM, MOBY, HUCK_FINN, TI, DRACULA])
 
@@ -114,7 +122,11 @@ class Fonts(Screen):
             for button in self.font_buttons:
                 if event.location in button:
                     self.current_font = button.button_value
-                    self.current_font_size = self.pango.find_size_for_desired_ascent(self.current_font, self.current_font_ascent)
+                    self.current_font_desc = PangoFontDescription.new(self.current_font)
+                    self.current_font_size = self.current_font_desc.find_size_for_desired_ascent(
+                        pango=self.pango, desired_ascent=self.current_font_ascent
+                    )
+                    self.current_font_desc.pt = self.current_font_size
                     self.current_line_spacing = DEFAULT_LINE_SPACING
                     font_changed = True
             for button in self.action_buttons:
@@ -123,11 +135,17 @@ class Fonts(Screen):
                     match button.button_value:
                         case "size_smaller":
                             self.current_font_ascent = max(10, self.current_font_ascent - 2)
-                            self.current_font_size = self.pango.find_size_for_desired_ascent(self.current_font, self.current_font_ascent)
+                            self.current_font_size = self.current_font_desc.find_size_for_desired_ascent(
+                                pango=self.pango, desired_ascent=self.current_font_ascent
+                            )
+                            self.current_font_desc.pt = self.current_font_size
                             font_changed = True
                         case "size_larger":
                             self.current_font_ascent = min(60, self.current_font_ascent + 2)
-                            self.current_font_size = self.pango.find_size_for_desired_ascent(self.current_font, self.current_font_ascent)
+                            self.current_font_size = self.current_font_desc.find_size_for_desired_ascent(
+                                pango=self.pango, desired_ascent=self.current_font_ascent
+                            )
+                            self.current_font_desc.pt = self.current_font_size
                             font_changed = True
                         case "decrease_line_spacing":
                             self.current_line_spacing -= 0.1
@@ -148,8 +166,8 @@ class Fonts(Screen):
                 app.hardware.display_rendered(self.render_sample())
 
     def make_buttons(self, sample_extent: Rect):
-        ascent = self.pango.calculate_ascent("B612 8")
-        line_height = self.pango.calculate_line_height("B612 8")
+        ascent = self.b612_8.calculate_ascent()
+        line_height = self.b612_8.calculate_line_height()
         smaller_line_height = ascent
         larger_line_height = line_height
 
@@ -183,12 +201,12 @@ class Fonts(Screen):
             spread=Size(width=self.screen_size.width - 600, height=self.screen_size.height - (font_button_y + 100)),
         )
         for font in self.drafting_fonts:
-            button_font_size = self.pango.find_size_for_desired_ascent(font, DEFAULT_ASCENT_SIZE)
-            font_str = f"{font} {button_font_size}"
+            font_desc = self.drafting_font_descs[font]
+            font_desc.set_size_for_desired_ascent(pango=self.pango, desired_ascent=DEFAULT_ASCENT_SIZE)
             font_button_specs.append(
                 ButtonSpec(
                     button_text=font,
-                    font=font_str,
+                    font=font_desc,
                     state=ButtonState.SELECTED if self.current_font == font else ButtonState.NORMAL,
                 )
             )
@@ -211,7 +229,7 @@ class Fonts(Screen):
                 button_text=CONFIRM_GLYPH,
                 button_size=button_size,
                 corner_radius=25,
-                font=ACTION_BUTTON_FONT,
+                font=self.action_button_font,
                 button_value="confirm",
                 screen_location=Point(x=confirm_x, y=confirm_abort_y),
             ),
@@ -220,7 +238,7 @@ class Fonts(Screen):
                 button_text=ABORT_GLYPH,
                 button_size=button_size,
                 corner_radius=25,
-                font=ACTION_BUTTON_FONT,
+                font=self.action_button_font,
                 button_value="abort",
                 screen_location=Point(x=abort_x, y=confirm_abort_y),
             ),
@@ -229,7 +247,7 @@ class Fonts(Screen):
                 button_text=NEXT_SAMPLE_GLYPH,
                 button_size=button_size,
                 corner_radius=25,
-                font=ACTION_BUTTON_FONT,
+                font=self.action_button_font,
                 button_value="next_sample",
                 screen_location=rotate_glyph_position,
             ),
@@ -262,7 +280,7 @@ class Fonts(Screen):
             text_width = text_cairo.size.width - 4
 
             with PangoLayout(pango=self.pango, width=text_width) as layout:
-                layout.set_font(self.sized_font)
+                layout.set_font(self.current_font_desc)
                 layout.set_content(self.samples[0], is_markup=True)
                 text_cairo.move_to(Point(x=2, y=2))
                 text_cairo.set_draw_color(CairoColor.BLACK)

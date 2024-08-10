@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import math
 import typing
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 
 from ..commontypes import Rect
 from ..util import golden_section_search
@@ -66,9 +67,10 @@ class PangoLayout(AbstractContextManager):
         )
         lib.pango_layout_set_alignment(self.layout, alignment)
 
-    def set_font(self, font: str):
-        with Pango._make_font_description(font) as font_description:
-            lib.pango_layout_set_font_description(self.layout, font_description)
+    def set_font(self, font: str | PangoFontDescription):
+        ctx = nullcontext(font) if isinstance(font, PangoFontDescription) else PangoFontDescription.new(font)
+        with ctx as font_description:
+            lib.pango_layout_set_font_description(self.layout, font_description.pango_font_description)
 
     def set_content(self, text: str, is_markup: bool = False):
         textbytes = text.encode("utf-8")
@@ -103,6 +105,79 @@ class PangoLayout(AbstractContextManager):
 
     def set_line_spacing(self, factor: float):
         lib.pango_layout_set_line_spacing(self.layout, factor)
+
+
+class PangoFontDescription(AbstractContextManager):
+    def __init__(self, pango_font_description):
+        if not isinstance(pango_font_description, ffi.CData):
+            raise TypeError()
+        self.pango_font_description = pango_font_description
+        self.pango_font_metrics = None
+
+    def _clear_metrics(self):
+        if self.pango_font_metrics is not None:
+            ffi.release(self.pango_font_metrics)
+        self.pango_font_metrics = None
+
+    @classmethod
+    def new(cls, font: str):
+        return cls(ffi.gc(lib.pango_font_description_from_string(font.encode("utf-8")), lib.pango_font_description_free))
+
+    @property
+    def pt(self):
+        return lib.pango_font_description_get_size(self.pango_font_description) / lib.PANGO_SCALE
+
+    @pt.setter
+    def pt(self, value: float):
+        lib.pango_font_description_set_size(self.pango_font_description, math.floor(value * lib.PANGO_SCALE))
+        self._clear_metrics()
+
+    @property
+    def name(self):
+        return ffi.string(lib.pango_font_description_get_family(self.pango_font_description)).decode("utf-8")
+
+    @name.setter
+    def name(self, value):
+        lib.pango_font_description_set_family(value.encode("utf-8"))
+
+    def __exit__(self, *ignored):
+        self._clear_metrics()
+        ffi.release(self.pango_font_description)
+
+    def __str__(self):
+        with ffi.gc(lib.pango_font_description_to_string(self.pango_font_description), lib.g_free) as chars:
+            return ffi.string(chars).decode("utf-8")
+
+    def fetch_metrics(self, pango: Pango):
+        self.pango_font_metrics = ffi.gc(
+            lib.pango_context_get_metrics(pango.context, self.pango_font_description, ffi.NULL), lib.pango_font_metrics_unref
+        )
+        return self
+
+    def calculate_line_height(self) -> float:
+        if self.pango_font_metrics is None:
+            raise ValueError("Lacking metrics")
+        return lib.pango_font_metrics_get_height(self.pango_font_metrics) / lib.PANGO_SCALE
+
+    def calculate_ascent(self) -> float:
+        if self.pango_font_metrics is None:
+            raise ValueError("Lacking metrics")
+        return lib.pango_font_metrics_get_ascent(self.pango_font_metrics) / lib.PANGO_SCALE
+
+    def find_size_for_desired_ascent(self, *, pango: Pango, desired_ascent: float):
+        orig_size = self.pt
+
+        def search_func(size):
+            self.pt = size
+            self.fetch_metrics(pango)
+            return abs(self.calculate_ascent() - desired_ascent)
+
+        found = round(golden_section_search(search_func, 1, 100), 1)
+        self.pt = orig_size
+        return found
+
+    def set_size_for_desired_ascent(self, *, pango: Pango, desired_ascent: float):
+        self.pt = self.find_size_for_desired_ascent(pango=pango, desired_ascent=desired_ascent)
 
 
 class Pango:
@@ -143,36 +218,6 @@ class Pango:
         lib.pango_context_set_base_dir(self.context, lib.PANGO_DIRECTION_LTR)
         lib.pango_context_set_base_gravity(self.context, lib.PANGO_GRAVITY_SOUTH)
         lib.pango_context_set_gravity_hint(self.context, lib.PANGO_GRAVITY_HINT_NATURAL)
-
-    @staticmethod
-    def _make_font_description(font: str):
-        return ffi.gc(
-            lib.pango_font_description_from_string(font.encode("utf-8")),
-            lib.pango_font_description_free,
-        )
-
-    def calculate_line_height(self, font: str) -> float:
-        with (
-            self._make_font_description(font) as font_description,
-            ffi.gc(
-                lib.pango_context_get_metrics(self.context, font_description, ffi.NULL),
-                lib.pango_font_metrics_unref,
-            ) as font_metrics,
-        ):
-            return lib.pango_font_metrics_get_height(font_metrics) / lib.PANGO_SCALE
-
-    def calculate_ascent(self, font: str) -> float:
-        with (
-            self._make_font_description(font) as font_description,
-            ffi.gc(
-                lib.pango_context_get_metrics(self.context, font_description, ffi.NULL),
-                lib.pango_font_metrics_unref,
-            ) as font_metrics,
-        ):
-            return lib.pango_font_metrics_get_ascent(font_metrics) / lib.PANGO_SCALE
-
-    def find_size_for_desired_ascent(self, unsized_font: str, desired_ascent: float):
-        return round(golden_section_search(lambda x: abs(self.calculate_ascent(f"{unsized_font} {x}") - desired_ascent), 1, 100), 1)
 
     def list_available_fonts(self) -> list[str]:
         with glib_alloc("int *") as size_p, glib_alloc("PangoFontFamily***") as families_p:

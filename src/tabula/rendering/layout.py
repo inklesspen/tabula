@@ -14,7 +14,7 @@ from ..util import now
 from ._cairopango import ffi, lib  # type: ignore
 from .cairo import Cairo, CairoSurfaceReference
 from .fonts import SERIF
-from .pango import Pango, PangoLayout
+from .pango import Pango, PangoFontDescription, PangoLayout
 from .rendertypes import Alignment, CairoColor, Rendered
 
 if typing.TYPE_CHECKING:
@@ -129,6 +129,7 @@ class LayoutManager:
         self.layout = PangoLayout(pango=self.pango, width=self.render_width)
         self.rendered_markups = {}
         self.rendered_font = None
+        self.rendered_font_desc = None
         self.rendered_line_spacing = None
         self.skip_height = 0
         self.render_size = Size(self.render_width, self.render_height)
@@ -143,8 +144,9 @@ class LayoutManager:
         if font != self.rendered_font:
             self.rendered_markups = {}
             self.only_cursor_para_rendered = None
-            self.skip_height = math.floor(self.pango.calculate_line_height(font))
-            self.layout.set_font(font)
+            self.rendered_font_desc = PangoFontDescription.new(font).fetch_metrics(self.pango)
+            self.skip_height = math.floor(self.rendered_font_desc.calculate_line_height())
+            self.layout.set_font(self.rendered_font_desc)
             self.rendered_font = font
         return self
 

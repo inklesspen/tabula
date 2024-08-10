@@ -649,9 +649,13 @@ void pango_matrix_transform_pixel_rectangle(const PangoMatrix *matrix,
 PangoLanguage *pango_language_from_string(const char *language);
 
 PangoFontDescription *pango_font_description_from_string(const char *str);
-void pango_font_description_set_size(PangoFontDescription *desc,
-                                     gint size);
+gint pango_font_description_get_size(const PangoFontDescription *desc);
 void pango_font_description_free(PangoFontDescription *desc);
+gboolean pango_font_description_get_size_is_absolute(const PangoFontDescription *desc);
+void pango_font_description_set_absolute_size(PangoFontDescription *desc, double size);
+void pango_font_description_set_size(PangoFontDescription *desc, gint size);
+const char *pango_font_description_get_family(const PangoFontDescription *desc);
+void pango_font_description_set_family(PangoFontDescription *desc, const char *family);
 
 PangoFontDescription *pango_font_describe(PangoFont *font);
 

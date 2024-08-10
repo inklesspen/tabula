@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
 
 from ..commontypes import Point, Rect, Size
 from ..rendering.cairo import Cairo
-from ..rendering.pango import Pango, PangoLayout
+from ..rendering.pango import Pango, PangoFontDescription, PangoLayout
 from ..rendering.rendertypes import (
     Alignment,
     CairoColor,
@@ -34,7 +34,7 @@ class Label:
         *,
         pango: Pango,
         text: str,
-        font: str,
+        font: str | PangoFontDescription,
         location: Point,
         size: Optional[Size] = None,
         width: Optional[int] = None,
@@ -91,7 +91,7 @@ class Button:
         button_text: str,
         button_size: Size,
         corner_radius: int,
-        font: str,
+        font: str | PangoFontDescription,
         screen_location: Point,
         state=ButtonState.NORMAL,
         button_value: Optional[Any] = None,
@@ -227,7 +227,7 @@ class Button:
 
 class ButtonSpec(TypedDict):
     button_text: str
-    font: NotRequired[str]
+    font: NotRequired[str | PangoFontDescription]
     button_value: NotRequired[Any]
     draw_callback: NotRequired[DrawCallback]
     hotkey: NotRequired[Key]
@@ -241,7 +241,7 @@ def make_button_row(
     button_y: int | float,
     row_width: int | float,
     pango: Pango,
-    default_font: Optional[str] = None,
+    default_font: Optional[str | PangoFontDescription] = None,
     align_baseline: bool = False,
 ) -> list[Button]:
     # big space between groups, small space between items within groups. maybe divide up the screen width by the number of groups?
@@ -405,7 +405,7 @@ def make_button_stack(
     corner_radius: int,
     screen_area: Rect,
     pango: Pango,
-    default_font: Optional[str] = None,
+    default_font: Optional[str | PangoFontDescription] = None,
     align_baseline: bool = False,
 ) -> list[Button]:
     # col_buffer = button_size.width * 2 / 3
