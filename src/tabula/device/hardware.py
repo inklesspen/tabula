@@ -3,12 +3,11 @@ from __future__ import annotations
 import abc
 import typing
 
-import tricycle
 import trio
 
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from .gestures import make_tapstream
-from .hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyEvent, SetLed, TabulaEvent, TapEvent, TouchReport
+from .hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, SetLed, TabulaEvent, TapEvent
 from .keyboard_consts import Led
 from .keystreams import make_keystream
 from .kobo_models import detect_model
@@ -213,54 +212,3 @@ class KoboHardware(Hardware):
         async with self.event_receive_channel:
             async for evt in self.event_receive_channel:
                 print(evt)
-
-
-class EventTestHardware(Hardware):
-    def __init__(
-        self,
-        event_channel: trio.abc.SendChannel,
-        settings: Settings,
-        incoming_event_channel: trio.abc.ReceiveChannel,
-    ):
-        super().__init__(settings)
-        self.event_channel = event_channel
-        self.incoming_event_channel = incoming_event_channel
-        self.capslock_led = False
-        self.compose_led = False
-
-    def get_screen_info(self) -> ScreenInfo:
-        return ScreenInfo(width=100, height=100, dpi=100)
-
-    def display_pixels(self, imagebytes: bytes, rect: Rect):
-        pass
-
-    def clear_screen(self):
-        pass
-
-    def set_led_state(self, state: SetLed):
-        match state.led:
-            case Led.LED_CAPSL:
-                self.capslock_led = state.state
-            case Led.LED_COMPOSE:
-                self.compose_led = state.state
-
-    async def _handle_events(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        async with self.incoming_event_channel:
-            task_status.started()
-            async for event in self.incoming_event_channel:
-                match event:
-                    case KeyEvent():
-                        if self.keystream_send_channel is not None:
-                            await self.keystream_send_channel.send(event)
-                    case TouchReport():
-                        if self.touchstream_send_channel is not None:
-                            await self.touchstream_send_channel.send(event)
-                    case _:
-                        raise NotImplementedError(f"Don't know how to handle {type(event)}.")
-
-    async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        async with tricycle.open_service_nursery() as nursery:
-            task_status.started()
-            nursery.start_soon(self._handle_events)
-            nursery.start_soon(self._handle_keystream)
-            nursery.start_soon(self._handle_touchstream)
