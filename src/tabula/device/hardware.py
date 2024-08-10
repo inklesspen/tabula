@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import abc
+import contextlib
 import typing
 
 import trio
 
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from .gestures import make_tapstream
-from .hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, SetLed, TabulaEvent, TapEvent
+from .hwtypes import AnnotatedKeyEvent, BluetoothVariant, DisplayUpdateMode, SetLed, TabulaEvent, TapEvent
 from .keyboard_consts import Led
 from .keystreams import make_keystream
 from .kobo_models import detect_model
 
 if typing.TYPE_CHECKING:
-    import contextlib
-
     from ..rendering.rendertypes import Rendered
     from ..settings import Settings
 
@@ -152,6 +151,17 @@ class KoboHardware(Hardware):
         self.keyboard = None
         self.touchscreen = None
         super().__init__(settings)
+
+        if self.settings.enable_bluetooth and self.model.bluetooth_variant is not BluetoothVariant.NONE:
+            match self.model.bluetooth_variant:
+                case BluetoothVariant.CLARA2E:
+                    from .bluetooth.clara2e import bluetooth
+
+                    self.bluetooth_cm = bluetooth
+                case _:
+                    raise NotImplementedError()
+        else:
+            self.bluetooth_cm = contextlib.nullcontext
         from .fbink_screen_display import FbInk
 
         self.fbink = FbInk()
@@ -199,7 +209,7 @@ class KoboHardware(Hardware):
         from .kobo_touchscreen import Touchscreen
 
         with self.fbink:
-            async with trio.open_nursery() as nursery:
+            async with self.bluetooth_cm(), trio.open_nursery() as nursery:
                 task_status.started()
                 self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.keystream_send_channel)
                 nursery.start_soon(self._handle_keystream)

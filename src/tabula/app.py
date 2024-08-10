@@ -10,10 +10,8 @@ import trio
 import trio_util
 
 from .db import make_db
-from .device.bluetooth.bluez import BluezContext
-from .device.bluetooth.clara2e import hciattach, kmods
 from .device.hardware import Hardware, KoboHardware
-from .device.hwtypes import AnnotatedKeyEvent, KeyboardDisconnect, TabulaEvent, TapEvent
+from .device.hwtypes import AnnotatedKeyEvent, BluetoothInitError, KeyboardDisconnect, TabulaEvent, TapEvent
 from .editor.document import DocumentModel
 from .rendering.fontconfig import setup_fontconfig
 from .screens import DIALOGS, SCREENS
@@ -197,17 +195,11 @@ class Tabula:
 async def start_tabula(settings_path: pathlib.Path):
     settings = Settings.load(settings_path)
     hardware = KoboHardware(settings)
-    # this isn't the proper location but we'll try it like this anyway.
-    async with kmods(), BluezContext() as bluezcontext:
-        _hci = await bluezcontext.nursery.start(hciattach, bluezcontext.nursery)
-        try:
-            with trio.fail_after(5):
-                await bluezcontext.ensure_adapter_powered_on()
-        except trio.TooSlowError:
-            hardware.fbink.emergency_print("Unable to activate Bluetooth; giving up.")
-        else:
-            app = Tabula(hardware, settings)
-            await app.run()
+    app = Tabula(hardware, settings)
+    try:
+        await app.run()
+    except BluetoothInitError:
+        hardware.fbink.emergency_print("Unable to activate Bluetooth; giving up.")
 
 
 parser = argparse.ArgumentParser(prog="tabula")
