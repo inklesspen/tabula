@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import abc
 import contextlib
 import typing
 
@@ -18,7 +17,7 @@ if typing.TYPE_CHECKING:
     from ..settings import Settings
 
 
-class Hardware(metaclass=abc.ABCMeta):
+class Hardware:
     screen_size: Size
     touch_coordinate_transform: TouchCoordinateTransform
     capslock_led: bool
@@ -30,6 +29,11 @@ class Hardware(metaclass=abc.ABCMeta):
         self,
         settings: Settings,
     ):
+        from .fbink_screen_display import FbInk  # can't import this if fbink library doesn't exist, so it has to be here
+
+        self.model = detect_model()
+        self.keyboard = None
+        self.touchscreen = None
         self.event_channel, self.event_receive_channel = trio.open_memory_channel(0)
         self.settings = settings
         self.capslock_led = False
@@ -45,29 +49,49 @@ class Hardware(metaclass=abc.ABCMeta):
         self.touchstream_send_channel = None
         self.reset_touchstream()
 
-    @abc.abstractmethod
-    def get_screen_info(self) -> ScreenInfo: ...
+        if self.settings.enable_bluetooth and self.model.bluetooth_variant is not BluetoothVariant.NONE:
+            match self.model.bluetooth_variant:
+                case BluetoothVariant.CLARA2E:
+                    from .bluetooth.clara2e import bluetooth
 
-    @abc.abstractmethod
-    def set_rotation(self, sr: ScreenRotation): ...
+                    self.bluetooth_cm = bluetooth
+                case _:
+                    raise NotImplementedError()
+        else:
+            self.bluetooth_cm = contextlib.nullcontext
 
-    @abc.abstractmethod
-    def display_pixels(self, imagebytes: bytes, rect: Rect): ...
+        self.fbink = FbInk()
 
-    def display_rendered(self, rendered: "Rendered"):
+    def get_screen_info(self) -> ScreenInfo:
+        info = self.fbink.get_screen_info()
+        self.screen_size = info.size
+        self.touch_coordinate_transform = info.touch_coordinate_transform
+        return info
+
+    def set_rotation(self, sr: ScreenRotation):
+        self.fbink.set_rotation(sr)
+        self.get_screen_info()  # refresh screen_size and touch_coordinate_transform
+
+    def display_pixels(self, imagebytes: bytes, rect: Rect):
+        if self.fbink.active:
+            self.fbink.display_pixels(imagebytes, rect)
+
+    def display_rendered(self, rendered: Rendered):
         self.display_pixels(rendered.image, rendered.extent)
 
-    @abc.abstractmethod
-    def set_display_update_mode(self, mode: DisplayUpdateMode): ...
+    def set_display_update_mode(self, mode: DisplayUpdateMode):
+        self.fbink.set_display_update_mode(mode)
 
-    @abc.abstractmethod
-    def display_update_mode(self, mode: DisplayUpdateMode) -> contextlib.AbstractContextManager[None]: ...
+    def display_update_mode(self, mode: DisplayUpdateMode):
+        return self.fbink.display_update_mode(mode)
 
-    @abc.abstractmethod
-    def clear_screen(self): ...
+    def clear_screen(self):
+        if self.fbink.active:
+            self.fbink.clear()
 
-    @abc.abstractmethod
-    def set_led_state(self, state: SetLed): ...
+    def set_led_state(self, state: SetLed):
+        if self.keyboard is not None:
+            self.keyboard.set_led(state.led, state.state)
 
     async def _handle_keystream(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
@@ -124,6 +148,8 @@ class Hardware(metaclass=abc.ABCMeta):
         if old_send_channel is not None:
             old_send_channel.close()
         self.keystream_cancel_scope.cancel()
+        if self.keyboard is not None:
+            self.keyboard.keyboard_send_channel = self.keystream_send_channel
 
     def reset_touchstream(self):
         # we would reset it when changing screens, for instance
@@ -137,72 +163,11 @@ class Hardware(metaclass=abc.ABCMeta):
         if old_send_channel is not None:
             old_send_channel.close()
         self.touchstream_cancel_scope.cancel()
+        if self.touchscreen is not None:
+            self.touchscreen.channel = self.touchstream_send_channel
 
     def _transform_tap_event(self, event: TapEvent):
         return event.apply_transform(self.touch_coordinate_transform, self.screen_size)
-
-
-class KoboHardware(Hardware):
-    def __init__(
-        self,
-        settings: Settings,
-    ):
-        self.model = detect_model()
-        self.keyboard = None
-        self.touchscreen = None
-        super().__init__(settings)
-
-        if self.settings.enable_bluetooth and self.model.bluetooth_variant is not BluetoothVariant.NONE:
-            match self.model.bluetooth_variant:
-                case BluetoothVariant.CLARA2E:
-                    from .bluetooth.clara2e import bluetooth
-
-                    self.bluetooth_cm = bluetooth
-                case _:
-                    raise NotImplementedError()
-        else:
-            self.bluetooth_cm = contextlib.nullcontext
-        from .fbink_screen_display import FbInk
-
-        self.fbink = FbInk()
-
-    def get_screen_info(self) -> ScreenInfo:
-        info = self.fbink.get_screen_info()
-        self.screen_size = info.size
-        self.touch_coordinate_transform = info.touch_coordinate_transform
-        return info
-
-    def set_rotation(self, sr: ScreenRotation):
-        self.fbink.set_rotation(sr)
-        self.get_screen_info()  # refresh screen_size and touch_coordinate_transform
-
-    def display_pixels(self, imagebytes: bytes, rect: Rect):
-        if self.fbink.active:
-            self.fbink.display_pixels(imagebytes, rect)
-
-    def clear_screen(self):
-        if self.fbink.active:
-            self.fbink.clear()
-
-    def set_led_state(self, state: SetLed):
-        if self.keyboard is not None:
-            self.keyboard.set_led(state.led, state.state)
-
-    def set_display_update_mode(self, mode: DisplayUpdateMode):
-        self.fbink.set_display_update_mode(mode)
-
-    def display_update_mode(self, mode: DisplayUpdateMode):
-        return self.fbink.display_update_mode(mode)
-
-    def reset_keystream(self):
-        super().reset_keystream()
-        if self.keyboard is not None:
-            self.keyboard.keyboard_send_channel = self.keystream_send_channel
-
-    def reset_touchstream(self):
-        super().reset_touchstream()
-        if self.touchscreen is not None:
-            self.touchscreen.channel = self.touchstream_send_channel
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         from .kobo_keyboard import LibevdevKeyboard

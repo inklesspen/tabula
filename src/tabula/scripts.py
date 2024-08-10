@@ -4,7 +4,7 @@ import pprint
 
 import trio
 
-from .device.hardware import KoboHardware
+from .device.hardware import Hardware
 from .rendering.fontconfig import setup_fontconfig
 from .rendering.pango import Pango
 from .settings import Settings
@@ -42,7 +42,7 @@ def print_kobo_events():
 
     async def runner():
         async with trio.open_nursery() as nursery:
-            hardware = KoboHardware(settings=settings)
+            hardware = Hardware(settings=settings)
             await nursery.start(hardware.run)
             print(hardware.get_screen_info())
             await hardware.print_events()

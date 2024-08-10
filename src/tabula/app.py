@@ -10,7 +10,7 @@ import trio
 import trio_util
 
 from .db import make_db
-from .device.hardware import Hardware, KoboHardware
+from .device.hardware import Hardware
 from .device.hwtypes import AnnotatedKeyEvent, BluetoothInitError, KeyboardDisconnect, TabulaEvent, TapEvent
 from .editor.document import DocumentModel
 from .rendering.fontconfig import setup_fontconfig
@@ -194,7 +194,7 @@ class Tabula:
 
 async def start_tabula(settings_path: pathlib.Path):
     settings = Settings.load(settings_path)
-    hardware = KoboHardware(settings)
+    hardware = Hardware(settings)
     app = Tabula(hardware, settings)
     try:
         await app.run()
