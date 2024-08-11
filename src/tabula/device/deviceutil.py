@@ -3,7 +3,6 @@ import contextlib
 import fcntl
 import os
 import pathlib
-from contextlib import contextmanager
 
 import libevdev
 
@@ -71,15 +70,6 @@ class EventDevice(contextlib.AbstractContextManager):
         self._d = None
         self._f = None
         return False  # to reraise exceptions if needed
-
-
-@contextmanager
-def open_device(devpath):
-    with open(devpath, "r+b", buffering=0) as f:
-        fcntl.fcntl(f, fcntl.F_SETFL, os.O_NONBLOCK)
-        d = libevdev.Device(f)
-        d.grab()
-        yield d
 
 
 if __name__ == "__main__":

@@ -8,8 +8,8 @@ import pathlib
 import libevdev
 import trio
 
-from .deviceutil import EventDevice, open_device
-from .eventsource import EventType
+from .deviceutil import EventDevice
+from .eventsource import EventType, KeyCode
 from .hwtypes import KeyboardDisconnect, KeyEvent, KeyPress, SetLed
 
 # Evdev keyboard class should represent the concept of an evdev keyboard, not a specific
@@ -40,13 +40,14 @@ def identify_inputs() -> list[pathlib.Path]:
             continue
         # check if inputpath can actually produce keyboard events
         try:
-            with open_device(inputpath) as d:
-                if not d.has(libevdev.EV_KEY.KEY_Q):
+            with EventDevice(inputpath) as d:
+                if not d.has_code(EventType.EV_KEY, KeyCode.KEY_Q):
                     continue
             found.append(inputpath)
         except OSError as exc:
             if exc.errno == errno.ENODEV:
                 # device went away while we were trying to open it. ignore.
+                logger.debug("Device went away while trying to check it", exc_info=True)
                 continue
             raise
         except libevdev.device.DeviceGrabError:
