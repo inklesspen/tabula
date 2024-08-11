@@ -788,16 +788,21 @@ class Event(msgspec.Struct, frozen=True, array_like=True, kw_only=True):
 class EventSource(typing.Protocol):
     def __enter__(self) -> typing.Self: ...
     def events(self) -> collections.abc.Iterator[Event]: ...
+    def has_code(self, type: EventType, code: EventCode) -> bool: ...
 
 
 class SimpleEventSource(contextlib.AbstractContextManager):
     def __init__(self, events: list[Event]):
         self._events = events
+        self._known_codes = {(evt.type, evt.code) for evt in events}
 
     def events(self):
         while self._events:
             evt = self._events.pop(0)
             yield evt
+
+    def has_code(self, type: EventType, code: EventCode):
+        return (type, code) in self._known_codes
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
         return None

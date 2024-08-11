@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import libevdev
 
 from ..commontypes import NotInContextError
-from .eventsource import Event
+from .eventsource import Event, EventCode, EventType
 
 
 class EventDevice(contextlib.AbstractContextManager):
@@ -59,6 +59,12 @@ class EventDevice(contextlib.AbstractContextManager):
                     resyncing = True
                 else:
                     yield Event.from_libevdev_event(evt)
+
+    def has_code(self, type: EventType, code: EventCode):
+        if self._d is None:
+            raise NotInContextError()
+
+        return self._d._libevdev.has_event(type.value, code.value)
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
         self._f.close()
