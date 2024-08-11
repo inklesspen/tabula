@@ -111,7 +111,14 @@ class LibevdevKeyboard:
         if old_inputs != current_inputs:
             self.present_devices = current_inputs
 
+    def cancel_listeners(self, except_for: int | None = None):
+        for device_id, listener in self.device_listeners.items():
+            if device_id == except_for:
+                continue
+            listener.cancelscope.cancel()
+
     async def wait_for_keys(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        # This doesn't currently handle the state where a new keyboard is connected while we're already in the stage1 loop.
         task_status.started()
         # stage 1: real keyboard unidentified, check if any of them are sending keys
         active_device_id = None
@@ -121,15 +128,16 @@ class LibevdevKeyboard:
                     event = listener.device_recv_channel.receive_nowait()
                 except trio.WouldBlock:
                     continue
+                except trio.EndOfChannel:
+                    # the device has gone away, which means available devices have changed.
+                    self.cancel_listeners()
+                    return
                 active_device_id = device_id
                 await self.keyboard_send_channel.send(event)
             if active_device_id is None:
                 await trio.sleep(0.1)
         # now we have a device, so kill everything that's not it
-        for device_id, listener in self.device_listeners.items():
-            if device_id == active_device_id:
-                continue
-            listener.cancelscope.cancel()
+        self.cancel_listeners(except_for=active_device_id)
         # stage 2: copy keys from selected device into output
         self.active_listener = self.device_listeners[active_device_id]
         async for event in self.active_listener.device_recv_channel:
