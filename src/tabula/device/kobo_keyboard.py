@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import itertools
 import logging
 import pathlib
@@ -43,6 +44,11 @@ def identify_inputs() -> list[pathlib.Path]:
                 if not d.has(libevdev.EV_KEY.KEY_Q):
                     continue
             found.append(inputpath)
+        except OSError as exc:
+            if exc.errno == errno.ENODEV:
+                # device went away while we were trying to open it. ignore.
+                continue
+            raise
         except libevdev.device.DeviceGrabError:
             continue
     return found
@@ -77,7 +83,7 @@ class DeviceListener:
                             await self._device_send_channel.send(ke)
                     await trio.sleep(1 / 60)
                 except OSError as exc:
-                    if exc.errno == 19:
+                    if exc.errno == errno.ENODEV:
                         # device has gone away
                         self._device_send_channel.close()
                         return
