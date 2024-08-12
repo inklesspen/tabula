@@ -13,14 +13,14 @@ dependencies = [
 dynamic = ["version", "description"]
 license = {file = "LICENSE"}
 name = "cocoatabula"
-requires-python = '>=3.11'
+requires-python = '>=3.12'
 
 [project.scripts]
 cocoa-tabula = "cocoatabula.triococoa:start"
 
 [tool.black]
 line-length = 140
-target-version = ['py311']
+target-version = ['py312']
 
 [tool.flake8]
 exclude = [".tox", ".eggs", "ci/templates", "build", "dist"]

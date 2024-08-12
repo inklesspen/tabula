@@ -43,13 +43,12 @@ dependencies = [
   'jeepney',
   'outcome',
   'libevdev',
-  'importlib-resources==5.12.0',
 ]
 description = 'cool as hecc'
 dynamic = ['version']
 name = 'tabula'
 readme = 'README.md'
-requires-python = '>=3.11'
+requires-python = '>=3.12'
 
 [project.optional-dependencies]
 # consider using https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
@@ -64,7 +63,7 @@ tabula = "tabula.app:main"
 [tool.ruff]
 extend-exclude = []
 line-length = 140
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.

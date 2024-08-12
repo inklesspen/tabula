@@ -29,7 +29,7 @@ WELL_KNOWN_NAME_P = re.compile(r"([A-Za-z_-][A-Za-z0-9_-]*(\.[A-Za-z_-][A-Za-z0-
 UniqueName = typing.NewType("UniqueName", str)
 WellKnownName = typing.NewType("WellKnownName", str)
 
-BusName: typing.TypeAlias = UniqueName | WellKnownName
+type BusName = UniqueName | WellKnownName
 ObjectPath = typing.NewType("ObjectPath", str)
 InterfaceName = typing.NewType("InterfaceName", str)
 
@@ -90,6 +90,7 @@ class NameAwareMatchRule(MatchRule):
             eavesdrop=eavesdrop,
         )
 
+    @typing.override
     def serialise(self) -> str:
         raise NotImplementedError("Never serialise a NameAwareMatchRule")
 

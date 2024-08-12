@@ -38,9 +38,6 @@ def _nameprefix(*names: str):
     return first
 
 
-E = typing.TypeVar("E", bound=type[enum.IntEnum], covariant=True)
-
-
 def check_c_enum(ffi: FFIType, enum_t: str, strip_prefix: str | None = None, allow_omitting_c_members: bool = False, **extras: int):
     """Checks an IntEnum for consistency with a C enum.
 
@@ -74,7 +71,7 @@ def check_c_enum(ffi: FFIType, enum_t: str, strip_prefix: str | None = None, all
     values: dict[str, int] = {k.removeprefix(strip_prefix): v for v, k in sorted(ctype.elements.items())}
     values.update(extras)
 
-    def checker(cls: E):
+    def checker[E: type[enum.IntEnum]](cls: E):
         for name, value in cls.__members__.items():
             if name not in values:
                 raise KeyError(name)
@@ -107,10 +104,7 @@ def invoke(c: typing.Callable, **provided_kwargs):
     return c(**used_kwargs)
 
 
-V = typing.TypeVar("V")
-
-
-def set_into(list: list[typing.Optional[V]], index: int, item: V):
+def set_into[V](list: list[typing.Optional[V]], index: int, item: V):
     while index >= len(list):
         list.append(None)
     list[index] = item
@@ -124,13 +118,13 @@ def now():
     return datetime.datetime.now(tzlocal())
 
 
-def removing(tup: tuple[V], item: V):
+def removing[V](tup: tuple[V], item: V):
     temp = list(tup)
     temp.remove(item)
     return tuple(temp)
 
 
-def replacing_last(tup: tuple[V], item: V):
+def replacing_last[V](tup: tuple[V], item: V):
     temp = list(tup)
     temp[-1] = item
     return tuple(temp)
@@ -195,14 +189,11 @@ def humanized_delta(delta: datetime.timedelta, allow_future: bool = False):
     return relative_template.format("a good long while")
 
 
-V = typing.TypeVar("V")
-
-
 class AlreadyFinalizedError(Exception):
     pass
 
 
-class Future(typing.Generic[V]):
+class Future[V]:
     _outcome: typing.Optional[outcome.Outcome]
 
     def __init__(self):

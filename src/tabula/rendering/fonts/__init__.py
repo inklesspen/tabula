@@ -1,5 +1,5 @@
-import importlib_resources
+import importlib.resources
 
-FILES = importlib_resources.files(__name__)
+FILES = importlib.resources.files(__name__)
 
 SERIF = "Literata"
