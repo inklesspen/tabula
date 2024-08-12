@@ -14,23 +14,23 @@ parser.add_argument("--csrc", type=pathlib.Path, required=True)
 parser.add_argument("--output", type=argparse.FileType("w", encoding="utf-8"), required=True)
 
 
-def make_ffi(modulename: str, cdef: pathlib.Path, csrc: pathlib.Path):
+def make_ffi(modulename: str, cdef: str, csrc: str):
     ffibuilder = FFI()
-    ffibuilder.cdef(cdef.read_text())
-    ffibuilder.set_source(modulename, csrc.read_text())
+    ffibuilder.cdef(cdef)
+    ffibuilder.set_source(modulename, csrc)
     return ffibuilder
 
 
 def main():
     args = parser.parse_args()
-    ffi = make_ffi(args.modulename, args.cdef, args.csrc)
+    csrc = args.csrc.read_text()
+    ffi = make_ffi(args.modulename, args.cdef.read_text(), csrc)
     # TODO: improve this; https://github.com/python-cffi/cffi/issues/47
-    module_name, source, source_extension, kwds = ffi._assigned_source
-    recompiler = Recompiler(ffi, module_name)
+    recompiler = Recompiler(ffi, args.modulename)
     recompiler.collect_type_table()
     recompiler.collect_step_tables()
     with args.output as f:
-        recompiler.write_source_to_f(f, source)
+        recompiler.write_source_to_f(f, csrc)
 
 
 if __name__ == "__main__":
