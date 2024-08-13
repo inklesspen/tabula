@@ -220,7 +220,6 @@ def main(argv=sys.argv):
     from .rendering import cairo  # noqa: F401
 
     logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger("markdown_it").setLevel(logging.ERROR)
     parsed = parser.parse_args(argv[1:])
     trio.run(start_tabula, parsed.settings)
     return 0

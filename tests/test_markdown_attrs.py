@@ -1,11 +1,11 @@
 import pytest
 from tabula.rendering._cairopango import ffi, lib  # type: ignore
-from tabula.rendering.markup import CURSOR
 
 OPEN_ATTR_END = 4294967295
 PARKED_CURSOR_ALPHA = "0 0 foreground-alpha 32767"
 PARKED_COMPOSE_UNDERLINE = "0 0 underline single"
 PARKED_ATTRS = [PARKED_COMPOSE_UNDERLINE, PARKED_CURSOR_ALPHA]
+MARKUP_CURSOR = '<span alpha="50%">_</span>'
 
 
 def split_attr_string(attrstring):
@@ -168,7 +168,7 @@ def test_backspace_to_reopen():
 def test_cursor():
     test_string = "You should be writing."
 
-    markup_string = test_string + CURSOR
+    markup_string = test_string + MARKUP_CURSOR
     fontmap = lib.pango_cairo_font_map_get_default()
     context = ffi.gc(lib.pango_font_map_create_context(fontmap), lib.g_object_unref)
     layout = ffi.gc(lib.pango_layout_new(context), lib.g_object_unref)

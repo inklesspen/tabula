@@ -81,7 +81,7 @@ class DocumentModel:
 
     @staticmethod
     def _wordcount_paras(paras: Sequence[Paragraph]):
-        return wordcount.count_plain_text(wordcount.make_plain_text("\n\n".join([p.markdown for p in paras])))
+        return sum(wordcount.count_plain_text(p.markdown) for p in paras if not p.is_comment())
 
     @property
     def wordcount(self):

@@ -31,7 +31,6 @@ dependencies = [
   'attrs',
   'cffi',
   'pygtrie',
-  'markdown-it-py',
   'python-dateutil',
   'timeflake',
   'trio',

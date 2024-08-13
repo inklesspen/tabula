@@ -58,5 +58,9 @@ class Paragraph(msgspec.Struct, kw_only=True):
             raise AttributeError(f"The field {name!r} cannot be modified.")
         return super().__setattr__(name, value)
 
+    def is_comment(self):
+        # a paragraph is comment material (and therefore doesn't contribute to wordcount) if the first character is a #
+        return bool(self.markdown and self.markdown[0] == "#")
+
     def to_db_dict(self):
         return msgspec.structs.asdict(self)
