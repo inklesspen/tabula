@@ -4,7 +4,7 @@
 
 [build-system]
 build-backend = 'mesonpy'
-requires = ['meson-python', 'cffi']
+requires = ['meson-python', 'cffi', 'cffi-buildtool']
 
 [project]
 authors = [

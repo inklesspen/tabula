@@ -11,15 +11,16 @@ py = import('python').find_installation(pure: false)
 # TODO: exclude some directories based on platform
 install_subdir('src/tabula', install_dir: py.get_install_dir())
 
-meson_cffi_buildtool = find_program('meson_cffi_buildtool.py')
+gen_cffi_src = find_program('gen-cffi-src')
 
 cairopango_c = custom_target(
     command: [
-        meson_cffi_buildtool,
-        '--modulename', 'tabula.rendering._cairopango',
-        '--cdef', '@INPUT0@',
-        '--csrc', '@INPUT1@',
-        '--output', '@OUTPUT@',
+        gen_cffi_src,
+        'read-sources',
+        'tabula.rendering._cairopango',
+        '@INPUT0@',
+        '@INPUT1@',
+        '@OUTPUT@',
     ],
     output: '_cairopango.c',
     input: [
@@ -46,11 +47,12 @@ fbink = dependency('fbink', required: host_machine.system() == 'linux')
 if fbink.found()
     fbink_c = custom_target(
         command: [
-            meson_cffi_buildtool,
-            '--modulename', 'tabula.device._fbink',
-            '--cdef', '@INPUT0@',
-            '--csrc', '@INPUT1@',
-            '--output', '@OUTPUT@',
+            gen_cffi_src,
+            'read-sources',
+            'tabula.device._fbink',
+            '@INPUT0@',
+            '@INPUT1@',
+            '@OUTPUT@',
         ],
         output: '_fbink.c',
         input: [
