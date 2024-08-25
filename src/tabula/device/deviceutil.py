@@ -7,7 +7,7 @@ import pathlib
 import libevdev
 
 from ..commontypes import NotInContextError
-from .eventsource import Event, EventCode, EventType
+from .eventsource import Event, EventCode, EventType, LedCode
 
 
 class EventDevice(contextlib.AbstractContextManager):
@@ -64,6 +64,9 @@ class EventDevice(contextlib.AbstractContextManager):
             raise NotInContextError()
 
         return self._d._libevdev.has_event(type.value, code.value)
+
+    def set_led(self, led: LedCode, state: bool):
+        self._d.set_leds([(libevdev.evbit(EventType.EV_LED.value, led.value), 1 if state else 0)])
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
         self._f.close()

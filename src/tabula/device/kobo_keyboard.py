@@ -65,11 +65,7 @@ class DeviceListener:
         self._device_send_channel, self.device_recv_channel = trio.open_memory_channel[KeyEvent](0)
 
     def set_led_state(self, state: SetLed):
-        # https://python-libevdev.readthedocs.io/en/latest/libevdev.html#libevdev.device.Device.set_leds
-        # We'll have to use the actual enums from libevdev, not our own.
-        # libevdev.evbit('EV_LED', led)
-        # libevdev.evbit('EV_LED', Led.LED_CAPSL)
-        logger.info("Would set %r to %r", state.led, state.state)
+        self.device.set_led(state.led, state.state)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         with self.cancelscope, self.device:
