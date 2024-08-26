@@ -4,10 +4,12 @@ import fcntl
 import os
 import pathlib
 
-import libevdev
-
 from ..commontypes import NotInContextError
 from .eventsource import Event, EventCode, EventType, LedCode
+
+
+class DeviceGrabError(Exception):
+    pass
 
 
 class EventDevice(contextlib.AbstractContextManager):
@@ -21,14 +23,30 @@ class EventDevice(contextlib.AbstractContextManager):
         self._f = None
         self._d = None
 
-    def __enter__(self):
+    def grab(self):
+        import libevdev
+
         self._f = self.device_path.open("r+b", buffering=0)
         fcntl.fcntl(self._f, fcntl.F_SETFL, os.O_NONBLOCK)
         self._d = libevdev.Device(self._f)
-        self._d.grab()
+        try:
+            self._d.grab()
+        except libevdev.device.DeviceGrabError as exc:
+            raise DeviceGrabError from exc
+
+    def ungrab(self):
+        # could call self._d.ungrab(). but simply closing self._f is sufficient.
+        self._f.close()
+        self._d = None
+        self._f = None
+
+    def __enter__(self):
+        self.grab()
         return self
 
     def events(self) -> collections.abc.Iterator[Event]:
+        import libevdev
+
         if self._d is None:
             raise NotInContextError()
 
@@ -66,17 +84,19 @@ class EventDevice(contextlib.AbstractContextManager):
         return self._d._libevdev.has_event(type.value, code.value)
 
     def set_led(self, led: LedCode, state: bool):
+        import libevdev
+
         self._d.set_leds([(libevdev.evbit(EventType.EV_LED.value, led.value), 1 if state else 0)])
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
-        self._f.close()
-        self._d = None
-        self._f = None
+        self.ungrab()
         return False  # to reraise exceptions if needed
 
 
 if __name__ == "__main__":
     import argparse
+
+    import libevdev
 
     parser = argparse.ArgumentParser()
     parser.add_argument("device", type=pathlib.Path)

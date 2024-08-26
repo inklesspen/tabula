@@ -12,11 +12,12 @@ logger = logging.getLogger(__name__)
 class KoboModelMixin:
     bluetooth_variant: BluetoothVariant
     multitouch_variant: MultitouchVariant
+    min_keyboard_input: int
 
 
 class KoboModel(KoboModelMixin, enum.Enum):
-    CLARA_HD = BluetoothVariant.NONE, MultitouchVariant.SNOW_PROTOCOL
-    CLARA_2E = BluetoothVariant.CLARA2E, MultitouchVariant.TYPE_B
+    CLARA_HD = BluetoothVariant.NONE, MultitouchVariant.SNOW_PROTOCOL, 2
+    CLARA_2E = BluetoothVariant.CLARA2E, MultitouchVariant.TYPE_B, 3
 
 
 CODENAMES = {"nova": KoboModel.CLARA_HD, "goldfinch": KoboModel.CLARA_2E}

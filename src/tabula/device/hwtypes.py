@@ -182,3 +182,14 @@ class DisplayUpdateMode(enum.Enum):
     AUTO = "auto"
     RAPID = "rapid"
     FIDELITY = "fidelity"
+
+
+@enum.unique
+class DeviceBus(enum.Enum):
+    USB = "usb"
+    BLUETOOTH = "bluetooth"
+
+
+class InputDeviceDetails(typing.Protocol):
+    name: str
+    bus: DeviceBus

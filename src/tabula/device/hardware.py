@@ -8,7 +8,7 @@ import trio
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from .eventsource import LedCode
 from .gestures import make_tapstream
-from .hwtypes import AnnotatedKeyEvent, BluetoothVariant, DisplayUpdateMode, SetLed, TabulaEvent, TapEvent
+from .hwtypes import BluetoothVariant, DisplayUpdateMode, KeyEvent, SetLed, TabulaEvent, TapEvent
 from .keystreams import make_keystream
 from .kobo_models import detect_model
 
@@ -132,14 +132,14 @@ class Hardware:
         (
             new_keystream_send_channel,
             new_keystream_receive_channel,
-        ) = trio.open_memory_channel[AnnotatedKeyEvent](0)
+        ) = trio.open_memory_channel[KeyEvent](0)
         self.keystream = make_keystream(new_keystream_receive_channel, self.settings)
         self.keystream_send_channel = new_keystream_send_channel
         if old_send_channel is not None:
             old_send_channel.close()
         self.keystream_cancel_scope.cancel()
         if self.keyboard is not None:
-            self.keyboard.keyboard_send_channel = self.keystream_send_channel
+            self.keyboard.set_keyboard_send_channel(self.keystream_send_channel)
 
     def reset_touchstream(self):
         # we would reset it when changing screens, for instance
@@ -166,9 +166,9 @@ class Hardware:
         with self.fbink:
             async with self.bluetooth_cm(), trio.open_nursery() as nursery:
                 task_status.started()
-                self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.keystream_send_channel)
+                self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.keystream_send_channel, self.model.min_keyboard_input)
                 nursery.start_soon(self._handle_keystream)
-                nursery.start_soon(self.keyboard.run, nursery)
+                nursery.start_soon(self.keyboard.run)
                 touchscreen = Touchscreen(self.model.multitouch_variant, self.touchstream_send_channel)
                 nursery.start_soon(self._handle_touchstream)
                 nursery.start_soon(touchscreen.run)
