@@ -1,6 +1,7 @@
 # The only way we can do this AT ALL is with some fairly extensive mocking/fakes. But it's worth doing.
 from __future__ import annotations
 
+import collections
 import contextlib
 import copy
 import datetime
@@ -18,7 +19,6 @@ from tabula.device.eventsource import Event, EventType, KeyCode
 from tabula.device.hwtypes import DeviceBus, KeyboardDisconnect
 
 if TYPE_CHECKING:
-    import collections.abc
     from typing import ClassVar
 
 
@@ -47,7 +47,7 @@ class IdentifyInputsMocker:
     def __init__(self):
         self.current = ()
 
-    def identify_inputs(self, min_input: int):
+    def identify_inputs(self, min_input: int, known_good: tuple[pathlib.Path, ...]):
         return self.current
 
 
@@ -55,12 +55,18 @@ class FakeEventDevice(contextlib.AbstractContextManager):
     devices: ClassVar[AsyncValue[dict[pathlib.Path, FakeEventDevice]]] = AsyncValue({})
     grabbed: AsyncBool
 
-    def __init__(self, device_path: pathlib.Path):
+    def __new__(cls, device_path: pathlib.Path):
+        if device_path not in cls.devices.value:
+            dev = super().__new__(cls)
+            dev.setup(device_path)
+            new_devices = copy.copy(cls.devices.value)
+            new_devices[device_path] = dev
+            cls.devices.value = new_devices
+        return cls.devices.value[device_path]
+
+    def setup(self, device_path: pathlib.Path):
         self.device_path = device_path
-        new_devices = copy.copy(self.devices.value)
-        new_devices[device_path] = self
-        self.devices.value = new_devices
-        self.event_send_channel, self.event_receive_channel = trio.open_memory_channel[Event](20)
+        self.eventqueue = collections.deque()
         self.grabbed = AsyncBool(False)
         self.throw_next_time = False
 
@@ -69,6 +75,8 @@ class FakeEventDevice(contextlib.AbstractContextManager):
 
     def ungrab(self):
         self.grabbed.value = False
+        self.throw_next_time = False
+        self.eventqueue.clear()
 
     def __enter__(self):
         self.grab()
@@ -78,12 +86,14 @@ class FakeEventDevice(contextlib.AbstractContextManager):
         return False
 
     def events(self) -> collections.abc.Iterator[Event]:
+        if not self.grabbed.value:
+            return
         while True:
             try:
                 if self.throw_next_time:
                     raise OSError(errno.ENODEV, "bye!")
-                yield self.event_receive_channel.receive_nowait()
-            except trio.WouldBlock:
+                yield self.eventqueue.popleft()
+            except IndexError:
                 return
 
 
@@ -101,16 +111,16 @@ async def test_device_listener(monkeypatch: pytest.MonkeyPatch, nursery: trio.Nu
     assert not fakedevice.grabbed.value
     await nursery.start(listener.run)
     await fakedevice.grabbed.wait_value(True)
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    device = None
+    device_path = None
     with trio.move_on_after(1):
-        device = await listener.device_recv_channel.receive()
-    assert device is fakedevice
+        device_path = await listener.device_recv_channel.receive()
+    assert device_path is samplepath
 
 
 async def test_maybe_keyboard_listener(monkeypatch: pytest.MonkeyPatch, nursery: trio.Nursery, autojump_clock: trio.testing.MockClock):
@@ -124,15 +134,15 @@ async def test_maybe_keyboard_listener(monkeypatch: pytest.MonkeyPatch, nursery:
     await FakeEventDevice.devices.wait_value(lambda d: samplepath in d)
     fakedevice = FakeEventDevice.devices.value[samplepath]
     await fakedevice.grabbed.wait_value(True)
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
     with trio.move_on_after(1):
-        found_details, found_device = await listener.device_recv_channel.receive()
-    assert found_device is fakedevice
+        found_details, found_device_path = await listener.device_recv_channel.receive()
+    assert found_device_path is samplepath
     assert found_details is details
 
 
@@ -160,17 +170,17 @@ async def test_scanner(monkeypatch: pytest.MonkeyPatch, nursery: trio.Nursery, a
     fakedevice = FakeEventDevice.devices.value[samplepath]
     with trio.fail_after(2):
         await fakedevice.grabbed.wait_value(True)
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
     with trio.fail_after(1):
         await found.wait_value(lambda d: d is not None)
-    found_details, found_device = found.value
+    found_details, found_device_path = found.value
     assert found_details == iim.current[0]
-    assert found_device is fakedevice
+    assert found_device_path is samplepath
 
 
 async def test_single_keyboard_discovery(monkeypatch: pytest.MonkeyPatch, nursery: trio.Nursery, autojump_clock: trio.testing.MockClock):
@@ -192,10 +202,10 @@ async def test_single_keyboard_discovery(monkeypatch: pytest.MonkeyPatch, nurser
     fakedevice = FakeEventDevice.devices.value[samplepath]
     assert keyboard.active_listener is None
     await fakedevice.grabbed.wait_value(True)
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
     with trio.fail_after(2):
@@ -221,19 +231,23 @@ async def test_single_keyboard_goes_away(monkeypatch: pytest.MonkeyPatch, nurser
     assert keyboard.scanner is not None
     await FakeEventDevice.devices.wait_value(lambda d: samplepath in d)
     fakedevice = FakeEventDevice.devices.value[samplepath]
-    await fakedevice.event_send_channel.send(
+    await fakedevice.grabbed.wait_value(True)
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice.event_send_channel.send(
+    fakedevice.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
     with trio.fail_after(2):
+        await fakedevice.grabbed.wait_value(False)
         await keyboard_receive_channel.receive()
+    await fakedevice.grabbed.wait_value(True)
     assert keyboard.active_listener is not None
     assert keyboard.active_listener.device_details.name == "Sample Keyboard"
 
     fakedevice.throw_next_time = True
     with trio.fail_after(2):
+        await fakedevice.grabbed.wait_value(False)
         recv = await disconnected_receive_channel.receive()
     assert isinstance(recv, KeyboardDisconnect)
 
@@ -262,14 +276,17 @@ async def test_single_keyboard_multiple_device_discovery(
     assert keyboard.active_listener is None
     await fakedevice_1.grabbed.wait_value(True)
     await fakedevice_2.grabbed.wait_value(True)
-    await fakedevice_1.event_send_channel.send(
+    fakedevice_1.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice_1.event_send_channel.send(
+    fakedevice_1.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
     with trio.fail_after(2):
+        await fakedevice_1.grabbed.wait_value(False)
+        await fakedevice_2.grabbed.wait_value(False)
         await keyboard_receive_channel.receive()
+        await fakedevice_1.grabbed.wait_value(True)
     assert keyboard.active_listener is not None
     assert keyboard.active_listener.device_details.name == "Sample Keyboard"
     assert fakedevice_1.grabbed.value
@@ -310,14 +327,16 @@ async def test_multiple_keyboard_discovery(monkeypatch: pytest.MonkeyPatch, nurs
     fakedevice_3 = FakeEventDevice.devices.value[samplepath_3]
     await fakedevice_3.grabbed.wait_value(True)
 
-    await fakedevice_3.event_send_channel.send(
+    fakedevice_3.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=1, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
-    await fakedevice_3.event_send_channel.send(
+    fakedevice_3.eventqueue.append(
         Event(type=EventType.EV_KEY, code=KeyCode.KEY_SPACE, value=0, timestamp=datetime.timedelta(seconds=autojump_clock.current_time()))
     )
     with trio.fail_after(2):
+        await fakedevice_3.grabbed.wait_value(False)
         await keyboard_receive_channel.receive()
+    await fakedevice_3.grabbed.wait_value(True)
     assert keyboard.active_listener is not None
     assert keyboard.active_listener.device_details.name == "Sample BT Keyboard"
     assert not fakedevice_1.grabbed.value

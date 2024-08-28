@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import errno
 import logging
 import pathlib
@@ -35,9 +34,12 @@ class EventDeviceDetails(msgspec.Struct, frozen=True, kw_only=True):
     inputpaths: list[pathlib.Path]
 
 
-def identify_inputs(min_input: int) -> tuple[EventDeviceDetails, ...]:
+def identify_inputs(min_input: int, already_grabbed: tuple[pathlib.Path, ...]) -> tuple[EventDeviceDetails, ...]:
     found = []
     for inputpath in pathlib.Path("/dev/input").glob("event*"):
+        if inputpath in already_grabbed:
+            found.append(already_grabbed)
+            continue
         eventnum = parse_eventnum(inputpath.name)
         if not eventnum >= min_input:
             continue
@@ -75,7 +77,7 @@ def identify_inputs(min_input: int) -> tuple[EventDeviceDetails, ...]:
                     inputpaths=[inputpath],
                 )
         return tuple(all_device_details.values())
-    return found
+    return ()
 
 
 class DeviceListener:
@@ -85,19 +87,17 @@ class DeviceListener:
     ):
         self.devicepath = devicepath
         self.device = EventDevice(devicepath)
-        self._device_send_channel, self.device_recv_channel = trio.open_memory_channel[EventDevice](0)
+        self._device_send_channel, self.device_recv_channel = trio.open_memory_channel[pathlib.Path](1)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.device)
+        with self.device:
             logger.debug("Getting events for %r to see if it's the user's keyboard", self.devicepath)
             task_status.started()
             while True:
                 try:
                     for evt in self.device.events():
                         if evt.type is EventType.EV_KEY:
-                            stack.pop_all()
-                            await self._device_send_channel.send(self.device)
+                            await self._device_send_channel.send(self.devicepath)
                             return
                     await trio.sleep(1 / 60)
                 except OSError as exc:
@@ -112,7 +112,7 @@ class DeviceListener:
 class MaybeKeyboardListener:
     def __init__(self, device_details: EventDeviceDetails):
         self.device_details = device_details
-        self._device_send_channel, self.device_recv_channel = trio.open_memory_channel[tuple[EventDeviceDetails, EventDevice]](0)
+        self._device_send_channel, self.device_recv_channel = trio.open_memory_channel[tuple[EventDeviceDetails, pathlib.Path]](1)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         logger.debug("Waiting for keystrokes from %r", self.device_details)
@@ -126,12 +126,12 @@ class MaybeKeyboardListener:
             while True:
                 for listener in listeners:
                     try:
-                        successful_device = listener.device_recv_channel.receive_nowait()
+                        successful_device_path = listener.device_recv_channel.receive_nowait()
                     except trio.WouldBlock:
                         continue
                     else:
                         logger.debug("Got key from %r", self.device_details)
-                        await self._device_send_channel.send((self.device_details, successful_device))
+                        await self._device_send_channel.send((self.device_details, successful_device_path))
                         nursery.cancel_scope.cancel()
                         return
                 await trio.sleep(0.1)
@@ -149,7 +149,10 @@ class InputDeviceScanner:
     async def keep_checking(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
         while True:
-            val = identify_inputs(self.min_input)
+            known_inputs = []
+            for listener in self._listeners.values():
+                known_inputs.extend(listener.device_details.inputpaths)
+            val = identify_inputs(self.min_input, tuple(known_inputs))
             self._found.value = val
             await trio.sleep(1)
 
@@ -173,9 +176,12 @@ class InputDeviceScanner:
         while True:
             for listener in self._listeners.values():
                 try:
-                    return listener.device_recv_channel.receive_nowait()
+                    device_details, device_path = listener.device_recv_channel.receive_nowait()
                 except trio.WouldBlock:
                     continue
+                else:
+                    logger.debug("Identified device: %r", device_details)
+                    return device_details, device_path
             await trio.sleep(0.001)
 
     async def scan(self):
@@ -191,12 +197,12 @@ class InputDeviceScanner:
 class KeyboardListener:
     def __init__(
         self,
-        device: EventDevice,
+        device_path: pathlib.Path,
         device_details: InputDeviceDetails,
         disconnected_send_channel: trio.MemorySendChannel,
         keyboard_send_channel: trio.MemorySendChannel,
     ):
-        self.device = device
+        self.device = EventDevice(device_path)
         self.device_details = device_details
         self.disconnected_send_channel = disconnected_send_channel
         self.keyboard_send_channel = keyboard_send_channel
@@ -208,8 +214,7 @@ class KeyboardListener:
         self.device.set_led(state.led, state.state)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
-        with contextlib.ExitStack() as stack:
-            stack.callback(self.device.ungrab)
+        with self.device:
             logger.debug("Getting events for %r", self.device.device_path)
             task_status.started()
             while True:
@@ -258,10 +263,10 @@ class LibevdevKeyboard:
             if self.active_listener is None:
                 self.scanner = InputDeviceScanner(self.min_input)
                 logger.debug("About to scan")
-                device_details, device = await self.scanner.scan()
-                logger.debug("Scanner found %r, %r", device_details, device)
+                device_details, device_path = await self.scanner.scan()
+                logger.debug("Scanner found %r, %r", device_details, device_path)
                 self.active_listener = KeyboardListener(
-                    device=device,
+                    device_path=device_path,
                     device_details=device_details,
                     disconnected_send_channel=self.disconnected_send_channel,
                     keyboard_send_channel=self.keyboard_send_channel,
