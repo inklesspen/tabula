@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 import trio
 
 from ..commontypes import Point, Rect, Size
+from ..device.eventsource import KeyCode
 from ..device.hwtypes import AnnotatedKeyEvent, TapEvent, TapPhase
 from ..editor.document import DocumentModel
 from ..rendering.cairo import Cairo
@@ -300,6 +301,12 @@ class SessionList(ButtonMenu):
         app = TABULA.get()
         await app.change_screen(TargetScreen.SystemMenu)
 
+    async def handle_key_event(self, event: AnnotatedKeyEvent):
+        if event.key is KeyCode.KEY_ESC:
+            await self.close_menu()
+        else:
+            await super().handle_key_event(event)
+
 
 class SessionActions(ButtonMenu):
     session_button_size = Size(width=800, height=100)
@@ -424,3 +431,9 @@ class SessionActions(ButtonMenu):
     async def back_to_session_list(self):
         app = TABULA.get()
         await app.change_screen(TargetScreen.SessionList)
+
+    async def handle_key_event(self, event: AnnotatedKeyEvent):
+        if event.key is KeyCode.KEY_ESC:
+            await self.back_to_session_list()
+        else:
+            await super().handle_key_event(event)
