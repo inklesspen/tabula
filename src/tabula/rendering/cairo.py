@@ -18,6 +18,14 @@ class CairoSurfaceReference(msgspec.Struct, frozen=True, kw_only=True):
     surface: cairo_surface_t_p
     size: Size
 
+    def get_image_bytes(self) -> bytes:
+        dataptr = lib.cairo_image_surface_get_data(self.surface)
+        buf = ffi.buffer(dataptr, self.size.total())
+        return bytes(buf)
+
+    def get_rendered(self, origin: Point):
+        return Rendered(image=self.get_image_bytes(), extent=Rect(origin=origin, spread=self.size))
+
     @classmethod
     def from_cairo(cls, cairo: Cairo):
         surface = cairo_surface_t_p(ffi.gc(lib.cairo_surface_reference(cairo.surface), lib.cairo_surface_destroy))

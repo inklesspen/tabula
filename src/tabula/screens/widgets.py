@@ -6,7 +6,7 @@ import math
 from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
 
 from ..commontypes import Point, Rect, Size
-from ..rendering.cairo import Cairo
+from ..rendering.cairo import Cairo, CairoSurfaceReference
 from ..rendering.pango import Pango, PangoFontDescription, PangoLayout
 from ..rendering.rendertypes import Alignment, CairoColor, Rendered, WrapMode
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 @dataclasses.dataclass(kw_only=True)
 class Label:
     bounds: Rect
-    cairo: Cairo
+    surface: CairoSurfaceReference
 
     @classmethod
     def create(
@@ -44,16 +44,15 @@ class Label:
                 rects = layout.get_layout_rects()
                 height = rects.logical.spread.height
                 size = Size(width=width, height=height)
-            cairo = Cairo(size)
-            cairo.setup()
-            cairo.fill_with_color(CairoColor.WHITE)
-            cairo.set_draw_color(CairoColor.BLACK)
-            cairo.move_to(Point.zeroes())
-            layout.render(cairo)
-        return cls(bounds=Rect(origin=location, spread=size), cairo=cairo)
+            with Cairo(size) as cairo:
+                cairo.fill_with_color(CairoColor.WHITE)
+                cairo.set_draw_color(CairoColor.BLACK)
+                cairo.move_to(Point.zeroes())
+                layout.render(cairo)
+                return cls(bounds=Rect(origin=location, spread=size), surface=CairoSurfaceReference.from_cairo(cairo))
 
     def paste_onto_cairo(self, cairo: Cairo):
-        cairo.paste_other(self.cairo, self.bounds.origin, Rect(origin=Point.zeroes(), spread=self.bounds.spread))
+        cairo.paste_other(self.surface, self.bounds.origin, Rect(origin=Point.zeroes(), spread=self.bounds.spread))
 
 
 class DrawCallback(Protocol):
@@ -68,9 +67,9 @@ class ButtonState(enum.Enum):
 
 @dataclasses.dataclass(kw_only=True)
 class Button:
-    normal: Cairo
-    inverted: Cairo
-    outlined: Cairo
+    normal: CairoSurfaceReference
+    inverted: CairoSurfaceReference
+    outlined: CairoSurfaceReference
     bounds: Rect
     button_value: Any
     state: ButtonState
@@ -115,11 +114,16 @@ class Button:
         inverted = Button._draw_button(
             button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=True, draw_callback=draw_callback
         )
+
+        def draw_outline(cairo: Cairo):
+            if draw_callback is not None:
+                draw_callback(cairo)
+            outline_bounds = Rect(origin=Point(x=4, y=4), spread=button_size - Size(width=8, height=8))
+            cairo.roundrect(rect=outline_bounds, radius=corner_radius, line_width=2, fill_color=None, stroke_color=CairoColor.WHITE)
+
         outlined = Button._draw_button(
-            button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=True, draw_callback=draw_callback
+            button_size, layout, roundrect_bounds, corner_radius, text_origin, inverted=True, draw_callback=draw_outline
         )
-        outline_bounds = Rect(origin=Point(x=4, y=4), spread=button_size - Size(width=8, height=8))
-        outlined.roundrect(rect=outline_bounds, radius=corner_radius, line_width=2, fill_color=None, stroke_color=CairoColor.WHITE)
         origin = screen_location if screen_location is not None else Point.zeroes()
         return cls(
             normal=normal,
@@ -183,20 +187,18 @@ class Button:
         layout_origin: Point,
         inverted: bool,
         draw_callback: Optional[DrawCallback],
-    ) -> Cairo:
-        cairo = Cairo(button_size)
-        cairo.setup()
-        cairo.fill_with_color(CairoColor.WHITE)
-        cairo.roundrect(
-            rect=rect, radius=radius, line_width=2, fill_color=CairoColor.BLACK if inverted else None, stroke_color=CairoColor.BLACK
-        )
-        cairo.move_to(layout_origin)
-        cairo.set_draw_color(CairoColor.WHITE if inverted else CairoColor.BLACK)
-        layout.render(cairo)
-        if draw_callback is not None:
-            draw_callback(cairo)
-        cairo.set_draw_color(CairoColor.BLACK)
-        return cairo
+    ) -> CairoSurfaceReference:
+        with Cairo(button_size) as cairo:
+            cairo.fill_with_color(CairoColor.WHITE)
+            cairo.roundrect(
+                rect=rect, radius=radius, line_width=2, fill_color=CairoColor.BLACK if inverted else None, stroke_color=CairoColor.BLACK
+            )
+            cairo.move_to(layout_origin)
+            cairo.set_draw_color(CairoColor.WHITE if inverted else CairoColor.BLACK)
+            layout.render(cairo)
+            if draw_callback is not None:
+                draw_callback(cairo)
+            return CairoSurfaceReference.from_cairo(cairo)
 
 
 class ButtonSpec(TypedDict):
