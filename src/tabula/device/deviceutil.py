@@ -1,15 +1,13 @@
 import collections.abc
 import contextlib
+import errno
 import fcntl
 import os
 import pathlib
 
 from ..commontypes import NotInContextError
 from .eventsource import Event, EventCode, EventType, LedCode
-
-
-class DeviceGrabError(Exception):
-    pass
+from .hwtypes import DeviceDisconnectedError, DeviceGrabError
 
 
 class EventDevice(contextlib.AbstractContextManager):
@@ -33,6 +31,10 @@ class EventDevice(contextlib.AbstractContextManager):
             self._d.grab()
         except libevdev.device.DeviceGrabError as exc:
             raise DeviceGrabError from exc
+        except OSError as exc:
+            if exc.errno == errno.ENODEV:
+                raise DeviceDisconnectedError() from exc
+            raise
 
     def ungrab(self):
         # could call self._d.ungrab(). but simply closing self._f is sufficient.
@@ -74,6 +76,10 @@ class EventDevice(contextlib.AbstractContextManager):
                     return
                 except libevdev.EventsDroppedException:
                     resyncing = True
+                except OSError as exc:
+                    if exc.errno == errno.ENODEV:
+                        raise DeviceDisconnectedError() from exc
+                    raise
                 else:
                     yield Event.from_libevdev_event(evt)
 
@@ -81,12 +87,22 @@ class EventDevice(contextlib.AbstractContextManager):
         if self._d is None:
             raise NotInContextError()
 
-        return self._d._libevdev.has_event(type.value, code.value)
+        try:
+            return self._d._libevdev.has_event(type.value, code.value)
+        except OSError as exc:
+            if exc.errno == errno.ENODEV:
+                raise DeviceDisconnectedError() from exc
+            raise
 
     def set_led(self, led: LedCode, state: bool):
         import libevdev
 
-        self._d.set_leds([(libevdev.evbit(EventType.EV_LED.value, led.value), 1 if state else 0)])
+        try:
+            self._d.set_leds([(libevdev.evbit(EventType.EV_LED.value, led.value), 1 if state else 0)])
+        except OSError as exc:
+            if exc.errno == errno.ENODEV:
+                raise DeviceDisconnectedError() from exc
+            raise
 
     def __exit__(self, _exc_type, _exc_value, _traceback):
         self.ungrab()

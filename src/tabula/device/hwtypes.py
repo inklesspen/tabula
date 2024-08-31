@@ -4,6 +4,7 @@ import enum
 import typing
 
 import msgspec
+import trio
 
 from ..commontypes import Point, Size, TabulaError, TouchCoordinateTransform
 
@@ -19,6 +20,14 @@ class HardwareError(TabulaError):
 
 
 class BluetoothInitError(HardwareError):
+    pass
+
+
+class DeviceGrabError(HardwareError):
+    pass
+
+
+class DeviceDisconnectedError(HardwareError):
     pass
 
 
@@ -193,3 +202,9 @@ class DeviceBus(enum.Enum):
 class InputDeviceDetails(typing.Protocol):
     name: str
     bus: DeviceBus
+
+
+KEYBOARD_SEND_CHANNEL: trio.lowlevel.RunVar[trio.MemorySendChannel[KeyEvent]] = trio.lowlevel.RunVar("tabula_keyboard_send_channel")
+TOUCHSCREEN_SEND_CHANNEL: trio.lowlevel.RunVar[trio.MemorySendChannel[TouchReport]] = trio.lowlevel.RunVar(
+    "tabula_touchscreen_send_channel"
+)

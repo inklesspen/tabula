@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import errno
 import logging
 import pathlib
 import typing
@@ -9,9 +8,19 @@ import msgspec
 import trio
 from trio_util import AsyncValue
 
-from .deviceutil import DeviceGrabError, EventDevice
+from .deviceutil import EventDevice
 from .eventsource import EventType, KeyCode
-from .hwtypes import DeviceBus, InputDeviceDetails, KeyboardDisconnect, KeyEvent, KeyPress, SetLed
+from .hwtypes import (
+    KEYBOARD_SEND_CHANNEL,
+    DeviceBus,
+    DeviceDisconnectedError,
+    DeviceGrabError,
+    InputDeviceDetails,
+    KeyboardDisconnect,
+    KeyEvent,
+    KeyPress,
+    SetLed,
+)
 from .proc_bus_input_devices_parser import DEVICES_PATH, parse_devices
 
 logger = logging.getLogger(__name__)
@@ -51,13 +60,7 @@ def identify_inputs(min_input: int, already_grabbed: tuple[pathlib.Path, ...]) -
                 if not d.has_code(EventType.EV_KEY, KeyCode.KEY_Q):
                     continue
             found.append(inputpath)
-        except OSError as exc:
-            if exc.errno == errno.ENODEV:
-                # device went away while we were trying to open it. ignore.
-                logger.debug("Device went away while trying to check it", exc_info=True)
-                continue
-            raise
-        except DeviceGrabError:
+        except (DeviceDisconnectedError, DeviceGrabError):
             continue
     if found:
         devices = parse_devices(DEVICES_PATH.open("r"))
@@ -87,30 +90,17 @@ class InputDeviceScanner:
     listeners_by_path: dict[pathlib.Path, KeyboardListener]
     all_listeners: list[KeyboardListener]
 
-    def __init__(
-        self,
-        min_input: int,
-        listener_nursery: trio.Nursery,
-        keyboard_send_channel: trio.MemorySendChannel[KeyEvent],
-    ):
+    def __init__(self, min_input: int, listener_nursery: trio.Nursery):
         self.min_input = min_input
         self.listener_nursery = listener_nursery
         self._found = AsyncValue(())
         self.listeners_by_path = {}
-        self.keyboard_send_channel = keyboard_send_channel
         self.listeners_added = trio.Event()
-
-    def set_keyboard_send_channel(self, keyboard_send_channel: trio.MemorySendChannel[KeyEvent]):
-        logger.debug("New keyboard send channel in %r", self)
-        self.keyboard_send_channel = keyboard_send_channel
-        for listener in self.listeners_by_path.values():
-            listener.set_keyboard_send_channel(keyboard_send_channel)
 
     async def keep_checking(self, *, task_status=trio.TASK_STATUS_IGNORED):
         task_status.started()
         while True:
             current_paths = tuple(self.listeners_by_path.keys())
-            logger.debug("Checking for new inputs; current paths: %r", current_paths)
             val = identify_inputs(self.min_input, current_paths)
             self._found.value = val
             await trio.sleep(1)
@@ -120,7 +110,6 @@ class InputDeviceScanner:
         async for devices_found in self._found.eventual_values():
             logger.debug("Updating listeners for devices_found %r", devices_found)
             current_paths = set(self.listeners_by_path.keys())
-            logger.debug("Current paths: %r", current_paths)
             seen_paths = set()
             added_paths = set()
             for device_details in devices_found:
@@ -129,14 +118,12 @@ class InputDeviceScanner:
                     seen_paths.add(inputpath)
                     if inputpath not in self.listeners_by_path:
                         logger.debug("Starting listener(s) for %r, %r", device_details, inputpath)
-                        listener = KeyboardListener(
-                            device_path=inputpath,
-                            device_details=device_details,
-                            keyboard_send_channel=self.keyboard_send_channel,
-                        )
+                        listener = KeyboardListener(device_path=inputpath, device_details=device_details)
                         await self.listener_nursery.start(listener.run)
                         self.listeners_by_path[inputpath] = listener
                         added_paths.add(inputpath)
+            current_paths = set(self.listeners_by_path.keys())
+
             missing_paths = current_paths - seen_paths
             for path in missing_paths:
                 listener = self.listeners_by_path.pop(path)
@@ -144,6 +131,7 @@ class InputDeviceScanner:
                 listener.cancel_scope.cancel()
             if added_paths:
                 self.listeners_added.set()
+            current_paths = set(self.listeners_by_path.keys())
 
     async def process(self):
         while True:
@@ -189,24 +177,18 @@ class KeyboardListener:
         self,
         device_path: pathlib.Path,
         device_details: InputDeviceDetails,
-        keyboard_send_channel: trio.MemorySendChannel,
     ):
         self.device = EventDevice(device_path)
         self.device_details = device_details
-        self.keyboard_send_channel = keyboard_send_channel
         self.keys_detected = trio.Event()
         self.cancel_scope = trio.CancelScope()
-
-    def set_keyboard_send_channel(self, keyboard_send_channel: trio.MemorySendChannel):
-        logger.debug("New keyboard send channel in %r", self)
-        self.keyboard_send_channel = keyboard_send_channel
 
     def set_led_state(self, state: SetLed):
         self.device.set_led(state.led, state.state)
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
         with self.cancel_scope, self.device:
-            logger.debug("Getting events for %r", self.device.device_path)
+            logger.debug("Getting events for %r, %r", self.device.device_path, self)
             task_status.started()
             while True:
                 try:
@@ -217,40 +199,31 @@ class KeyboardListener:
                         if evt.type is EventType.EV_KEY:
                             self.keys_detected.set()
                             ke = KeyEvent(key=evt.code, press=KeyPress(evt.value))
-                            await self.keyboard_send_channel.send(ke)
+                            await KEYBOARD_SEND_CHANNEL.get().send(ke)
                     await trio.sleep(1 / 60)
-                except OSError as exc:
-                    if exc.errno == errno.ENODEV:
-                        # device has gone away
-                        logger.debug("Device went away", exc_info=True)
-                        self.cancel_scope.cancel()
-                        return
-                    # some other kind of error, let it rise
-                    raise
-                except trio.BrokenResourceError:
-                    logger.debug("Somehow outdated keyboard send channel, in %r for %r", self, self.device.device_path, exc_info=True)
+                except DeviceDisconnectedError:
+                    logger.debug("Device went away")
+                    self.cancel_scope.cancel()
+                    return
+                except (trio.BrokenResourceError, trio.ClosedResourceError):
+                    logger.debug(
+                        "Somehow outdated keyboard send channel %r, in %r for %r",
+                        KEYBOARD_SEND_CHANNEL.get(),
+                        self,
+                        self.device.device_path,
+                        exc_info=True,
+                    )
 
 
 class LibevdevKeyboard:
     active_listener: AsyncValue[typing.Optional[KeyboardListener]]
     scanner: typing.Optional[InputDeviceScanner]
 
-    def __init__(
-        self, disconnected_send_channel: trio.MemorySendChannel, keyboard_send_channel: trio.MemorySendChannel[KeyEvent], min_input: int
-    ):
+    def __init__(self, disconnected_send_channel: trio.MemorySendChannel, min_input: int):
         self.disconnected_send_channel = disconnected_send_channel
-        self.keyboard_send_channel = keyboard_send_channel
         self.min_input = min_input
         self.active_listener = AsyncValue(None)
         self.scanner = None
-
-    def set_keyboard_send_channel(self, keyboard_send_channel: trio.MemorySendChannel[KeyEvent]):
-        logger.debug("New keyboard send channel in %r", self)
-        self.keyboard_send_channel = keyboard_send_channel
-        if self.scanner is not None:
-            self.scanner.set_keyboard_send_channel(keyboard_send_channel)
-        if self.active_listener.value is not None:
-            self.active_listener.value.set_keyboard_send_channel(keyboard_send_channel)
 
     def set_led_state(self, state: SetLed):
         if self.active_listener.value is not None:
@@ -265,15 +238,13 @@ class LibevdevKeyboard:
             async with trio.open_nursery() as nursery:
                 if self.active_listener.value is None:
                     logger.debug("About to scan")
-                    self.scanner = InputDeviceScanner(self.min_input, nursery, self.keyboard_send_channel)
+                    self.scanner = InputDeviceScanner(self.min_input, nursery)
                     detected_listener = await self.scanner.scan()
                     logger.debug("Scanner found %r, %r", detected_listener.device_details, detected_listener.device.device_path)
                     if len(nursery.child_tasks) != 1:
                         logger.warning("Nursery is currently holding %r", nursery.child_tasks)
                     self.active_listener.value = detected_listener
                     self.scanner = None
-                    # it may well have changed by now.
-                    detected_listener.set_keyboard_send_channel(self.keyboard_send_channel)
             # the nursery won't exit until the last task (Which should only be the running KeyboardListener) has exited
             # now we lost the keyboard, so clear the listener and send the disconnected event
             self.active_listener.value = None

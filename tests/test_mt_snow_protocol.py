@@ -2,8 +2,9 @@ import datetime
 
 import pytest
 import trio
+
 from tabula.device.eventsource import Event, SimpleEventSource
-from tabula.device.hwtypes import MultitouchVariant, TouchEvent, TouchReport
+from tabula.device.hwtypes import TOUCHSCREEN_SEND_CHANNEL, MultitouchVariant, TouchEvent, TouchReport
 from tabula.device.kobo_touchscreen import Touchscreen
 
 TAP_RAW_EVENTS = [
@@ -626,7 +627,8 @@ async def test_touches(raw_events, expected, nursery):
         "EV_SYN", "SYN_CONFIG", value=42, seconds=raw_events[-1].timestamp.seconds, microseconds=raw_events[-1].timestamp.microseconds
     )
     touch_send, touch_receive = trio.open_memory_channel[TouchReport](0)
-    touchscreen = Touchscreen(MultitouchVariant.SNOW_PROTOCOL, touch_send, SimpleEventSource([*raw_events, end_event]))
+    TOUCHSCREEN_SEND_CHANNEL.set(touch_send)
+    touchscreen = Touchscreen(MultitouchVariant.SNOW_PROTOCOL, SimpleEventSource([*raw_events, end_event]))
     await nursery.start(touchscreen.run)
     received = []
     async with touch_receive:

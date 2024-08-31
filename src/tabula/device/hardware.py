@@ -8,7 +8,17 @@ import trio
 from ..commontypes import Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from .eventsource import LedCode
 from .gestures import make_tapstream
-from .hwtypes import BluetoothVariant, DisplayUpdateMode, KeyEvent, SetLed, TabulaEvent, TapEvent
+from .hwtypes import (
+    KEYBOARD_SEND_CHANNEL,
+    TOUCHSCREEN_SEND_CHANNEL,
+    BluetoothVariant,
+    DisplayUpdateMode,
+    KeyEvent,
+    SetLed,
+    TabulaEvent,
+    TapEvent,
+    TouchReport,
+)
 from .keystreams import make_keystream
 from .kobo_models import detect_model
 
@@ -40,13 +50,11 @@ class Hardware:
         self.compose_led = False
         self.keystream_cancel_scope = trio.CancelScope()
         self.keystream = None
-        self.keystream_send_channel = None
         self.reset_keystream()
         self.screen_size = Size(0, 0)
         self.touch_coordinate_transform = TouchCoordinateTransform.IDENTITY
         self.touchstream_cancel_scope = trio.CancelScope()
         self.touchstream = None
-        self.touchstream_send_channel = None
         self.reset_touchstream()
 
         if self.settings.enable_bluetooth and self.model.bluetooth_variant is not BluetoothVariant.NONE:
@@ -128,33 +136,29 @@ class Hardware:
 
     def reset_keystream(self):
         # when resetting the keystream, we want to cancel the current handler and start a new one.
-        old_send_channel = self.keystream_send_channel
+        old_send_channel = KEYBOARD_SEND_CHANNEL.get(None)
         (
             new_keystream_send_channel,
             new_keystream_receive_channel,
         ) = trio.open_memory_channel[KeyEvent](0)
+        KEYBOARD_SEND_CHANNEL.set(new_keystream_send_channel)
         self.keystream = make_keystream(new_keystream_receive_channel, self.settings)
-        self.keystream_send_channel = new_keystream_send_channel
         if old_send_channel is not None:
             old_send_channel.close()
         self.keystream_cancel_scope.cancel()
-        if self.keyboard is not None:
-            self.keyboard.set_keyboard_send_channel(self.keystream_send_channel)
 
     def reset_touchstream(self):
         # we would reset it when changing screens, for instance
-        old_send_channel = self.touchstream_send_channel
+        old_send_channel = TOUCHSCREEN_SEND_CHANNEL.get(None)
         (
             new_touchstream_send_channel,
             new_touchstream_receive_channel,
-        ) = trio.open_memory_channel[TapEvent](0)
+        ) = trio.open_memory_channel[TouchReport](0)
+        TOUCHSCREEN_SEND_CHANNEL.set(new_touchstream_send_channel)
         self.touchstream = make_tapstream(new_touchstream_receive_channel)
-        self.touchstream_send_channel = new_touchstream_send_channel
         if old_send_channel is not None:
             old_send_channel.close()
         self.touchstream_cancel_scope.cancel()
-        if self.touchscreen is not None:
-            self.touchscreen.channel = self.touchstream_send_channel
 
     def _transform_tap_event(self, event: TapEvent):
         return event.apply_transform(self.touch_coordinate_transform, self.screen_size)
@@ -166,10 +170,10 @@ class Hardware:
         with self.fbink:
             async with self.bluetooth_cm(), trio.open_nursery() as nursery:
                 task_status.started()
-                self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.keystream_send_channel, self.model.min_keyboard_input)
+                self.keyboard = LibevdevKeyboard(self.event_channel.clone(), self.model.min_keyboard_input)
                 nursery.start_soon(self._handle_keystream)
                 nursery.start_soon(self.keyboard.run)
-                touchscreen = Touchscreen(self.model.multitouch_variant, self.touchstream_send_channel)
+                touchscreen = Touchscreen(self.model.multitouch_variant)
                 nursery.start_soon(self._handle_touchstream)
                 nursery.start_soon(touchscreen.run)
 

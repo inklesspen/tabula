@@ -35,10 +35,22 @@ from Foundation import (
     NSSize,
 )
 from PyObjCTools import AppHelper
+
 from tabula.app import Tabula, parser
 from tabula.commontypes import Point, Rect, ScreenInfo, ScreenRotation, Size, TouchCoordinateTransform
 from tabula.device.eventsource import KeyCode
-from tabula.device.hwtypes import AnnotatedKeyEvent, DisplayUpdateMode, KeyboardDisconnect, KeyEvent, KeyPress, SetLed, TapEvent, TapPhase
+from tabula.device.hwtypes import (
+    KEYBOARD_SEND_CHANNEL,
+    TOUCHSCREEN_SEND_CHANNEL,
+    AnnotatedKeyEvent,
+    DisplayUpdateMode,
+    KeyboardDisconnect,
+    KeyEvent,
+    KeyPress,
+    SetLed,
+    TapEvent,
+    TapPhase,
+)
 from tabula.device.keystreams import make_keystream
 from tabula.settings import Settings
 
@@ -121,19 +133,17 @@ class CocoaHardware:
         self.keystream_cancel_scope = trio.CancelScope()
         self.keystream = None
         self.keystream_send_channel = None
-        self.reset_keystream()
         self.touchstream_cancel_scope = trio.CancelScope()
         self.touchstream_receive_channel = None
         self.touchstream_send_channel = None
-        self.reset_touchstream()
 
     def handle_key_event(self, key_event: KeyEvent):
-        self.keystream_send_channel.send_nowait(key_event)
+        KEYBOARD_SEND_CHANNEL.get().send_nowait(key_event)
 
     def handle_mouseclick(self, ns_point: NSPoint, down: bool):
         point = southwest_to_northwest(Point(int(ns_point.x), int(ns_point.y)), self.screen_geometry.value)
         phase = TapPhase.INITIATED if down else TapPhase.COMPLETED
-        self.touchstream_send_channel.send_nowait((TapEvent(location=point, phase=phase)))
+        TOUCHSCREEN_SEND_CHANNEL.get().send_nowait((TapEvent(location=point, phase=phase)))
 
     def disconnect_keyboard(self):
         self.event_channel.send_nowait(KeyboardDisconnect())
@@ -211,31 +221,33 @@ class CocoaHardware:
 
     def reset_keystream(self):
         # This needs redesign.
-        old_send_channel = self.keystream_send_channel
+        old_send_channel = KEYBOARD_SEND_CHANNEL.get(None)
         (
             new_keystream_send_channel,
             new_keystream_receive_channel,
         ) = trio.open_memory_channel(10)
         self.keystream = make_keystream(new_keystream_receive_channel, self.settings)
-        self.keystream_send_channel = new_keystream_send_channel
+        KEYBOARD_SEND_CHANNEL.set(new_keystream_send_channel)
         if old_send_channel is not None:
             old_send_channel.close()
         self.keystream_cancel_scope.cancel()
 
     def reset_touchstream(self):
         # we would reset it when changing screens, for instance
-        old_send_channel = self.touchstream_send_channel
+        old_send_channel = TOUCHSCREEN_SEND_CHANNEL.get(None)
         (
             new_touchstream_send_channel,
             new_touchstream_receive_channel,
         ) = trio.open_memory_channel(10)
         self.touchstream_receive_channel = new_touchstream_receive_channel
-        self.touchstream_send_channel = new_touchstream_send_channel
+        TOUCHSCREEN_SEND_CHANNEL.set(new_touchstream_send_channel)
         if old_send_channel is not None:
             old_send_channel.close()
         self.touchstream_cancel_scope.cancel()
 
     async def run(self, *, task_status=trio.TASK_STATUS_IGNORED):
+        self.reset_keystream()
+        self.reset_touchstream()
         async with trio.open_nursery() as nursery:
             task_status.started()
             nursery.start_soon(self._handle_keystream)

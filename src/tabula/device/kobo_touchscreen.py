@@ -11,7 +11,7 @@ import msgspec
 import trio
 
 from .eventsource import AbsCode, Event, EventSource, EventType, KeyCode, SynCode
-from .hwtypes import MultitouchVariant, TouchEvent, TouchReport
+from .hwtypes import TOUCHSCREEN_SEND_CHANNEL, MultitouchVariant, TouchEvent, TouchReport
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +72,11 @@ class WipTouchEvent(msgspec.Struct, kw_only=True):
 
 class Touchscreen:
     # https://www.kernel.org/doc/Documentation/input/multi-touch-protocol.txt
-    def __init__(self, variant: MultitouchVariant, channel: trio.abc.SendChannel, event_source: typing.Optional[EventSource] = None):
+    def __init__(self, variant: MultitouchVariant, event_source: typing.Optional[EventSource] = None):
         self.variant = variant
         self.active_touches = Touches()
         self.wip = WipTouchEvent()
         self.wip_touches: dict[int, WipTouchEvent] = collections.defaultdict(WipTouchEvent)
-        self.channel = channel
         if event_source is None:
             # Prevent importing libevdev unless necessary
             from .deviceutil import EventDevice
@@ -95,9 +94,10 @@ class Touchscreen:
             while True:
                 for evt in self.event_source.events():
                     await trio.lowlevel.checkpoint()
+                    channel = TOUCHSCREEN_SEND_CHANNEL.get()
                     match evt:
                         case Event(type=EventType.EV_SYN, code=SynCode.SYN_REPORT):
-                            await self.channel.send(TouchReport(touches=self.active_touches.values, timestamp=evt.timestamp))
+                            await channel.send(TouchReport(touches=self.active_touches.values, timestamp=evt.timestamp))
                             self.active_touches.clear()
                             self.wip.clear()
                         case Event(type=EventType.EV_SYN, code=SynCode.SYN_MT_REPORT):
@@ -115,7 +115,7 @@ class Touchscreen:
                             self.wip.clear()
                             self.active_touches.clear()
                         case Event(type=EventType.EV_SYN, code=SynCode.SYN_CONFIG, value=42):
-                            self.channel.close()
+                            channel.close()
                             return
                 await trio.sleep(1 / 60)
 
@@ -126,6 +126,7 @@ class Touchscreen:
             while True:
                 for evt in self.event_source.events():
                     await trio.lowlevel.checkpoint()
+                    channel = TOUCHSCREEN_SEND_CHANNEL.get()
                     match evt:
                         case Event(type=EventType.EV_ABS, code=AbsCode.ABS_MT_SLOT):
                             current_slot = evt.value
@@ -165,9 +166,9 @@ class Touchscreen:
                                     logger.warning("Unable to handle touch in slot %d", wip.slot)
                                     continue
                                 self.active_touches[wip.slot] = wip.finalize()
-                            await self.channel.send(TouchReport(touches=self.active_touches.values, timestamp=evt.timestamp))
+                            await channel.send(TouchReport(touches=self.active_touches.values, timestamp=evt.timestamp))
                         case Event(type=EventType.EV_SYN, code=SynCode.SYN_CONFIG, value=42):
-                            self.channel.close()
+                            channel.close()
                             return
                 await trio.sleep(1 / 60)
 

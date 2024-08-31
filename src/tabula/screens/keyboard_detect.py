@@ -86,6 +86,10 @@ class KeyboardDetectDialog(Dialog):
     def become_responder(self):
         app = TABULA.get()
         app.hardware.reset_keystream()
+        self.render_screen()
+
+    def render_screen(self):
+        app = TABULA.get()
         if self.screen_info != app.screen_info:
             self.screen = self.render(app.screen_info)
         app.hardware.display_rendered(self.screen)
@@ -106,4 +110,4 @@ class KeyboardDetectDialog(Dialog):
                 app.hardware.display_rendered(self.rotate_button.render(override_state=ButtonState.PRESSED))
                 app.rotate()
                 # force rerender; this is the only screen where rotation can happen while the screen is active
-                self.become_responder()
+                self.render_screen()
