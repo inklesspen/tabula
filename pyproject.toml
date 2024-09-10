@@ -94,3 +94,8 @@ docstring-code-line-length = "dynamic"
 # Consider if we care about limited-api.
 # [tool.meson-python]
 # limited-api = true
+
+[tool.uv]
+# Force uv to _always_ rebuild the binaries when using install --editable
+# https://docs.astral.sh/uv/concepts/cache/#dynamic-metadata
+reinstall-package = ["tabula"]
