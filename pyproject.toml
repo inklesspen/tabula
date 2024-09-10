@@ -28,7 +28,6 @@ classifiers = [
   "Topic :: Text Processing :: Markup :: Markdown",
 ]
 dependencies = [
-  'attrs',
   'cffi',
   'pygtrie',
   'python-dateutil',

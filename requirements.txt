@@ -4,7 +4,6 @@ async-generator==1.10
     # via trio-util
 attrs==23.2.0
     # via
-    #   tabula (pyproject.toml)
     #   cattrs
     #   outcome
     #   trio
