@@ -328,7 +328,7 @@ class SessionActions(ButtonMenu):
         self.session_delta = self.selected_session.updated_at - timestamp
 
     def make_buttons(self):
-        button_top = 150 if self.can_resume_drafting else 450
+        button_top = 225 if self.can_resume_drafting else 525
         specs = []
         if self.can_resume_drafting:
             specs.append(
@@ -377,8 +377,15 @@ class SessionActions(ButtonMenu):
                 menu_button.paste_onto_cairo(cairo)
 
             header_text = f"Last edited {humanized_delta(self.session_delta)}\nWordcount: {self.selected_session.wordcount}"
+            if self.selected_session.first_paragraph is not None:
+                header_text += f"\n{self.selected_session.first_paragraph}"
             Label.create(
-                pango=self.pango, text=header_text, font=f"{SERIF} 12", location=Point(x=0, y=10), width=self.screen_info.size.width
+                pango=self.pango,
+                text=header_text,
+                font=f"{SERIF} 12",
+                location=Point(x=0, y=10),
+                width=self.screen_info.size.width,
+                ellipsize=True,
             ).paste_onto_cairo(cairo)
 
             if not self.can_resume_drafting:

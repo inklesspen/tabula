@@ -13,6 +13,7 @@ class Session(msgspec.Struct, kw_only=True, frozen=True):
     updated_at: datetime.datetime
     exported_at: typing.Optional[datetime.datetime] = None
     wordcount: int = 0
+    first_paragraph: typing.Optional[str] = None
 
     @property
     def needs_export(self):

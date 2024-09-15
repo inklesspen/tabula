@@ -156,7 +156,9 @@ def set_version(conn: Connectable, version: int):
     conn.execute(text(f"PRAGMA user_version = {version}"))
 
 
-def make_db(sqlite_path: pathlib.Path):
+def make_db(sqlite_path: pathlib.Path | str):
+    if not isinstance(sqlite_path, pathlib.Path):
+        sqlite_path = pathlib.Path(sqlite_path)
     exists = sqlite_path.is_file()
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     engine_url = EngineURL.create(drivername="sqlite", database=sqlite_path.__fspath__())
@@ -193,7 +195,12 @@ class TabulaDb:
         return session_id
 
     def list_sessions(self, limit=None, only_exportable=False):
-        s = select(session_table).order_by(session_table.c.id.desc())
+        s = (
+            select(session_table, paragraph_table.c.markdown.label("first_paragraph"))
+            .join(paragraph_table, isouter=True)
+            .where(paragraph_table.c.index == 0)
+            .order_by(session_table.c.id.desc())
+        )
         if limit is not None:
             s = s.limit(limit)
         if only_exportable:

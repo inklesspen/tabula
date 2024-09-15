@@ -34,30 +34,22 @@ class PangoLayout(AbstractContextManager):
         alignment: Alignment = Alignment.LEFT,
         single_par: bool = False,
         wrap: WrapMode = WrapMode.WORD_CHAR,
+        single_line: bool = False,
     ):
         self.pango = pango
         self.layout = ffi.gc(lib.pango_layout_new(self.pango.context), lib.g_object_unref)
         self.layout_ink_rect = glib_alloc("PangoRectangle *")
         self.layout_logical_rect = glib_alloc("PangoRectangle *")
-        self._setup_layout(
-            width=width,
-            justify=justify,
-            alignment=alignment,
-            single_par=single_par,
-            wrap=wrap,
-        )
+        self._setup_layout(width=width, justify=justify, alignment=alignment, single_par=single_par, wrap=wrap, single_line=single_line)
 
-    def _setup_layout(
-        self,
-        width: float,
-        justify: bool,
-        alignment: Alignment,
-        single_par: bool,
-        wrap: WrapMode,
-    ):
+    def _setup_layout(self, width: float, justify: bool, alignment: Alignment, single_par: bool, wrap: WrapMode, single_line: bool):
         # don't try auto-detecting text direction
         lib.pango_layout_set_auto_dir(self.layout, False)
-        lib.pango_layout_set_ellipsize(self.layout, lib.PANGO_ELLIPSIZE_NONE)
+        if single_line:
+            lib.pango_layout_set_height(self.layout, -1)
+            lib.pango_layout_set_ellipsize(self.layout, lib.PANGO_ELLIPSIZE_END)
+        else:
+            lib.pango_layout_set_ellipsize(self.layout, lib.PANGO_ELLIPSIZE_NONE)
         lib.pango_layout_set_justify(self.layout, justify)
         lib.pango_layout_set_single_paragraph_mode(self.layout, single_par)
         lib.pango_layout_set_wrap(self.layout, wrap)

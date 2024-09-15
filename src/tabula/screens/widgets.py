@@ -33,9 +33,10 @@ class Label:
         width: Optional[int] = None,
         alignment: Alignment = Alignment.CENTER,
         wrap: WrapMode = WrapMode.WORD_CHAR,
+        ellipsize: bool = False,
     ):
         layout_width = size.width if size is not None else width
-        with PangoLayout(pango=pango, width=layout_width, alignment=alignment, wrap=wrap) as layout:
+        with PangoLayout(pango=pango, width=layout_width, alignment=alignment, wrap=wrap, single_line=ellipsize) as layout:
             layout.set_font(font)
             layout.set_content(text)
             if size is None:
