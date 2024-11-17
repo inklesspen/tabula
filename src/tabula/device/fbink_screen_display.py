@@ -126,11 +126,12 @@ TOUCH_COORDINATE_TRANSFORMS = (
     TouchCoordinateTransform.SWAP_AND_MIRROR_X,  # native_rota 3
 )
 
-DISPLAY_UPDATE_MODES = {
+DISPLAY_UPDATE_MODES = {  # This may need to be kobo-model dependent
     DisplayUpdateMode.AUTO: WaveformMode.AUTO,
     DisplayUpdateMode.RAPID: WaveformMode.GC4,
-    DisplayUpdateMode.FIDELITY: WaveformMode.REAGL,
+    DisplayUpdateMode.FIDELITY: WaveformMode.REAGL,  # TODO: try using GC16 for FIDELITY
 }
+
 
 BitDepth = typing.Optional[typing.Literal[4, 8, 16, 32]]  # None for KEEP_CURRENT_BITDEPTH
 
