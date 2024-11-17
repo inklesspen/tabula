@@ -2,16 +2,16 @@
 #    uv pip compile --python-version 3.12 pyproject.toml -o requirements.txt
 async-generator==1.10
     # via trio-util
-attrs==23.2.0
+attrs==24.2.0
     # via
     #   cattrs
     #   outcome
     #   trio
-cattrs==23.2.3
+cattrs==24.1.0
     # via tabula (pyproject.toml)
-cffi==1.16.0
+cffi==1.17.1
     # via tabula (pyproject.toml)
-idna==3.7
+idna==3.8
     # via trio
 jeepney==0.8.0
     # via tabula (pyproject.toml)
@@ -35,13 +35,13 @@ sniffio==1.3.1
     # via trio
 sortedcontainers==2.4.0
     # via trio
-sqlalchemy==2.0.31
+sqlalchemy==2.0.34
     # via tabula (pyproject.toml)
 timeflake==0.4.3
     # via tabula (pyproject.toml)
 tricycle==0.4.1
     # via tabula (pyproject.toml)
-trio==0.26.0
+trio==0.26.2
     # via
     #   tabula (pyproject.toml)
     #   tricycle
