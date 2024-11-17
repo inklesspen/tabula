@@ -547,7 +547,57 @@ struct _PangoLogAttr
 typedef struct _PangoLogAttr PangoLogAttr;
 
 typedef ... PangoAttrList;
-typedef ... PangoAttrClass;
+
+
+typedef enum
+{
+  PANGO_ATTR_INVALID,           /* 0 is an invalid attribute type */
+  PANGO_ATTR_LANGUAGE,          /* PangoAttrLanguage */
+  PANGO_ATTR_FAMILY,            /* PangoAttrString */
+  PANGO_ATTR_STYLE,             /* PangoAttrInt */
+  PANGO_ATTR_WEIGHT,            /* PangoAttrInt */
+  PANGO_ATTR_VARIANT,           /* PangoAttrInt */
+  PANGO_ATTR_STRETCH,           /* PangoAttrInt */
+  PANGO_ATTR_SIZE,              /* PangoAttrSize */
+  PANGO_ATTR_FONT_DESC,         /* PangoAttrFontDesc */
+  PANGO_ATTR_FOREGROUND,        /* PangoAttrColor */
+  PANGO_ATTR_BACKGROUND,        /* PangoAttrColor */
+  PANGO_ATTR_UNDERLINE,         /* PangoAttrInt */
+  PANGO_ATTR_STRIKETHROUGH,     /* PangoAttrInt */
+  PANGO_ATTR_RISE,              /* PangoAttrInt */
+  PANGO_ATTR_SHAPE,             /* PangoAttrShape */
+  PANGO_ATTR_SCALE,             /* PangoAttrFloat */
+  PANGO_ATTR_FALLBACK,          /* PangoAttrInt */
+  PANGO_ATTR_LETTER_SPACING,    /* PangoAttrInt */
+  PANGO_ATTR_UNDERLINE_COLOR,   /* PangoAttrColor */
+  PANGO_ATTR_STRIKETHROUGH_COLOR,/* PangoAttrColor */
+  PANGO_ATTR_ABSOLUTE_SIZE,     /* PangoAttrSize */
+  PANGO_ATTR_GRAVITY,           /* PangoAttrInt */
+  PANGO_ATTR_GRAVITY_HINT,      /* PangoAttrInt */
+  PANGO_ATTR_FONT_FEATURES,     /* PangoAttrFontFeatures */
+  PANGO_ATTR_FOREGROUND_ALPHA,  /* PangoAttrInt */
+  PANGO_ATTR_BACKGROUND_ALPHA,  /* PangoAttrInt */
+  PANGO_ATTR_ALLOW_BREAKS,      /* PangoAttrInt */
+  PANGO_ATTR_SHOW,              /* PangoAttrInt */
+  PANGO_ATTR_INSERT_HYPHENS,    /* PangoAttrInt */
+  PANGO_ATTR_OVERLINE,          /* PangoAttrInt */
+  PANGO_ATTR_OVERLINE_COLOR,    /* PangoAttrColor */
+  PANGO_ATTR_LINE_HEIGHT,       /* PangoAttrFloat */
+  PANGO_ATTR_ABSOLUTE_LINE_HEIGHT, /* PangoAttrInt */
+  PANGO_ATTR_TEXT_TRANSFORM,    /* PangoAttrInt */
+  PANGO_ATTR_WORD,              /* PangoAttrInt */
+  PANGO_ATTR_SENTENCE,          /* PangoAttrInt */
+  PANGO_ATTR_BASELINE_SHIFT,    /* PangoAttrSize */
+  PANGO_ATTR_FONT_SCALE,        /* PangoAttrInt */
+} PangoAttrType;
+
+
+struct _PangoAttrClass
+{
+  PangoAttrType type;
+  ...;
+};
+typedef struct _PangoAttrClass PangoAttrClass;
 struct _PangoAttribute
 {
   const PangoAttrClass *klass;
@@ -555,6 +605,8 @@ struct _PangoAttribute
   guint end_index;
 };
 typedef struct _PangoAttribute PangoAttribute;
+#define PANGO_ATTR_INDEX_FROM_TEXT_BEGINNING ...
+#define PANGO_ATTR_INDEX_TO_TEXT_END ...
 
 typedef enum {
   PANGO_STYLE_NORMAL,
@@ -836,10 +888,13 @@ struct _MarkdownState
     PangoAttribute *italic;
     PangoAttribute *cursor_alpha;
     PangoAttribute *compose_underline;
-    ...;
+    gchar *cached_start;
+    gchar *pos_p;
+    gchar *prev_pos_p;
 };
 
 typedef struct _MarkdownState MarkdownState;
+void markdown_state_housekeeping(MarkdownState *state, GString *string);
 MarkdownState *markdown_state_new(GString *string);
 void markdown_state_free(MarkdownState *state);
 void markdown_attrs(MarkdownState *state, GString *string);
@@ -850,6 +905,8 @@ void setup_cursor(MarkdownState *state, GString *string);
 void cleanup_cursor(MarkdownState *state, GString *string);
 void setup_compose(MarkdownState *state, guint start, guint end);
 void cleanup_compose(MarkdownState *state);
+
+extern "Python" gboolean backspace_filter_callback(PangoAttribute *, void *);
 
 struct _CursorPara
 {

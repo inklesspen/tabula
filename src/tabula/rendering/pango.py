@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import typing
 from contextlib import AbstractContextManager, nullcontext
@@ -11,6 +12,7 @@ from .fontconfig import NON_DRAFTING_FONTS
 from .rendertypes import (
     Alignment,
     Antialias,
+    AttrType,
     HintMetrics,
     HintMode,
     LayoutRects,
@@ -20,6 +22,8 @@ from .rendertypes import (
 
 if typing.TYPE_CHECKING:
     from .cairo import Cairo
+
+logger = logging.getLogger(__name__)
 
 glib_alloc = ffi.new_allocator(alloc=lib.g_malloc0, free=lib.g_free, should_clear_after_alloc=False)
 
@@ -222,3 +226,52 @@ class Pango:
 
     def list_drafting_fonts(self):
         return sorted(set(self.list_available_fonts()) - NON_DRAFTING_FONTS)
+
+
+@ffi.def_extern()
+def backspace_filter_callback(attribute, user_data):
+    if attribute.klass.type not in (AttrType.STYLE, AttrType.WEIGHT):
+        return False
+
+    logger.debug(
+        "Backspace callback called for %s attribute on range %d-%d",
+        AttrType(attribute.klass.type).name,
+        attribute.start_index,
+        attribute.end_index,
+    )
+    state = ffi.cast("MarkdownState *", user_data)
+    last = state.pos_p - state.cached_start
+
+    if attribute.end_index > last:
+        attribute.end_index = lib.PANGO_ATTR_INDEX_TO_TEXT_END
+        if attribute.klass.type == AttrType.WEIGHT:
+            state.bold = attribute
+        elif attribute.klass.type == AttrType.STYLE:
+            state.italic = attribute
+
+    if attribute.klass.type == AttrType.WEIGHT:
+        # bold attributes start one character before, but the asterisk is always a single byte.
+        last -= 1
+
+    if attribute.start_index >= last:
+        # we're removing this, but first we might have to clear bold or italic
+        if attribute == state.bold:
+            state.bold = ffi.NULL
+        if attribute == state.italic:
+            state.italic = ffi.NULL
+        return True
+
+    return False
+
+
+def markdown_attrs_backspace(state, string):
+    lib.markdown_state_housekeeping(state, string)
+    if state.prev_pos_p == ffi.NULL:
+        return
+    state.pos = lib.g_utf8_pointer_to_offset(string.str, state.prev_pos_p)
+    state.pos_p = lib.g_utf8_offset_to_pointer(string.str, state.pos)
+    state.prev_pos_p = lib.g_utf8_find_prev_char(string.str, state.pos_p)
+    lib.g_string_truncate(string, (state.pos_p - string.str))
+    # fix the attrlist
+    pruned = lib.pango_attr_list_filter(state.attr_list, lib.backspace_filter_callback, state)
+    lib.pango_attr_list_unref(pruned)

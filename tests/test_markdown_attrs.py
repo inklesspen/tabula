@@ -1,5 +1,7 @@
 import pytest
+
 from tabula.rendering._cairopango import ffi, lib  # type: ignore
+from tabula.rendering.pango import markdown_attrs_backspace as python_markdown_attrs_backspace
 
 OPEN_ATTR_END = 4294967295
 PARKED_CURSOR_ALPHA = "0 0 foreground-alpha 32767"
@@ -115,6 +117,10 @@ def test_multibyte():
 
 
 @pytest.mark.parametrize(
+    "backspace_func",
+    [pytest.param(lib.markdown_attrs_backspace, id="c impl"), pytest.param(python_markdown_attrs_backspace, id="python impl")],
+)
+@pytest.mark.parametrize(
     "test_string,expected_attrs,should_have_bold,should_have_italic",
     [
         pytest.param("We slowly go back.", [], False, False, id="unstyled"),
@@ -126,16 +132,18 @@ def test_multibyte():
         ),
         pytest.param("And now _the_ **", ["8 13 style italic"], False, False, id="open bold removed"),
         pytest.param("**Multibyte**: ☭", ["0 13 weight semibold"], False, False, id="multibyte backspace"),
+        pytest.param("This is _only_,", ["8 14 style italic"], False, False, id="closed italic should stay closed"),
+        pytest.param("This is **only**,", ["8 16 weight semibold"], False, False, id="closed bold should stay closed"),
     ],
 )
-def test_backspace(test_string, expected_attrs, should_have_bold, should_have_italic):
+def test_backspace(backspace_func, test_string, expected_attrs, should_have_bold, should_have_italic):
     gstr = ffi.gc(lib.g_string_new(test_string.encode("utf-8")), lib.fully_free_g_string)
     mstate = ffi.gc(lib.markdown_state_new(gstr), lib.markdown_state_free)
     lib.markdown_attrs(mstate, gstr)
     assert mstate.pos == len(test_string)
     assert gstr.len == len(test_string.encode("utf-8"))
 
-    lib.markdown_attrs_backspace(mstate, gstr)
+    backspace_func(mstate, gstr)
     assert mstate.pos == len(test_string[:-1])
     assert gstr.len == len(test_string[:-1].encode("utf-8"))
     assert ffi.string(gstr.str).decode("utf-8") == test_string[:-1]
@@ -145,13 +153,17 @@ def test_backspace(test_string, expected_attrs, should_have_bold, should_have_it
     assert bool(mstate.italic) == should_have_italic
 
 
-def test_backspace_to_reopen():
+@pytest.mark.parametrize(
+    "backspace_func",
+    [pytest.param(lib.markdown_attrs_backspace, id="c impl"), pytest.param(python_markdown_attrs_backspace, id="python impl")],
+)
+def test_reopen_then_close(backspace_func):
     test_string = "Let us now **_un_bold**"
     gstr = ffi.gc(lib.g_string_new(test_string.encode("utf-8")), lib.fully_free_g_string)
     mstate = ffi.gc(lib.markdown_state_new(gstr), lib.markdown_state_free)
     lib.markdown_attrs(mstate, gstr)
 
-    lib.markdown_attrs_backspace(mstate, gstr)
+    backspace_func(mstate, gstr)
     assert mstate.pos == len(test_string[:-1])
     assert gstr.len == len(test_string[:-1].encode("utf-8"))
     assert ffi.string(gstr.str).decode("utf-8") == test_string[:-1]

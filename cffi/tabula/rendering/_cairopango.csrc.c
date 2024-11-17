@@ -109,13 +109,11 @@ void simplify_attr_list(PangoAttrList *list)
     pango_attr_list_unref(out);
 }
 
-static void markdown_state_housekeeping(MarkdownState *state, GString *string)
+void markdown_state_housekeeping(MarkdownState *state, GString *string)
 {
     if (G_UNLIKELY(state->cached_start != string->str))
     {
         // the underlying str has been reallocated; we cannot trust the previous pointer.
-        // in theory we can pass negative offsets to gain some efficiency but i don't understand the trick used, so…
-        // https://gitlab.gnome.org/GNOME/glib/-/commit/1ee0917984152f9fe09b33a3660ba96cec0b55b1
         state->pos_p = g_utf8_offset_to_pointer(string->str, state->pos);
         state->prev_pos_p = g_utf8_find_prev_char(string->str, state->pos_p);
         state->cached_start = string->str;
@@ -210,20 +208,16 @@ void markdown_attrs(MarkdownState *state, GString *string)
 
 static gboolean backspace_filter(PangoAttribute *attribute, gpointer user_data)
 {
-    MarkdownState *state = (MarkdownState *)user_data;
-    guint last = (state->pos_p - state->cached_start);
-
     if (!(attribute->klass->type == PANGO_ATTR_STYLE || attribute->klass->type == PANGO_ATTR_WEIGHT))
     {
         // never remove the cursor or compose attributes
         return FALSE;
     }
-    if (attribute->klass->type == PANGO_ATTR_WEIGHT)
-    {
-        // bold ones start one character before. luckily the asterisk is always a single byte.
-        last--;
-    }
-    if (attribute->end_index >= last)
+
+    MarkdownState *state = (MarkdownState *)user_data;
+    guint last = (state->pos_p - state->cached_start);
+
+    if (attribute->end_index > last)
     {
         attribute->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
         if (attribute->klass->type == PANGO_ATTR_WEIGHT)
@@ -234,6 +228,11 @@ static gboolean backspace_filter(PangoAttribute *attribute, gpointer user_data)
         {
             state->italic = attribute;
         }
+    }
+    if (attribute->klass->type == PANGO_ATTR_WEIGHT)
+    {
+        // bold ones start one character before. luckily the asterisk is always a single byte.
+        last--;
     }
     if (attribute->start_index >= last)
     {
@@ -260,6 +259,10 @@ void markdown_attrs_backspace(MarkdownState *state, GString *string)
         return;
     }
     // fix up the positioning
+    // in theory we can pass negative offsets to gain some efficiency.
+    // https://gitlab.gnome.org/GNOME/glib/-/commit/1ee0917984152f9fe09b33a3660ba96cec0b55b1
+    // https://bugzilla.gnome.org/show_bug.cgi?id=320638
+    // https://stackoverflow.com/questions/3911536/utf-8-unicode-whats-with-0xc0-and-0x80
     state->pos = g_utf8_pointer_to_offset(string->str, state->prev_pos_p);
     state->pos_p = g_utf8_offset_to_pointer(string->str, state->pos);
     state->prev_pos_p = g_utf8_find_prev_char(string->str, state->pos_p);

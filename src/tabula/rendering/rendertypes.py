@@ -109,6 +109,14 @@ class CairoStatus(enum.IntEnum):
     LAST_STATUS = 45
 
 
+@check_c_enum(ffi, "PangoAttrType", allow_omitting_c_members=True)
+class AttrType(enum.IntEnum):
+    STYLE = 3
+    WEIGHT = 4
+    UNDERLINE = 11
+    FOREGROUND_ALPHA = 24
+
+
 @check_c_enum(ffi, "PangoStyle")
 class Style(enum.IntEnum):
     NORMAL = 0
