@@ -792,7 +792,7 @@ class BluezContext(tricycle.BackgroundObject, daemon=True):
     @property
     def agent_manager(self) -> BluezAgentManager:
         for obj in self.objects_by_path.values():
-            if "org.bluez.Adapter1" in obj:
+            if "org.bluez.AgentManager1" in obj:
                 return obj["org.bluez.AgentManager1"]
 
     @property
